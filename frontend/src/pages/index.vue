@@ -1121,8 +1121,8 @@ const colunasNaoAlocadosDetalhes = [
   },
   {
     name: 'secao',
-    label: 'SEÇÃO',
-    field: 'secao',
+    label: 'SEÇÃO NO SISTEMA',
+    field: 'base',
     align: 'left'
   },
   {
@@ -1483,15 +1483,15 @@ function exportarNaoAlocados() {
     'CHAPA',
     'COLABORADOR',
     'FUNÇÃO NO SISTEMA',
-    'SEÇÃO',
+    'SEÇÃO NO SISTEMA',
     'BASE'
   ]
   const linhas = naoAlocadosDetalhes.value.map(colaborador => [
     colaborador.chapa,
     colaborador.nome,
     colaborador.funcao,
-    colaborador.secao,
-    colaborador.base
+    colaborador.base,
+    colaborador.codigo
   ])
   const csv = [cabecalho, ...linhas]
     .map(linha => linha.map(escaparCsv).join(';'))
