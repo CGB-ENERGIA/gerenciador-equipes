@@ -1194,6 +1194,12 @@ const colunasDetalhes = [
     align: 'left'
   },
   {
+    name: 'secao_sistema',
+    label: 'SEÇÃO NO SISTEMA',
+    field: 'secao_sistema',
+    align: 'left'
+  },
+  {
     name: 'vaga',
     label: 'VAGA',
     field: 'vaga',
@@ -1447,6 +1453,7 @@ function exportarAlocados() {
     'CHAPA',
     'COLABORADOR',
     'FUNÇÃO NO SISTEMA',
+    'SEÇÃO NO SISTEMA',
     'VAGA'
   ]
 
@@ -1456,6 +1463,7 @@ function exportarAlocados() {
     colaborador.chapa,
     colaborador.nome,
     colaborador.funcao_sistema,
+    colaborador.secao_sistema,
     colaborador.vaga
   ])
 

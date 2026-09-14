@@ -489,6 +489,9 @@ def obter_resumo():
                         "nome": str(colaborador.NOME).strip(),
                         "funcao": funcao_exibicao,
                         "funcao_sistema": str(colaborador.FUNÇÃO).strip() if colaborador.FUNÇÃO else "",
+                        "secao_sistema": str(colaborador.SEÇÃO_TRATADA).strip()
+                        if colaborador.SEÇÃO_TRATADA
+                        else base_da_secao(colaborador.SEÇÃO)["nome"],
                         "vaga": str(composicao.FUNÇÃO_ER).strip() if composicao.FUNÇÃO_ER else "",
                     })
 
