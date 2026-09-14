@@ -1,6 +1,11 @@
 {
   "buildCommand": "cd frontend && npm ci && npm run build",
   "outputDirectory": "frontend/dist/spa",
+  "build": {
+    "env": {
+      "UV_LINK_MODE": "copy"
+    }
+  },
   "rewrites": [
     { "source": "/api/:caminho*", "destination": "/api/index" }
   ],
