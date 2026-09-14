@@ -55,6 +55,7 @@ app.permanent_session_lifetime = timedelta(hours=12)
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=bool(os.getenv("VERCEL")),
 )
 
 # Diferente do projeto original (Render): aqui o Flask NÃO serve os arquivos
@@ -1140,7 +1141,7 @@ def remover_todas_alocacoes():
 
 
 @app.route("/api/equipes/<int:equipe_id>/membros", methods=["DELETE"])
-@exige_permissao(auth.VER_EQUIPES)
+@exige_permissao(auth.REMOVER_ALOCACAO)
 def remover_membros_equipe(equipe_id):
     session = SessionLocal()
     try:

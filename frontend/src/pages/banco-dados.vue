@@ -383,6 +383,8 @@
                               icon="person_remove"
                               class="q-ml-sm"
                               aria-label="Remover colaborador"
+                              :loading="removendoComposicaoId === vaga.id"
+                              :disable="removendoComposicaoId !== null"
                               @click="removerColaborador(vaga.id)"
                             />
                           </template>
@@ -1110,6 +1112,7 @@ const opcoesAlocacao = ref({})
 const colaboradorSelecionado = ref(null)
 const dialogAlocacao = ref(false)
 const carregandoAlocacao = ref(false)
+const removendoComposicaoId = ref(null)
 
 const baseAlocacao = ref(null)
 const equipeAlocacao = ref(null)
@@ -1969,6 +1972,7 @@ async function removerColaborador(composicaoId) {
     .find(item => String(item.id) === String(composicaoId))
   const chapa = vaga?.colaborador?.chapa
 
+  removendoComposicaoId.value = composicaoId
   try {
     const resposta = await fetch('/api/equipes/remover', {
       method: 'POST',
@@ -1989,6 +1993,8 @@ async function removerColaborador(composicaoId) {
     atualizarEstadoAposRemocao(chapa, composicaoId)
   } catch (e) {
     erro.value = e.message || 'Erro ao remover colaborador.'
+  } finally {
+    removendoComposicaoId.value = null
   }
 }
 

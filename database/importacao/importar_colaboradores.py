@@ -27,6 +27,10 @@ def normalizar_linha_colaborador(linha):
     if not chapa:
         return None, "CHAPA não informada."
 
+    nome_bruto = linha.get("NOME")
+    if nome_bruto is None or (isinstance(nome_bruto, float) and pd.isna(nome_bruto)) or not str(nome_bruto).strip():
+        return None, "NOME não informado."
+
     admissao = pd.to_datetime(linha.get("ADMISSÃO"), dayfirst=True, errors="coerce")
     admissao = None if pd.isna(admissao) else admissao.date()
 
