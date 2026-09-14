@@ -1,0 +1,618 @@
+// ============================================================
+// FONTES (hospedadas localmente: a CSP do app nao permite externas)
+// ============================================================
+
+@font-face {
+  font-family: 'Barlow Semi Condensed';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/barlow-semi-condensed-600.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Barlow Semi Condensed';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/barlow-semi-condensed-700.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-400.woff2') format('woff2');
+}
+
+// Inter: usada so na tela de login (visual proprio, pedido a parte pelo
+// Igor). E uma fonte variavel: um arquivo so cobre todos os pesos abaixo.
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/inter-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/inter-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/inter-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/inter-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/fonts/inter-variable.woff2') format('woff2');
+}
+
+// ============================================================
+// TEMA
+// ============================================================
+
+:root {
+  // reforca por CSS o que o <meta name="color-scheme"> ja diz no HTML:
+  // qual esquema esta ativo agora, pra nenhum navegador tentar escurecer a
+  // pagina por conta propria por cima do nosso proprio tema
+  color-scheme: light;
+
+  --marca: #711424;
+  --marca-clara: #8d2136;
+  --titulo: #4f1723;
+  --fundo: #f2eeef;
+  --superficie: #ffffff;
+  --superficie-2: #faf7f8;
+  --tinta: #2d2527;
+  --tinta-fraca: #6d5f63;
+  --linha: rgba(113, 20, 36, 0.16);
+  --linha-forte: rgba(113, 20, 36, 0.32);
+  --folguista: #c9741b;
+  --folguista-fundo: #fbeedd;
+  --negativo: #b3261e;
+  --negativo-fundo: #fbe9e7;
+  --positivo: #1b6b45;
+  --positivo-fundo: #e6f2ea;
+  --neutro: #7a6c70;
+  --realce: #f7e9d7;
+  --sombra: 0 10px 28px rgba(65, 32, 38, 0.09);
+
+  // disciplinas com cor propria: construcao usa a cor da marca e folguista o
+  // laranja, por serem os dois conceitos fixos do sistema
+  --tipo-construcao: #711424;
+  // laranja um pouco mais escuro que o --folguista das outras areas: aqui ele
+  // e fundo de chip com texto branco, e o tom claro so dava 3,5:1
+  --tipo-folguista: #ad6417;
+
+  // paleta para as demais disciplinas. a atribuicao e estavel por nome, entao
+  // uma disciplina nova entra com cor propria sem precisar mexer no codigo
+  --tipo-p1: #3f6b48;
+  --tipo-p2: #4a5c80;
+  --tipo-p3: #6b4a78;
+  --tipo-p4: #1f6f6b;
+  --tipo-p5: #8a5a2b;
+  --tipo-p6: #a03d5c;
+  --tipo-p7: #5f6b2a;
+  --tipo-p8: #2f6690;
+  --tipo-p9: #8a6a1f;
+  --tipo-p10: #8a3f78;
+  --tipo-outro: #6d5f63;
+
+  // tinta do texto sobre a cor da disciplina. No claro as cores sao escuras e
+  // pedem texto branco; no escuro elas clareiam e o branco fica ilegivel
+  // (ficava em torno de 2:1, contra os 4,5:1 minimos), entao inverte.
+  --tipo-tinta: #ffffff;
+
+  --fonte-ui: 'Barlow Semi Condensed', 'Segoe UI', sans-serif;
+  --fonte-texto: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+}
+
+body.body--dark {
+  color-scheme: dark;
+
+  // o Quasar usa --q-dark/--q-dark-page como fundo padrao de qualquer
+  // componente seu que caia no modo escuro "de fabrica" (ex: q-page, q-dark
+  // em botoes/campos). Sem isso, esses componentes pintam um cinza neutro
+  // (#1d1d1d/#121212) por cima do nosso tema, dando a impressao de uma
+  // "camada cinza" sobre a tela ao trocar de tema. Aqui eles viram os mesmos
+  // tons de --superficie/--fundo, entao nunca destoam.
+  --q-dark: #221c1e;
+  --q-dark-page: #171314;
+
+  --marca: #7c1a2c;
+  --marca-clara: #99283f;
+  --titulo: #f2dbe0;
+  --fundo: #171314;
+  --superficie: #221c1e;
+  --superficie-2: #2b2325;
+  --tinta: #f1e9ea;
+  --tinta-fraca: #b7a6aa;
+  --linha: rgba(212, 154, 85, 0.2);
+  --linha-forte: rgba(212, 154, 85, 0.38);
+  --folguista: #e0a259;
+  --folguista-fundo: #3b2c1c;
+  --negativo: #f08a80;
+  --negativo-fundo: #3d2321;
+  --positivo: #6cc79a;
+  --positivo-fundo: #1e3329;
+  --neutro: #9c8b90;
+  --realce: #382a1c;
+  --sombra: 0 10px 28px rgba(0, 0, 0, 0.32);
+
+  // no escuro as cores de disciplina precisam clarear para continuarem legiveis
+  --tipo-construcao: #e08a9c;
+  --tipo-folguista: #e0a259;
+
+  --tipo-p1: #86c294;
+  --tipo-p2: #9ab0d8;
+  --tipo-p3: #c3a0cd;
+  --tipo-p4: #71c4bd;
+  --tipo-p5: #d9a877;
+  --tipo-p6: #e896ac;
+  --tipo-p7: #b9c47e;
+  --tipo-p8: #86b6dd;
+  --tipo-p9: #d9c078;
+  --tipo-p10: #d693c9;
+  --tipo-outro: #b7a6aa;
+
+  // sobre as cores claras acima, o texto escuro passa de 8:1 em todas elas
+  --tipo-tinta: #1b1416;
+
+  // o Quasar pinta o fundo escuro com #121212; aqui usamos o tom quente do tema
+  background: var(--fundo);
+}
+
+// ============================================================
+// BASE
+// ============================================================
+
+body {
+  background: var(--fundo);
+  color: var(--tinta);
+  font-family: var(--fonte-texto);
+}
+
+.q-page {
+  background: transparent;
+}
+
+// ============================================================
+// CABEÇALHO
+// ============================================================
+
+.site-header {
+  background: var(--marca) !important;
+}
+
+.q-header .q-toolbar {
+  min-height: 58px;
+  padding-left: 18px;
+  padding-right: 18px;
+}
+
+.q-toolbar__title {
+  font-family: var(--fonte-ui);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.site-logo {
+  width: 88px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex: 0 0 auto;
+}
+
+.site-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: left center;
+}
+
+// ============================================================
+// TIPOGRAFIA
+// ============================================================
+
+.text-h4,
+.text-h5,
+.text-h6 {
+  font-family: var(--fonte-ui);
+  color: var(--titulo);
+  font-weight: 700;
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+
+.text-subtitle1,
+.text-subtitle2,
+.text-caption {
+  color: var(--tinta-fraca);
+}
+
+.text-overline {
+  font-family: var(--fonte-ui);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--marca-clara);
+}
+
+// os utilitarios de cinza do Quasar sao fixos e nao acompanham o tema. Esse
+// bug ja foi corrigido antes so pra 7/8/9 (as tonalidades que alguem notou
+// quebradas na hora) e voltou quando um texto novo usou grey-6 (empty
+// states do Resumo, rotulo "fixo" em Usuarios) -- cobre 6 a 9, a faixa
+// inteira usada no projeto pra texto secundario, em vez de ir tampando
+// tonalidade por tonalidade cada vez que aparece de novo.
+.text-grey-6,
+.text-grey-7,
+.text-grey-8,
+.text-grey-9 {
+  color: var(--tinta-fraca) !important;
+}
+
+// O Quasar colore os textos secundarios de QItemLabel com
+// color-mix(in srgb, currentColor N%, transparent). Alguns navegadores nao
+// repintam esse valor quando so a cor herdada do body muda ao trocar de tema,
+// deixando o texto com a cor do tema anterior. Cor explicita evita isso.
+.q-item__label--caption,
+.q-item__label--header,
+.q-item__section--side:not(.q-item__section--avatar) {
+  color: var(--tinta-fraca);
+}
+
+.q-item__label--overline {
+  color: var(--tinta-fraca);
+}
+
+// ============================================================
+// SUPERFÍCIES
+// ============================================================
+
+.q-card {
+  background: var(--superficie);
+  color: var(--tinta);
+  border-radius: 8px;
+  border: 1px solid var(--linha);
+  box-shadow: var(--sombra);
+}
+
+.q-card--bordered {
+  border-color: var(--linha);
+}
+
+// cartao dentro de cartao nao repete sombra: so o de fora e um objeto
+.q-card .q-card {
+  box-shadow: none;
+}
+
+.q-item,
+.q-field__control,
+.q-field__native,
+.q-field__label,
+.q-table {
+  color: var(--tinta);
+}
+
+.q-separator {
+  background: var(--linha);
+}
+
+.q-btn {
+  border-radius: 10px;
+  font-family: var(--fonte-ui);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
+}
+
+// botoes "solidos" (unelevated/padrao, nao flat nem outline) ganham uma
+// sombra suave na cor do proprio texto/fundo e se levantam de leve ao
+// passar o mouse — a mesma linguagem do .btn-exportar, agora em todo o
+// app. Os segmentos de um q-btn-toggle ficam de fora: ali o efeito de
+// "grupo" quebraria com botoes individuais subindo.
+.q-btn:not(.q-btn--flat):not(.q-btn--outline):not(.q-btn-toggle .q-btn) {
+  box-shadow: 0 3px 10px rgba(45, 37, 39, 0.14);
+}
+
+.q-btn:not(.q-btn--flat):not(.q-btn--outline):not(.q-btn-toggle .q-btn):not(.q-btn--round):hover {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+  box-shadow: 0 6px 16px rgba(45, 37, 39, 0.2);
+}
+
+.q-btn:not(.q-btn--flat):not(.q-btn--outline):not(.q-btn-toggle .q-btn):active {
+  transform: translateY(0);
+  filter: brightness(0.97);
+}
+
+.q-btn--flat:hover,
+.q-btn--outline:hover {
+  filter: brightness(1.06);
+}
+
+body.body--dark .q-btn:not(.q-btn--flat):not(.q-btn--outline):not(.q-btn-toggle .q-btn) {
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+}
+
+body.body--dark .q-btn:not(.q-btn--flat):not(.q-btn--outline):not(.q-btn-toggle .q-btn):not(.q-btn--round):hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .q-btn {
+    transition: none;
+  }
+
+  .q-btn:hover,
+  .q-btn:active {
+    transform: none;
+  }
+}
+
+// ============================================================
+// BARRA DE FILTROS
+// ============================================================
+// Usada nas telas de Resumo, Banco de Dados e Cadastro de Vagas: o mesmo
+// bloco "row de selects" das três, com um visual mais atual — cantos mais
+// arredondados, campos com contorno suave e um realce de foco na cor da
+// marca em vez do contorno quadrado padrão do Quasar.
+//
+// Duas classes, propósitos diferentes:
+// - .filtros-campos: só o estilo dos CAMPOS (arredondar, focar, ícones).
+//   Aplica em qualquer container — usada quando os filtros são uma seção
+//   dentro de um cartão maior (ex.: "Vagas cadastradas").
+// - .barra-filtros: tudo isso, MAIS o tratamento de cartão inteiro (fundo em
+//   gradiente leve, sombra, acento no topo) — usada quando o cartão existe
+//   só para os filtros (Resumo, Banco de Dados).
+
+.barra-filtros {
+  border-radius: 16px;
+  border: 1px solid var(--linha);
+  background: linear-gradient(165deg, var(--superficie) 0%, var(--superficie-2) 100%);
+  box-shadow: 0 8px 24px rgba(65, 32, 38, 0.07);
+  overflow: hidden;
+  position: relative;
+}
+
+body.body--dark .barra-filtros {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+// tira acento fino no topo, na cor da marca — assina o bloco sem pesar
+.barra-filtros::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--marca) 0%, var(--marca-clara) 60%, transparent 100%);
+  opacity: 0.85;
+}
+
+.barra-filtros .q-field--outlined .q-field__control,
+.filtros-campos .q-field--outlined .q-field__control {
+  border-radius: 12px;
+  background: var(--superficie);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.barra-filtros .q-field--outlined .q-field__control:before,
+.filtros-campos .q-field--outlined .q-field__control:before {
+  border-color: var(--linha);
+}
+
+.barra-filtros .q-field--outlined .q-field__control:hover:before,
+.filtros-campos .q-field--outlined .q-field__control:hover:before {
+  border-color: var(--linha-forte);
+}
+
+.barra-filtros .q-field--outlined.q-field--focused .q-field__control,
+.filtros-campos .q-field--outlined.q-field--focused .q-field__control {
+  box-shadow: 0 0 0 3px rgba(113, 20, 36, 0.12);
+}
+
+body.body--dark .barra-filtros .q-field--outlined.q-field--focused .q-field__control,
+body.body--dark .filtros-campos .q-field--outlined.q-field--focused .q-field__control {
+  box-shadow: 0 0 0 3px rgba(224, 138, 156, 0.16);
+}
+
+.barra-filtros .q-field__prepend .q-icon,
+.filtros-campos .q-field__prepend .q-icon {
+  color: var(--marca-clara);
+  opacity: 0.85;
+}
+
+// chips de filtro/indicador: pill cheio, peso maior, sem o quadrado do Quasar
+.barra-filtros .q-chip,
+.filtros-campos .q-chip {
+  border-radius: 999px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.barra-filtros .q-btn-toggle,
+.filtros-campos .q-btn-toggle {
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.barra-filtros .q-btn-toggle .q-btn,
+.filtros-campos .q-btn-toggle .q-btn {
+  border-radius: 0;
+}
+
+// BUG DO TEMA ESCURO: os q-btn-toggle do app (Resumo, Banco de Dados,
+// Cadastro de Vagas) usam color="grey-3"/text-color="grey-8" para o botao
+// NAO selecionado. "grey-3" e uma cor fixa do Quasar que nao muda com o
+// tema (continua clara no escuro); o texto (herda --tinta-fraca, que FICA
+// claro no escuro por .text-grey-8 acima) some sobre esse fundo claro fixo.
+// Sobrescreve so o par bg-grey-3/text-grey-8 DENTRO do toggle para os
+// tokens do tema, sem mexer no q-chip e nos outros usos soltos de grey-3.
+.q-btn-toggle .bg-grey-3 {
+  background: var(--superficie-2) !important;
+}
+
+.q-btn-toggle .text-grey-8 {
+  color: var(--tinta) !important;
+}
+
+// ============================================================
+// TABELAS
+// ============================================================
+
+.q-table thead tr {
+  background: var(--marca);
+}
+
+.q-table thead th {
+  color: #fff;
+  font-family: var(--fonte-ui);
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.q-table tbody td {
+  font-variant-numeric: tabular-nums;
+  border-color: var(--linha);
+}
+
+.q-table__container,
+.q-table tbody tr {
+  background: var(--superficie);
+}
+
+// ============================================================
+// FUNDOS SEMÂNTICOS
+// ============================================================
+
+.bg-red-1 {
+  background: var(--negativo-fundo) !important;
+}
+
+.bg-green-1 {
+  background: var(--positivo-fundo) !important;
+}
+
+.bg-orange-1 {
+  background: var(--folguista-fundo) !important;
+}
+
+.bg-blue-1 {
+  background: var(--realce) !important;
+}
+
+.bg-grey-2 {
+  background: var(--superficie-2) !important;
+}
+
+.text-negative {
+  color: var(--negativo) !important;
+}
+
+.text-positive {
+  color: var(--positivo) !important;
+}
+
+.text-primary {
+  color: var(--marca-clara) !important;
+}
+
+body.body--dark .text-primary {
+  color: var(--tipo-construcao) !important;
+}
+
+// botao de exportar Excel/CSV/planilha: mesmo visual em toda a tela
+// (Resumo, Banco de dados, Cadastro de vagas) — pill em gradiente, com
+// sombra na cor do proprio botao (em vez de cinza generico) e um leve
+// realce ao passar o mouse. Usa !important pontual pra vencer as cores
+// solidas que o Quasar aplica via color="positive" inline.
+.btn-exportar {
+  position: relative;
+  overflow: hidden;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: linear-gradient(135deg, #1b6b45 0%, #1f8054 100%) !important;
+  box-shadow: 0 4px 14px rgba(27, 107, 69, 0.32);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+}
+
+// filete de brilho no topo — reforca o efeito "pill" sem pesar
+.btn-exportar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 55%);
+  pointer-events: none;
+}
+
+.btn-exportar:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(27, 107, 69, 0.4);
+  filter: brightness(1.04);
+}
+
+.btn-exportar:active {
+  transform: translateY(0);
+  box-shadow: 0 3px 10px rgba(27, 107, 69, 0.3);
+}
+
+body.body--dark .btn-exportar {
+  background: linear-gradient(135deg, #1e3329 0%, #227c52 100%) !important;
+  box-shadow: 0 4px 14px rgba(108, 199, 154, 0.22);
+}
+
+body.body--dark .btn-exportar:hover {
+  box-shadow: 0 8px 20px rgba(108, 199, 154, 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-exportar {
+    transition: none;
+  }
+
+  .btn-exportar:hover,
+  .btn-exportar:active {
+    transform: none;
+  }
+}
