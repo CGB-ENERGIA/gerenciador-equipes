@@ -1164,12 +1164,6 @@ const colunasNaoAlocadas = computed(() => {
 
 const colunasDetalhes = [
   {
-    name: 'base',
-    label: 'BASE',
-    field: 'base',
-    align: 'left'
-  },
-  {
     name: 'equipe',
     label: 'EQUIPE',
     field: 'equipe',
@@ -1194,15 +1188,21 @@ const colunasDetalhes = [
     align: 'left'
   },
   {
+    name: 'vaga',
+    label: 'VAGA',
+    field: 'vaga',
+    align: 'left'
+  },
+  {
     name: 'secao_sistema',
     label: 'SEÇÃO NO SISTEMA',
     field: 'secao_sistema',
     align: 'left'
   },
   {
-    name: 'vaga',
-    label: 'VAGA',
-    field: 'vaga',
+    name: 'base',
+    label: 'BASE',
+    field: 'base',
     align: 'left'
   }
 ]
@@ -1448,23 +1448,23 @@ function escaparCsv(valor) {
 
 function exportarAlocados() {
   const cabecalho = [
-    'BASE',
     'EQUIPE',
     'CHAPA',
     'COLABORADOR',
     'FUNÇÃO NO SISTEMA',
+    'VAGA',
     'SEÇÃO NO SISTEMA',
-    'VAGA'
+    'BASE'
   ]
 
   const linhas = detalhesExibidos.value.map(colaborador => [
-    colaborador.base,
     colaborador.equipe,
     colaborador.chapa,
     colaborador.nome,
     colaborador.funcao_sistema,
+    colaborador.vaga,
     colaborador.secao_sistema,
-    colaborador.vaga
+    colaborador.base
   ])
 
   const csv = [cabecalho, ...linhas]
