@@ -351,6 +351,31 @@ def obter_resumo():
         filtro_coordenador = request.args.get("coordenador", "").strip()
         filtro_supervisor = request.args.get("supervisor", "").strip()
 
+        filtrando_folguista = normalizar(filtro_tipo) == "FOLGUISTA"
+
+        def vaga_bate_outros_filtros(composicao, tipo, folguista, ignorar):
+            """Confere se a vaga bate com os filtros ativos, exceto a
+            dimensao 'ignorar' — usado para montar as opcoes de CADA filtro
+            considerando os demais ja selecionados (filtros em cascata),
+            sem que um filtro restrinja a si mesmo."""
+            if ignorar != "tipo" and filtro_tipo:
+                if filtrando_folguista:
+                    if not folguista:
+                        return False
+                elif normalizar(tipo) != normalizar(filtro_tipo):
+                    return False
+
+            if ignorar != "setor" and filtro_setor and normalizar(composicao.SETOR or "") != normalizar(filtro_setor):
+                return False
+
+            if ignorar != "coordenador" and filtro_coordenador and normalizar(composicao.COORDENADOR or "") != normalizar(filtro_coordenador):
+                return False
+
+            if ignorar != "supervisor" and filtro_supervisor and normalizar(composicao.SUPERVISOR or "") != normalizar(filtro_supervisor):
+                return False
+
+            return True
+
         equipes = (
             session.query(Equipe)
             .options(
@@ -365,6 +390,7 @@ def obter_resumo():
         resumo_bases = {}
         pessoas_disponiveis = {}
         tipos_existentes = set()
+        setores_existentes = set()
         coordenadores_existentes = set()
         supervisores_existentes = set()
 
@@ -391,17 +417,29 @@ def obter_resumo():
                 c for c in (equipe.composicoes or []) if vaga_no_escopo(usuario, equipe, c)
             ]
 
-            # o tipo, o coordenador e o supervisor alimentam o filtro mesmo
-            # quando a base
-            # esta filtrada fora
+            # o tipo, o setor, o coordenador e o supervisor alimentam o filtro
+            # mesmo quando a base esta filtrada fora; cada um considera os
+            # demais filtros ja selecionados (filtros em cascata), exceto a
+            # si mesmo, para nao esconder a propria opcao marcada
             for composicao in composicoes_visiveis:
-                tipos_existentes.add(tipo_equipe_da_vaga(composicao))
+                tipo = tipo_equipe_da_vaga(composicao)
+
+                if vaga_bate_outros_filtros(composicao, tipo, folguista, ignorar="tipo"):
+                    tipos_existentes.add(tipo)
+                    if folguista:
+                        tipos_existentes.add("FOLGUISTA")
+
+                if composicao.SETOR and composicao.SETOR.strip():
+                    if vaga_bate_outros_filtros(composicao, tipo, folguista, ignorar="setor"):
+                        setores_existentes.add(composicao.SETOR.strip())
+
                 if composicao.COORDENADOR and composicao.COORDENADOR.strip():
-                    coordenadores_existentes.add(composicao.COORDENADOR.strip())
+                    if vaga_bate_outros_filtros(composicao, tipo, folguista, ignorar="coordenador"):
+                        coordenadores_existentes.add(composicao.COORDENADOR.strip())
+
                 if composicao.SUPERVISOR and composicao.SUPERVISOR.strip():
-                    supervisores_existentes.add(composicao.SUPERVISOR.strip())
-            if folguista and composicoes_visiveis:
-                tipos_existentes.add("FOLGUISTA")
+                    if vaga_bate_outros_filtros(composicao, tipo, folguista, ignorar="supervisor"):
+                        supervisores_existentes.add(composicao.SUPERVISOR.strip())
 
             if filtro_base:
                 filtro_norm = normalizar(filtro_base)
@@ -422,8 +460,6 @@ def obter_resumo():
                     "funcoes": {},
                     "detalhes": {},
                 }
-
-            filtrando_folguista = normalizar(filtro_tipo) == "FOLGUISTA"
 
             for composicao in composicoes_visiveis:
                 tipo = tipo_equipe_da_vaga(composicao)
@@ -639,7 +675,7 @@ def obter_resumo():
             "base_selecionada": filtro_base,
             "tipos_filtro": sorted(tipos_existentes),
             "tipo_selecionado": filtro_tipo,
-            "setores_filtro": list(SETORES_NEGOCIO),
+            "setores_filtro": sorted(setores_existentes),
             "setor_selecionado": filtro_setor,
             "coordenadores_filtro": sorted(coordenadores_existentes),
             "coordenador_selecionado": filtro_coordenador,
