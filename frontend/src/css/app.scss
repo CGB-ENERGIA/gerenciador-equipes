@@ -203,6 +203,13 @@ body.body--dark {
 // BASE
 // ============================================================
 
+// o Quasar dimensiona quase tudo (fonte, padding, chips, botoes, icones,
+// densidade de tabela) em rem relativo a este valor — reduzir aqui encolhe
+// o app inteiro de forma proporcional, sem precisar editar tela por tela.
+html {
+  font-size: 13px;
+}
+
 body {
   background: var(--fundo);
   color: var(--tinta);
