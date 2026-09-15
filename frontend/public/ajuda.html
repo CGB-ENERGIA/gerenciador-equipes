@@ -68,7 +68,7 @@
   .nav-item{display:block;padding:9px 11px;border-radius:9px;color:#f4e3e6;text-decoration:none;
     font-size:.9rem;margin-bottom:2px;}
   .nav-item:hover{background:rgba(255,255,255,.1);}
-  .nav-item.ativo{background:#fff;color:var(--titulo);font-weight:700;}
+  .nav-item.ativo{background:#fff;color:#171314;font-weight:700;}
   .tema-toggle{width:100%;margin-top:22px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);
     color:#f6e6e9;border-radius:9px;padding:9px;font-size:.8rem;font-weight:600;cursor:pointer;font-family:var(--font-body);}
 
@@ -86,7 +86,7 @@
 
   /* JANELA / MOCKUP */
   .janela{background:var(--superficie);border-radius:12px;overflow:hidden;border:1px solid var(--linha);
-    box-shadow:0 20px 44px -22px rgba(0,0,0,.35);}
+    box-shadow:0 20px 44px -22px rgba(0,0,0,.35);position:relative;}
   .janela-barra{background:var(--superficie-2);padding:9px 14px;display:flex;gap:7px;border-bottom:1px solid var(--linha);}
   .janela-barra .bolinha{width:9px;height:9px;border-radius:50%;background:var(--linha-forte);}
   .cabecalho-app{background:var(--marca);color:#fff;padding:0 18px;height:56px;display:flex;align-items:center;gap:14px;
@@ -97,6 +97,45 @@
   .cabecalho-app .cab-usuario{font-family:var(--font-body);font-weight:500;font-size:.8rem;
     background:rgba(255,255,255,.14);padding:5px 11px;border-radius:999px;}
   .janela-corpo{padding:18px;background:var(--fundo);}
+
+  /* Destaque do ícone/opção de Ajuda (atalho para este guia) */
+  .aviso-reabertura{background:var(--realce);border-left:3px solid var(--folguista);border-radius:0 10px 10px 0;
+    padding:12px 16px;font-size:.88rem;color:var(--titulo);margin:16px 0 0;}
+  .ajuda-destaque{position:absolute;top:14px;right:14px;width:26px;height:26px;border-radius:50%;
+    background:var(--folguista);color:#fff;display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:.85rem;font-family:var(--font-display);z-index:2;}
+  .ajuda-anel{position:absolute;inset:-6px;border-radius:50%;border:2px solid var(--folguista);opacity:.6;}
+  @media (prefers-reduced-motion:no-preference){
+    .ajuda-anel{animation:pulso-ajuda 1.8s ease-out infinite;}
+    @keyframes pulso-ajuda{0%{transform:scale(.9);opacity:.7;}100%{transform:scale(1.7);opacity:0;}}
+  }
+  .legenda-mockup{text-align:center;font-size:.82rem;color:var(--tinta-fraca);margin-top:10px;}
+  .menu-usuario-mock{position:absolute;top:56px;right:14px;background:var(--superficie);border:1px solid var(--linha);
+    border-radius:10px;box-shadow:0 14px 30px -14px rgba(0,0,0,.4);padding:6px;z-index:5;min-width:180px;}
+  .menu-usuario-mock .mu-item{padding:8px 12px;font-size:.8rem;color:var(--tinta);border-radius:6px;
+    display:flex;align-items:center;justify-content:space-between;}
+  .menu-usuario-mock .mu-item.destaque{background:var(--folguista-fundo);color:var(--titulo);font-weight:700;}
+  .menu-usuario-mock .mu-novo{background:var(--folguista);color:#fff;font-size:.6rem;font-weight:700;
+    padding:1px 7px;border-radius:999px;margin-left:8px;}
+
+  /* Miniaturas indicando onde encontrar o atalho de ajuda */
+  .indicativo-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0 26px;}
+  .mini-preview{background:var(--superficie);border:1px solid var(--linha);border-radius:10px;padding:10px;text-align:center;}
+  .mini-tela{border-radius:7px;overflow:hidden;border:1px solid var(--linha);}
+  .mini-topo-login{background:linear-gradient(160deg,var(--marca),var(--titulo));padding:9px 10px;
+    display:flex;align-items:center;justify-content:space-between;}
+  .mini-logo-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.6);}
+  .mini-corpo-login{background:var(--fundo);padding:14px 10px;}
+  .mini-topo-app{background:var(--marca);padding:8px 10px;display:flex;align-items:center;gap:6px;}
+  .mini-titulo-app{color:#fff;font-family:var(--font-display);font-size:.68rem;font-weight:700;}
+  .mini-spacer{flex:1;}
+  .mini-icone-app{width:14px;height:14px;border-radius:4px;background:rgba(255,255,255,.22);display:inline-block;}
+  .mini-corpo-app{background:var(--fundo);padding:12px 10px;}
+  .mini-linha{height:6px;border-radius:3px;background:var(--linha);margin-bottom:6px;}
+  .mini-linha.curta{width:55%;}
+  .mini-alvo{background:#ffd400;color:#3a2c00;font-weight:800;font-size:.66rem;border-radius:6px;
+    padding:2px 7px;box-shadow:0 0 0 3px rgba(255,212,0,.4);font-family:var(--font-body);}
+  .mini-legenda{display:block;margin-top:9px;font-size:.78rem;color:var(--tinta-fraca);font-weight:600;}
 
   .barra-filtros{background:linear-gradient(180deg,var(--superficie),var(--superficie-2));border:1px solid var(--linha);
     border-radius:16px;padding:13px 15px 11px;position:relative;overflow:hidden;margin-bottom:14px;}
@@ -257,6 +296,40 @@
       <h1>Início</h1>
       <p class="lede">Antes de conhecer as telas, entenda o que é o sistema, para quem ele foi feito e qual problema resolve.</p>
 
+      <p class="aviso-reabertura">Este guia pode ser reaberto a qualquer momento dentro do sistema, clicando no ícone de ajuda da tela de login ou na opção "Ajuda" do menu do usuário, já logado.</p>
+
+      <div class="indicativo-grid">
+        <div class="mini-preview">
+          <div class="mini-tela">
+            <div class="mini-topo-login">
+              <span class="mini-logo-dot"></span>
+              <span class="mini-alvo">?</span>
+            </div>
+            <div class="mini-corpo-login">
+              <div class="mini-linha"></div>
+              <div class="mini-linha"></div>
+              <div class="mini-linha curta"></div>
+            </div>
+          </div>
+          <span class="mini-legenda">Tela de Login</span>
+        </div>
+        <div class="mini-preview">
+          <div class="mini-tela">
+            <div class="mini-topo-app">
+              <span class="mini-titulo-app">Resumo</span>
+              <span class="mini-spacer"></span>
+              <span class="mini-icone-app"></span><span class="mini-icone-app"></span>
+              <span class="mini-alvo">Camila ▾</span>
+            </div>
+            <div class="mini-corpo-app">
+              <div class="mini-linha"></div>
+              <div class="mini-linha curta"></div>
+            </div>
+          </div>
+          <span class="mini-legenda">Já logado, no menu do usuário</span>
+        </div>
+      </div>
+
       <div class="linha-cartoes" style="margin-top:16px;">
         <div class="cartao"><h5>O que é</h5><p style="margin:0;font-size:.9rem;color:var(--tinta-fraca);">Um sistema web para gerenciar as equipes técnicas de campo da CGB Energia — eletricistas, podadores, técnicos de linha viva e outras funções.</p></div>
         <div class="cartao"><h5>Para quem é</h5><p style="margin:0;font-size:.9rem;color:var(--tinta-fraca);">Gestores, coordenadores, supervisores e analistas — cada um enxergando apenas as bases, equipes e setores pelos quais é responsável.</p></div>
@@ -279,7 +352,8 @@
           </div>
         </div>
         <div class="lado-visual">
-          <div class="login-fundo">
+          <div class="login-fundo" style="position:relative;">
+            <span class="ajuda-destaque" title="Ícone de ajuda">?<span class="ajuda-anel"></span></span>
             <div class="login-cartao">
               <div class="login-logo"></div>
               <span class="login-selo"><span class="p"></span> Sistema online</span>
@@ -291,6 +365,7 @@
               <span class="login-esq">Esqueceu a senha? Fale com o Administrador.</span>
             </div>
           </div>
+          <p class="legenda-mockup">↑ Ícone de ajuda, no canto superior direito — clique para abrir este guia em uma nova aba.</p>
         </div>
       </div>
     </section>
@@ -352,7 +427,12 @@
             <div class="janela-barra"><span class="bolinha"></span><span class="bolinha"></span><span class="bolinha"></span></div>
             <div class="cabecalho-app">Resumo<div class="cab-spacer"></div>
               <span class="cab-icone">⟳</span><span class="cab-icone">◐</span><span class="cab-icone">☰</span>
-              <span class="cab-usuario">Camila Nunes</span>
+              <span class="cab-usuario">Camila Nunes ▾</span>
+            </div>
+            <div class="menu-usuario-mock">
+              <div class="mu-item destaque">Ajuda<span class="mu-novo">novo</span></div>
+              <div class="mu-item">Trocar minha senha</div>
+              <div class="mu-item">Sair</div>
             </div>
             <div class="janela-corpo">
               <div class="barra-filtros">
@@ -383,6 +463,7 @@
               </div>
             </div>
           </div>
+          <p class="legenda-mockup">↑ Novo: opção "Ajuda" no menu do usuário — abre este guia em uma nova aba.</p>
         </div>
       </div>
 
