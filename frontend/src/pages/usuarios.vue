@@ -777,9 +777,33 @@
                         class="q-ml-xs"
                       />
                     </th>
-                    <th class="text-left">Campo</th>
-                    <th class="text-left">De</th>
-                    <th class="text-left">Para</th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('campo')">
+                      Campo
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'campo'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('de')">
+                      De
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'de'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('para')">
+                      Para
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'para'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
                   </tr>
                   <tr v-else-if="detalheImportacao === 'rateios'">
                     <th class="text-left col-ordenavel" @click="ordenarDetalhe('chapa')">
@@ -880,12 +904,32 @@
                 </tbody>
 
                 <!--
-                  Atualizados vira uma linha POR MUDANÇA (de-para), não por
-                  colaborador: chapa/nome só aparecem na primeira linha de
-                  cada pessoa, pra leitura ficar em bloco. Por isso só Chapa
-                  e Nome (que ordenam os colaboradores, não as mudanças) são
-                  clicáveis aqui — Campo/De/Para quebrariam o agrupamento.
+                  Por padrão (ou ordenando por Chapa/Nome), Atualizados vira
+                  uma linha POR MUDANÇA (de-para) agrupada por colaborador:
+                  chapa/nome só aparecem na primeira linha de cada pessoa.
+                  Ordenando por Campo/De/Para o agrupamento perde sentido
+                  (as mudanças de uma mesma pessoa se espalham pela tabela),
+                  então nesse caso a chapa/nome repete em toda linha.
                 -->
+                <tbody
+                  v-else-if="detalheImportacao === 'atualizados' && atualizadosOrdenaPorMudanca"
+                >
+                  <tr v-for="(linha, indice) in atualizadosLinhasFlatOrdenadas" :key="indice">
+                    <td>{{ linha.chapa }}</td>
+                    <td>{{ linha.nome || '—' }}</td>
+                    <template v-if="linha.semAlteracao">
+                      <td colspan="3" class="text-grey-7">
+                        Sem alteração de campo — só reconfirmado pela planilha.
+                      </td>
+                    </template>
+                    <template v-else>
+                      <td class="text-weight-medium">{{ linha.campo }}</td>
+                      <td class="text-grey-7">{{ linha.de }}</td>
+                      <td class="text-positive text-weight-medium">{{ linha.para }}</td>
+                    </template>
+                  </tr>
+                </tbody>
+
                 <tbody v-else-if="detalheImportacao === 'atualizados'">
                   <template
                     v-for="item in atualizadosOrdenados"
@@ -1473,6 +1517,54 @@ const criadosOrdenados = computed(() =>
 const atualizadosOrdenados = computed(() =>
   ordenarDetalheImportacao(resumoColaboradores.value?.detalhes_atualizados || [])
 )
+
+// Ordenar por Campo/De/Para só faz sentido linha a linha (por mudança), não
+// por colaborador — nesse caso a tabela troca o agrupamento por uma lista
+// achatada, com chapa/nome repetidos em toda linha.
+const COLUNAS_ATUALIZADOS_POR_MUDANCA = ['campo', 'de', 'para']
+
+const atualizadosOrdenaPorMudanca = computed(
+  () =>
+    detalheImportacao.value === 'atualizados' &&
+    COLUNAS_ATUALIZADOS_POR_MUDANCA.includes(ordenacaoDetalhe.coluna)
+)
+
+const atualizadosLinhasFlat = computed(() => {
+  const itens = resumoColaboradores.value?.detalhes_atualizados || []
+  const linhas = []
+
+  itens.forEach(item => {
+    if (!item.mudancas?.length) {
+      linhas.push({ chapa: item.chapa, nome: item.nome, semAlteracao: true })
+      return
+    }
+
+    item.mudancas.forEach(mudanca => {
+      linhas.push({
+        chapa: item.chapa,
+        nome: item.nome,
+        campo: mudanca.campo,
+        de: mudanca.de,
+        para: mudanca.para
+      })
+    })
+  })
+
+  return linhas
+})
+
+const EXTRATORES_ATUALIZADOS_POR_MUDANCA = {
+  campo: linha => linha.campo,
+  de: linha => linha.de,
+  para: linha => linha.para
+}
+
+const atualizadosLinhasFlatOrdenadas = computed(() => {
+  const extrair = EXTRATORES_ATUALIZADOS_POR_MUDANCA[ordenacaoDetalhe.coluna]
+  return extrair
+    ? ordenarListaDetalhe(atualizadosLinhasFlat.value, extrair)
+    : atualizadosLinhasFlat.value
+})
 
 const rateiosOrdenados = computed(() =>
   ordenarDetalheImportacao(resumoColaboradores.value?.detalhes_rateios || [])
