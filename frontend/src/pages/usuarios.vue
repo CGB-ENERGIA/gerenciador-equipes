@@ -307,22 +307,24 @@
             </div>
 
             <div v-if="planoUsuarios" class="q-mt-md">
+              <!--
+                Igual ao resumo de "Atualizar cadastro de colaboradores": os
+                chips só resumem a contagem — o detalhe abre num diálogo à
+                parte (abrirDetalheLoteUsuarios), reaproveitando o mesmo
+                componente/estilo de tabela ordenável.
+              -->
               <div class="row q-gutter-sm q-mb-sm">
-                <q-chip color="positive" text-color="white">
-                  {{ planoUsuarios.criar?.length || 0 }} novo(s)
-                </q-chip>
-                <q-chip color="primary" text-color="white">
-                  {{ planoUsuarios.atualizar?.length || 0 }} alterado(s)
-                </q-chip>
-                <q-chip color="grey-7" text-color="white">
-                  {{ planoUsuarios.ignoradas || 0 }} sem mudança
-                </q-chip>
                 <q-chip
-                  v-if="planoUsuarios.erros?.length"
-                  color="negative"
+                  v-for="chip in chipsLoteUsuarios"
+                  :key="chip.tipo"
+                  :color="chip.cor"
                   text-color="white"
+                  :clickable="chip.total > 0"
+                  @click="abrirDetalheLoteUsuarios(chip.tipo)"
                 >
-                  {{ planoUsuarios.erros.length }} com erro
+                  {{ chip.total }} {{ chip.rotulo }}
+                  <q-icon v-if="chip.total > 0" name="visibility" size="16px" class="q-ml-xs" />
+                  <q-tooltip v-if="chip.total > 0">Clique para ver os detalhes</q-tooltip>
                 </q-chip>
               </div>
 
@@ -332,125 +334,9 @@
                 rounded
                 dense
               >
-                <div
-                  v-for="(item, indice) in planoUsuarios.erros"
-                  :key="indice"
-                  class="text-caption"
-                >
-                  <strong v-if="item.linha">Linha {{ item.linha }}</strong>
-                  <strong v-else>Planilha</strong>
-                  <span v-if="item.usuario"> ({{ item.usuario }})</span>:
-                  {{ item.erro }}
-                </div>
+                {{ planoUsuarios.erros.length }} linha(s) com erro impedem a
+                aplicação. Clique no chip vermelho para ver quais.
               </q-banner>
-
-              <q-markup-table
-                v-if="linhasPlanoUsuarios.length"
-                flat
-                dense
-                bordered
-                separator="horizontal"
-                class="tabela-detalhe q-mb-sm"
-                style="max-height: 40vh"
-              >
-                <thead>
-                  <tr>
-                    <th
-                      v-for="coluna in COLUNAS_LOTE_USUARIOS"
-                      :key="coluna.chave"
-                      class="text-left"
-                      :class="coluna.ordenavel ? 'col-ordenavel' : ''"
-                      @click="coluna.ordenavel && ordenarLote(coluna.chave)"
-                    >
-                      {{ coluna.rotulo }}
-                      <q-icon
-                        v-if="ordenacaoLote.coluna === coluna.chave"
-                        :name="ordenacaoLote.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
-                        size="14px"
-                        class="q-ml-xs"
-                      />
-                    </th>
-                  </tr>
-                </thead>
-
-                <!--
-                  Igual ao detalhe de colaboradores atualizados: ordenar por
-                  Campo/De/Para exibe uma linha por mudança (achatada); nas
-                  demais colunas (ou sem ordenação) agrupa por usuário.
-                -->
-                <tbody v-if="loteUsuariosOrdenaPorMudanca">
-                  <tr v-for="(linha, indice) in loteUsuariosLinhasFlatOrdenadas" :key="indice">
-                    <td>{{ linha.linha }}</td>
-                    <td>{{ linha.usuario }}</td>
-                    <td>{{ linha.nome }}</td>
-                    <td>{{ linha.nivel_rotulo }}</td>
-                    <td>{{ linha.ativo ? 'Ativo' : 'Será desativado' }}</td>
-                    <td>
-                      <q-badge
-                        :color="linha.novo ? 'positive' : 'primary'"
-                        :label="linha.novo ? 'novo' : 'alterado'"
-                      />
-                    </td>
-                    <template v-if="linha.semMudanca">
-                      <td colspan="3" class="text-grey-7">
-                        {{ linha.novo ? 'Usuário novo.' : 'Sem alteração de campo.' }}
-                      </td>
-                    </template>
-                    <template v-else>
-                      <td class="text-weight-medium">{{ linha.campo }}</td>
-                      <td class="text-grey-7">{{ linha.de }}</td>
-                      <td class="text-positive text-weight-medium">{{ linha.para }}</td>
-                    </template>
-                  </tr>
-                </tbody>
-
-                <tbody v-else>
-                  <template
-                    v-for="item in linhasPlanoUsuariosOrdenadas"
-                    :key="item.linha"
-                  >
-                    <tr v-if="!item.mudancas?.length" class="linha-sem-mudanca">
-                      <td>{{ item.linha }}</td>
-                      <td>{{ item.usuario }}</td>
-                      <td>{{ item.nome }}</td>
-                      <td>{{ item.nivel_rotulo }}</td>
-                      <td>{{ item.ativo ? 'Ativo' : 'Será desativado' }}</td>
-                      <td>
-                        <q-badge
-                          :color="item.novo ? 'positive' : 'primary'"
-                          :label="item.novo ? 'novo' : 'alterado'"
-                        />
-                      </td>
-                      <td colspan="3" class="text-grey-7">
-                        {{ item.novo ? 'Usuário novo.' : 'Sem alteração de campo.' }}
-                      </td>
-                    </tr>
-                    <template v-else>
-                      <tr
-                        v-for="(mudanca, indice) in item.mudancas"
-                        :key="`${item.linha}-${indice}`"
-                        :class="indice === 0 ? 'linha-inicio-grupo' : ''"
-                      >
-                        <td>{{ indice === 0 ? item.linha : '' }}</td>
-                        <td>{{ indice === 0 ? item.usuario : '' }}</td>
-                        <td>{{ indice === 0 ? item.nome : '' }}</td>
-                        <td>{{ indice === 0 ? item.nivel_rotulo : '' }}</td>
-                        <td>{{ indice === 0 ? (item.ativo ? 'Ativo' : 'Será desativado') : '' }}</td>
-                        <td>
-                          <q-badge
-                            v-if="indice === 0"
-                            :color="item.novo ? 'positive' : 'primary'"
-                            :label="item.novo ? 'novo' : 'alterado'"
-                          />
-                        </td>
-                        <td class="text-weight-medium">{{ mudanca.campo }}</td>
-                        <td class="text-grey-7">{{ mudanca.de }}</td>
-                        <td class="text-positive text-weight-medium">{{ mudanca.para }}</td>
-                      </tr>
-                    </template>
-                  </template>
-                </tbody>
-              </q-markup-table>
 
               <q-btn
                 color="positive"
@@ -1060,6 +946,134 @@
             </q-card-section>
           </q-card>
         </q-dialog>
+
+        <!-- ================================================== -->
+        <!-- DETALHE DO LOTE DE USUÁRIOS (novos / alterados / erros) -->
+        <!-- ================================================== -->
+
+        <q-dialog v-model="dialogDetalheLoteUsuarios">
+          <q-card style="width: 820px; max-width: 94vw">
+            <q-card-section class="row items-center q-py-sm">
+              <div class="text-h6">{{ tituloDetalheLoteUsuarios }}</div>
+              <q-space />
+              <q-btn v-close-popup flat round dense icon="close" />
+            </q-card-section>
+
+            <q-separator />
+
+            <q-card-section class="q-pa-none" style="max-height: 62vh; overflow: auto">
+              <q-markup-table flat dense separator="horizontal" class="tabela-detalhe">
+                <thead>
+                  <tr v-if="detalheLoteUsuarios === 'criados'">
+                    <th
+                      v-for="coluna in COLUNAS_LOTE_USUARIOS_CRIADOS"
+                      :key="coluna.chave"
+                      class="text-left col-ordenavel"
+                      @click="ordenarLote(coluna.chave)"
+                    >
+                      {{ coluna.rotulo }}
+                      <q-icon
+                        v-if="ordenacaoLote.coluna === coluna.chave"
+                        :name="ordenacaoLote.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                  </tr>
+                  <tr v-else-if="detalheLoteUsuarios === 'atualizados'">
+                    <th
+                      v-for="coluna in COLUNAS_LOTE_USUARIOS_ATUALIZADOS"
+                      :key="coluna.chave"
+                      class="text-left"
+                      :class="coluna.ordenavel ? 'col-ordenavel' : ''"
+                      @click="coluna.ordenavel && ordenarLote(coluna.chave)"
+                    >
+                      {{ coluna.rotulo }}
+                      <q-icon
+                        v-if="ordenacaoLote.coluna === coluna.chave"
+                        :name="ordenacaoLote.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                  </tr>
+                  <tr v-else>
+                    <th
+                      v-for="coluna in COLUNAS_LOTE_USUARIOS_ERROS"
+                      :key="coluna.chave"
+                      class="text-left col-ordenavel"
+                      @click="ordenarLote(coluna.chave)"
+                    >
+                      {{ coluna.rotulo }}
+                      <q-icon
+                        v-if="ordenacaoLote.coluna === coluna.chave"
+                        :name="ordenacaoLote.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody v-if="detalheLoteUsuarios === 'criados'">
+                  <tr v-for="item in criadosLoteOrdenados" :key="item.linha">
+                    <td>{{ item.linha }}</td>
+                    <td>{{ item.usuario }}</td>
+                    <td>{{ item.nome }}</td>
+                    <td>{{ item.nivel_rotulo }}</td>
+                    <td>{{ item.ativo ? 'Ativo' : 'Desativado' }}</td>
+                  </tr>
+                </tbody>
+
+                <!--
+                  Igual ao detalhe de colaboradores atualizados: ordenar por
+                  Campo/De/Para exibe uma linha por mudança (achatada); nas
+                  demais colunas (ou sem ordenação) agrupa por usuário.
+                -->
+                <tbody
+                  v-else-if="detalheLoteUsuarios === 'atualizados' && loteUsuariosOrdenaPorMudanca"
+                >
+                  <tr v-for="(linha, indice) in loteUsuariosLinhasFlatOrdenadas" :key="indice">
+                    <td>{{ linha.linha }}</td>
+                    <td>{{ linha.usuario }}</td>
+                    <td>{{ linha.nome }}</td>
+                    <td class="text-weight-medium">{{ linha.campo }}</td>
+                    <td class="text-grey-7">{{ linha.de }}</td>
+                    <td class="text-positive text-weight-medium">{{ linha.para }}</td>
+                  </tr>
+                </tbody>
+
+                <tbody v-else-if="detalheLoteUsuarios === 'atualizados'">
+                  <template
+                    v-for="item in atualizadosLoteOrdenados"
+                    :key="item.linha"
+                  >
+                    <tr
+                      v-for="(mudanca, indice) in item.mudancas"
+                      :key="`${item.linha}-${indice}`"
+                      :class="indice === 0 ? 'linha-inicio-grupo' : ''"
+                    >
+                      <td>{{ indice === 0 ? item.linha : '' }}</td>
+                      <td>{{ indice === 0 ? item.usuario : '' }}</td>
+                      <td>{{ indice === 0 ? item.nome : '' }}</td>
+                      <td class="text-weight-medium">{{ mudanca.campo }}</td>
+                      <td class="text-grey-7">{{ mudanca.de }}</td>
+                      <td class="text-positive text-weight-medium">{{ mudanca.para }}</td>
+                    </tr>
+                  </template>
+                </tbody>
+
+                <tbody v-else>
+                  <tr v-for="(item, indice) in errosLoteOrdenados" :key="indice">
+                    <td>{{ item.linha }}</td>
+                    <td>{{ item.usuario || '—' }}</td>
+                    <td class="text-negative">{{ item.erro }}</td>
+                  </tr>
+                </tbody>
+              </q-markup-table>
+            </q-card-section>
+          </q-card>
+        </q-dialog>
       </q-page>
     </q-page-container>
   </q-layout>
@@ -1119,36 +1133,121 @@ const linhasPlanoUsuarios = computed(() => {
 })
 
 // ------------------------------------------------------------
-// Ordenação da tabela de "Usuários em lote" (clique no cabeçalho)
+// Detalhe do lote de usuários — mesmo padrão de "Atualizar cadastro de
+// colaboradores": chips resumem, um diálogo à parte mostra a tabela.
 // ------------------------------------------------------------
 
-const COLUNAS_LOTE_USUARIOS = [
+const dialogDetalheLoteUsuarios = ref(false)
+const detalheLoteUsuarios = ref('criados')
+
+const chipsLoteUsuarios = computed(() => {
+  const plano = planoUsuarios.value || {}
+
+  return [
+    { tipo: 'criados', cor: 'positive', rotulo: 'novo(s)', total: plano.criar?.length || 0 },
+    {
+      tipo: 'atualizados',
+      cor: 'primary',
+      rotulo: 'alterado(s)',
+      total: plano.atualizar?.length || 0
+    },
+    { tipo: 'ignorados', cor: 'grey-7', rotulo: 'sem mudança', total: 0 },
+    {
+      tipo: 'erros',
+      cor: plano.erros?.length ? 'negative' : 'grey-5',
+      rotulo: 'com erro',
+      total: plano.erros?.length || 0
+    }
+  ]
+})
+
+const TITULOS_DETALHE_LOTE_USUARIOS = {
+  criados: 'Usuários novos',
+  atualizados: 'Usuários atualizados (de → para)',
+  erros: 'Linhas com erro'
+}
+
+const tituloDetalheLoteUsuarios = computed(
+  () => TITULOS_DETALHE_LOTE_USUARIOS[detalheLoteUsuarios.value] || 'Detalhes'
+)
+
+function abrirDetalheLoteUsuarios(tipo) {
+  const chip = chipsLoteUsuarios.value.find(item => item.tipo === tipo)
+
+  if (!chip?.total) {
+    return
+  }
+
+  detalheLoteUsuarios.value = tipo
+  resetarOrdenacaoLote()
+  dialogDetalheLoteUsuarios.value = true
+}
+
+const { estado: ordenacaoLote, ordenarPor: ordenarLote, resetar: resetarOrdenacaoLote } =
+  criarOrdenacaoTabela()
+
+const COLUNAS_LOTE_USUARIOS_CRIADOS = [
+  { chave: 'linha', rotulo: 'Linha' },
+  { chave: 'usuario', rotulo: 'Usuário' },
+  { chave: 'nome', rotulo: 'Nome' },
+  { chave: 'nivel_rotulo', rotulo: 'Nível' },
+  { chave: 'ativo', rotulo: 'Situação' }
+]
+
+const COLUNAS_LOTE_USUARIOS_ERROS = [
+  { chave: 'linha', rotulo: 'Linha' },
+  { chave: 'usuario', rotulo: 'Usuário' },
+  { chave: 'erro', rotulo: 'Erro' }
+]
+
+// Campo/De/Para não são ordenáveis aqui: cada mudança é por usuário, não
+// por colaborador — ordenar por essas colunas troca para a lista achatada
+// (loteUsuariosLinhasFlatOrdenadas), que já cobre esse caso.
+const COLUNAS_LOTE_USUARIOS_ATUALIZADOS = [
   { chave: 'linha', rotulo: 'Linha', ordenavel: true },
   { chave: 'usuario', rotulo: 'Usuário', ordenavel: true },
   { chave: 'nome', rotulo: 'Nome', ordenavel: true },
-  { chave: 'nivel_rotulo', rotulo: 'Nível', ordenavel: true },
-  { chave: 'ativo', rotulo: 'Situação', ordenavel: true },
-  { chave: 'novo', rotulo: 'Tipo', ordenavel: true },
   { chave: 'campo', rotulo: 'Campo', ordenavel: true },
   { chave: 'de', rotulo: 'De', ordenavel: true },
   { chave: 'para', rotulo: 'Para', ordenavel: true }
 ]
 
-const { estado: ordenacaoLote, ordenarPor: ordenarLote, resetar: resetarOrdenacaoLote } =
-  criarOrdenacaoTabela()
-
-const EXTRATORES_LOTE_USUARIOS = {
+const EXTRATORES_LOTE_CRIADOS = {
   linha: item => item.linha,
   usuario: item => item.usuario,
   nome: item => item.nome,
   nivel_rotulo: item => item.nivel_rotulo,
-  ativo: item => item.ativo,
-  novo: item => item.novo
+  ativo: item => item.ativo
 }
 
-const linhasPlanoUsuariosOrdenadas = computed(() => {
-  const extrair = EXTRATORES_LOTE_USUARIOS[ordenacaoLote.coluna]
-  return extrair ? ordenarLista(linhasPlanoUsuarios.value, extrair, ordenacaoLote) : linhasPlanoUsuarios.value
+const criadosLoteOrdenados = computed(() => {
+  const extrair = EXTRATORES_LOTE_CRIADOS[ordenacaoLote.coluna]
+  const lista = planoUsuarios.value?.criar || []
+  return extrair ? ordenarLista(lista, extrair, ordenacaoLote) : lista
+})
+
+const EXTRATORES_LOTE_ERROS = {
+  linha: item => item.linha,
+  usuario: item => item.usuario,
+  erro: item => item.erro
+}
+
+const errosLoteOrdenados = computed(() => {
+  const extrair = EXTRATORES_LOTE_ERROS[ordenacaoLote.coluna]
+  const lista = planoUsuarios.value?.erros || []
+  return extrair ? ordenarLista(lista, extrair, ordenacaoLote) : lista
+})
+
+const EXTRATORES_LOTE_ATUALIZADOS = {
+  linha: item => item.linha,
+  usuario: item => item.usuario,
+  nome: item => item.nome
+}
+
+const atualizadosLoteOrdenados = computed(() => {
+  const extrair = EXTRATORES_LOTE_ATUALIZADOS[ordenacaoLote.coluna]
+  const lista = planoUsuarios.value?.atualizar || []
+  return extrair ? ordenarLista(lista, extrair, ordenacaoLote) : lista
 })
 
 // Igual ao detalhe de colaboradores: ordenar por Campo/De/Para só faz
@@ -1162,20 +1261,12 @@ const loteUsuariosOrdenaPorMudanca = computed(() =>
 const loteUsuariosLinhasFlat = computed(() => {
   const linhas = []
 
-  linhasPlanoUsuarios.value.forEach(item => {
-    if (!item.mudancas?.length) {
-      linhas.push({ ...item, semMudanca: true })
-      return
-    }
-
-    item.mudancas.forEach(mudanca => {
+  ;(planoUsuarios.value?.atualizar || []).forEach(item => {
+    (item.mudancas || []).forEach(mudanca => {
       linhas.push({
         linha: item.linha,
         usuario: item.usuario,
         nome: item.nome,
-        nivel_rotulo: item.nivel_rotulo,
-        ativo: item.ativo,
-        novo: item.novo,
         campo: mudanca.campo,
         de: mudanca.de,
         para: mudanca.para

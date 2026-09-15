@@ -2113,14 +2113,6 @@ COLUNAS_FIXAS_PLANILHA_ALOCACOES = (
     "SETOR",
     "NOME_ATUAL",
     COLUNA_ALOC_CHAPA,
-    # Seção tratada e tipo de ccusto do colaborador que ocupa a vaga HOJE —
-    # em branco quando a vaga esta livre. So informativo (nao e lido pela
-    # analise, so a coluna CHAPA importa pra decidir alocar/trocar/remover).
-    # Sao do CADASTRO do colaborador, nao da vaga: um colaborador de tipo de
-    # ccusto CONSTRUÇÃO pode estar (e continua podendo ser alocado) numa
-    # vaga de TIPO EQUIPE LIGAÇÃO NOVA — ver database/depara.py.
-    "SEÇÃO_TRATADA",
-    "TIPO_CCUSTO",
 )
 
 COLUNAS_PLANILHA_ATIVOS = (
@@ -2187,8 +2179,6 @@ def montar_planilha_alocacoes(session, usuario=None):
                 "SETOR": composicao.SETOR or "",
                 "NOME_ATUAL": colaborador.NOME if colaborador else "",
                 COLUNA_ALOC_CHAPA: colaborador.CHAPA if colaborador else "",
-                "SEÇÃO_TRATADA": (colaborador.SEÇÃO_TRATADA or "") if colaborador else "",
-                "TIPO_CCUSTO": (colaborador.TIPO_CCUSTO or "") if colaborador else "",
             })
 
     return pd.DataFrame(linhas, columns=list(COLUNAS_FIXAS_PLANILHA_ALOCACOES))
