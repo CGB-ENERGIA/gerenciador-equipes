@@ -2063,13 +2063,19 @@ def criar_vaga():
 
 
 @app.route("/api/equipes/vagas/<int:vaga_id>", methods=["DELETE"])
-@exige_permissao(auth.GERENCIAR_VAGAS)
+@exige_permissao(auth.VER_EQUIPES)
 def remover_vaga(vaga_id):
     session = SessionLocal()
     try:
         vaga = session.query(ComposicaoEquipe).filter(ComposicaoEquipe.id == vaga_id).first()
         if not vaga:
             return jsonify({"erro": "Vaga não encontrada."}), 404
+
+        # Folguista Extra e a unica vaga que quem nao tem GERENCIAR_VAGAS
+        # pode excluir (e a unica que ele tambem pode criar).
+        usuario = auth.usuario_logado()
+        if auth.GERENCIAR_VAGAS not in (usuario.get("permissoes") or ()) and not eh_extra(vaga):
+            return jsonify({"erro": "Seu nível de acesso não permite esta ação."}), 403
 
         if vaga.membro:
             return jsonify({"erro": "Não é possível excluir uma vaga ocupada. Remova o colaborador antes."}), 400

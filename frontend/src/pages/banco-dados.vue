@@ -401,6 +401,20 @@
                             aria-label="Alocar colaborador"
                             @click="abrirAlocacaoParaVaga(equipe, vaga)"
                           />
+
+                          <q-btn
+                            v-if="!vaga.colaborador && podeExcluirVaga(vaga)"
+                            flat
+                            round
+                            dense
+                            color="negative"
+                            icon="delete"
+                            class="q-ml-sm"
+                            aria-label="Excluir vaga"
+                            :loading="removendoComposicaoId === vaga.id"
+                            :disable="removendoComposicaoId !== null"
+                            @click="excluirVagaExtra(equipe, vaga)"
+                          />
                         </div>
                       </div>
                     </q-card-section>
@@ -778,13 +792,13 @@
             </template>
           </q-select>
 
-          <q-input
+          <q-select
             v-model="funcaoExtra"
+            :options="FUNCOES_SISTEMA"
             label="Função"
             outlined
             dense
             class="q-mb-md"
-            hint="Ex.: ELETRICISTA, PODADOR..."
           />
 
           <q-select
@@ -1005,13 +1019,19 @@ import { ref, computed, onMounted, watch } from 'vue'
 
 import CabecalhoApp from '../components/CabecalhoApp.vue'
 import MarcaDaguaFundo from '../components/MarcaDaguaFundo.vue'
-import { PODE_REMOVER_ALOCACAO, PODE_VER_EQUIPES, useSessao } from '../composables/useSessao'
+import {
+  PODE_GERENCIAR_VAGAS,
+  PODE_REMOVER_ALOCACAO,
+  PODE_VER_EQUIPES,
+  useSessao
+} from '../composables/useSessao'
 import {
   CHAVE_BASES_SELECIONADAS,
   ehEquipeFolguista,
   equipeCombinaComResponsavel,
   equipeCombinaComSetor,
   equipeCombinaComTipo,
+  FUNCOES_SISTEMA,
   normalizarSelecaoBases,
   OPCAO_TODAS_BASES,
   opcoesResponsavelFiltro,
@@ -1031,6 +1051,12 @@ const { temPermissao } = useSessao()
 // Folguista Extra (não conta como vaga padrão da equipe).
 function podeRemoverVaga(vaga) {
   return temPermissao(PODE_REMOVER_ALOCACAO) || Boolean(vaga?.eh_extra)
+}
+
+// Idem para excluir a vaga em si (só faz sentido vazia): sem
+// gerenciar_vagas, só a de Folguista Extra pode ser excluída.
+function podeExcluirVaga(vaga) {
+  return temPermissao(PODE_GERENCIAR_VAGAS) || Boolean(vaga?.eh_extra)
 }
 
 // ============================================================
@@ -2002,6 +2028,32 @@ async function removerColaborador(composicaoId) {
     atualizarEstadoAposRemocao(chapa, composicaoId)
   } catch (e) {
     erro.value = e.message || 'Erro ao remover colaborador.'
+  } finally {
+    removendoComposicaoId.value = null
+  }
+}
+
+async function excluirVagaExtra(equipe, vaga) {
+  if (!window.confirm('Deseja realmente excluir esta vaga de Folguista Extra?')) {
+    return
+  }
+
+  erro.value = ''
+  removendoComposicaoId.value = vaga.id
+  try {
+    const resposta = await fetch(`/api/equipes/vagas/${vaga.id}`, {
+      method: 'DELETE'
+    })
+
+    const dados = await resposta.json()
+
+    if (!resposta.ok || dados.erro) {
+      throw new Error(dados.erro || 'Erro ao excluir a vaga.')
+    }
+
+    equipe.vagas = (equipe.vagas || []).filter(item => item.id !== vaga.id)
+  } catch (e) {
+    erro.value = e.message || 'Erro ao excluir a vaga.'
   } finally {
     removendoComposicaoId.value = null
   }
