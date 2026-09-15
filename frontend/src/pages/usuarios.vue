@@ -286,7 +286,7 @@
                   clearable
                   accept=".xlsx"
                   label="Planilha de usuários (.xlsx)"
-                  @update:model-value="planoUsuarios = null"
+                  @update:model-value="planoUsuarios = null; resetarOrdenacaoLote()"
                 >
                   <template #prepend>
                     <q-icon name="attach_file" />
@@ -344,39 +344,113 @@
                 </div>
               </q-banner>
 
-              <q-list
+              <q-markup-table
                 v-if="linhasPlanoUsuarios.length"
-                bordered
+                flat
                 dense
-                separator
-                class="rounded-borders q-mb-sm"
+                bordered
+                separator="horizontal"
+                class="tabela-detalhe q-mb-sm"
+                style="max-height: 40vh"
               >
-                <q-item v-for="item in linhasPlanoUsuarios" :key="item.linha">
-                  <q-item-section>
-                    <q-item-label class="text-weight-medium">
-                      {{ item.usuario }} — {{ item.nome }}
-                      <q-badge
-                        :color="item.novo ? 'positive' : 'primary'"
-                        :label="item.novo ? 'novo' : 'alterado'"
+                <thead>
+                  <tr>
+                    <th
+                      v-for="coluna in COLUNAS_LOTE_USUARIOS"
+                      :key="coluna.chave"
+                      class="text-left"
+                      :class="coluna.ordenavel ? 'col-ordenavel' : ''"
+                      @click="coluna.ordenavel && ordenarLote(coluna.chave)"
+                    >
+                      {{ coluna.rotulo }}
+                      <q-icon
+                        v-if="ordenacaoLote.coluna === coluna.chave"
+                        :name="ordenacaoLote.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
                         class="q-ml-xs"
                       />
-                    </q-item-label>
+                    </th>
+                  </tr>
+                </thead>
 
-                    <q-item-label caption>
-                      {{ item.nivel_rotulo }}
-                      <span v-if="!item.ativo"> · será desativado</span>
-                    </q-item-label>
+                <!--
+                  Igual ao detalhe de colaboradores atualizados: ordenar por
+                  Campo/De/Para exibe uma linha por mudança (achatada); nas
+                  demais colunas (ou sem ordenação) agrupa por usuário.
+                -->
+                <tbody v-if="loteUsuariosOrdenaPorMudanca">
+                  <tr v-for="(linha, indice) in loteUsuariosLinhasFlatOrdenadas" :key="indice">
+                    <td>{{ linha.linha }}</td>
+                    <td>{{ linha.usuario }}</td>
+                    <td>{{ linha.nome }}</td>
+                    <td>{{ linha.nivel_rotulo }}</td>
+                    <td>{{ linha.ativo ? 'Ativo' : 'Será desativado' }}</td>
+                    <td>
+                      <q-badge
+                        :color="linha.novo ? 'positive' : 'primary'"
+                        :label="linha.novo ? 'novo' : 'alterado'"
+                      />
+                    </td>
+                    <template v-if="linha.semMudanca">
+                      <td colspan="3" class="text-grey-7">
+                        {{ linha.novo ? 'Usuário novo.' : 'Sem alteração de campo.' }}
+                      </td>
+                    </template>
+                    <template v-else>
+                      <td class="text-weight-medium">{{ linha.campo }}</td>
+                      <td class="text-grey-7">{{ linha.de }}</td>
+                      <td class="text-positive text-weight-medium">{{ linha.para }}</td>
+                    </template>
+                  </tr>
+                </tbody>
 
-                    <q-item-label
-                      v-for="(mudanca, indice) in item.mudancas || []"
-                      :key="indice"
-                      caption
-                    >
-                      {{ mudanca.campo }}: {{ mudanca.de }} → {{ mudanca.para }}
-                    </q-item-label>
-                  </q-item-section>
-                </q-item>
-              </q-list>
+                <tbody v-else>
+                  <template
+                    v-for="item in linhasPlanoUsuariosOrdenadas"
+                    :key="item.linha"
+                  >
+                    <tr v-if="!item.mudancas?.length" class="linha-sem-mudanca">
+                      <td>{{ item.linha }}</td>
+                      <td>{{ item.usuario }}</td>
+                      <td>{{ item.nome }}</td>
+                      <td>{{ item.nivel_rotulo }}</td>
+                      <td>{{ item.ativo ? 'Ativo' : 'Será desativado' }}</td>
+                      <td>
+                        <q-badge
+                          :color="item.novo ? 'positive' : 'primary'"
+                          :label="item.novo ? 'novo' : 'alterado'"
+                        />
+                      </td>
+                      <td colspan="3" class="text-grey-7">
+                        {{ item.novo ? 'Usuário novo.' : 'Sem alteração de campo.' }}
+                      </td>
+                    </tr>
+                    <template v-else>
+                      <tr
+                        v-for="(mudanca, indice) in item.mudancas"
+                        :key="`${item.linha}-${indice}`"
+                        :class="indice === 0 ? 'linha-inicio-grupo' : ''"
+                      >
+                        <td>{{ indice === 0 ? item.linha : '' }}</td>
+                        <td>{{ indice === 0 ? item.usuario : '' }}</td>
+                        <td>{{ indice === 0 ? item.nome : '' }}</td>
+                        <td>{{ indice === 0 ? item.nivel_rotulo : '' }}</td>
+                        <td>{{ indice === 0 ? (item.ativo ? 'Ativo' : 'Será desativado') : '' }}</td>
+                        <td>
+                          <q-badge
+                            v-if="indice === 0"
+                            :color="item.novo ? 'positive' : 'primary'"
+                            :label="item.novo ? 'novo' : 'alterado'"
+                          />
+                        </td>
+                        <td class="text-weight-medium">{{ mudanca.campo }}</td>
+                        <td class="text-grey-7">{{ mudanca.de }}</td>
+                        <td class="text-positive text-weight-medium">{{ mudanca.para }}</td>
+                      </tr>
+                    </template>
+                  </template>
+                </tbody>
+              </q-markup-table>
 
               <q-btn
                 color="positive"
@@ -1001,6 +1075,7 @@ import {
   PODE_GERENCIAR_USUARIOS,
   useSessao
 } from '../composables/useSessao'
+import { criarOrdenacaoTabela, ordenarLista } from '../utils/ordenacaoTabela'
 
 definePage({ meta: { permissao: PODE_GERENCIAR_USUARIOS } })
 
@@ -1041,6 +1116,87 @@ const linhasPlanoUsuarios = computed(() => {
   }))
 
   return [...novos, ...alterados].sort((a, b) => a.linha - b.linha)
+})
+
+// ------------------------------------------------------------
+// Ordenação da tabela de "Usuários em lote" (clique no cabeçalho)
+// ------------------------------------------------------------
+
+const COLUNAS_LOTE_USUARIOS = [
+  { chave: 'linha', rotulo: 'Linha', ordenavel: true },
+  { chave: 'usuario', rotulo: 'Usuário', ordenavel: true },
+  { chave: 'nome', rotulo: 'Nome', ordenavel: true },
+  { chave: 'nivel_rotulo', rotulo: 'Nível', ordenavel: true },
+  { chave: 'ativo', rotulo: 'Situação', ordenavel: true },
+  { chave: 'novo', rotulo: 'Tipo', ordenavel: true },
+  { chave: 'campo', rotulo: 'Campo', ordenavel: true },
+  { chave: 'de', rotulo: 'De', ordenavel: true },
+  { chave: 'para', rotulo: 'Para', ordenavel: true }
+]
+
+const { estado: ordenacaoLote, ordenarPor: ordenarLote, resetar: resetarOrdenacaoLote } =
+  criarOrdenacaoTabela()
+
+const EXTRATORES_LOTE_USUARIOS = {
+  linha: item => item.linha,
+  usuario: item => item.usuario,
+  nome: item => item.nome,
+  nivel_rotulo: item => item.nivel_rotulo,
+  ativo: item => item.ativo,
+  novo: item => item.novo
+}
+
+const linhasPlanoUsuariosOrdenadas = computed(() => {
+  const extrair = EXTRATORES_LOTE_USUARIOS[ordenacaoLote.coluna]
+  return extrair ? ordenarLista(linhasPlanoUsuarios.value, extrair, ordenacaoLote) : linhasPlanoUsuarios.value
+})
+
+// Igual ao detalhe de colaboradores: ordenar por Campo/De/Para só faz
+// sentido linha a linha (por mudança), quebrando o agrupamento por usuário.
+const COLUNAS_LOTE_POR_MUDANCA = ['campo', 'de', 'para']
+
+const loteUsuariosOrdenaPorMudanca = computed(() =>
+  COLUNAS_LOTE_POR_MUDANCA.includes(ordenacaoLote.coluna)
+)
+
+const loteUsuariosLinhasFlat = computed(() => {
+  const linhas = []
+
+  linhasPlanoUsuarios.value.forEach(item => {
+    if (!item.mudancas?.length) {
+      linhas.push({ ...item, semMudanca: true })
+      return
+    }
+
+    item.mudancas.forEach(mudanca => {
+      linhas.push({
+        linha: item.linha,
+        usuario: item.usuario,
+        nome: item.nome,
+        nivel_rotulo: item.nivel_rotulo,
+        ativo: item.ativo,
+        novo: item.novo,
+        campo: mudanca.campo,
+        de: mudanca.de,
+        para: mudanca.para
+      })
+    })
+  })
+
+  return linhas
+})
+
+const EXTRATORES_LOTE_POR_MUDANCA = {
+  campo: linha => linha.campo,
+  de: linha => linha.de,
+  para: linha => linha.para
+}
+
+const loteUsuariosLinhasFlatOrdenadas = computed(() => {
+  const extrair = EXTRATORES_LOTE_POR_MUDANCA[ordenacaoLote.coluna]
+  return extrair
+    ? ordenarLista(loteUsuariosLinhasFlat.value, extrair, ordenacaoLote)
+    : loteUsuariosLinhasFlat.value
 })
 
 // cópia local editável das permissões por nível, sincronizada sempre que
@@ -1429,8 +1585,7 @@ function abrirDetalheImportacao(tipo) {
   }
 
   detalheImportacao.value = tipo
-  ordenacaoDetalhe.coluna = null
-  ordenacaoDetalhe.direcao = 'asc'
+  resetarOrdenacaoDetalhe()
   dialogDetalheImportacao.value = true
 }
 
@@ -1438,42 +1593,11 @@ function abrirDetalheImportacao(tipo) {
 // Ordenação das tabelas do diálogo de detalhe (clique no cabeçalho)
 // ------------------------------------------------------------
 
-const ordenacaoDetalhe = reactive({ coluna: null, direcao: 'asc' })
-
-function ordenarDetalhe(coluna) {
-  if (ordenacaoDetalhe.coluna === coluna) {
-    ordenacaoDetalhe.direcao = ordenacaoDetalhe.direcao === 'asc' ? 'desc' : 'asc'
-  } else {
-    ordenacaoDetalhe.coluna = coluna
-    ordenacaoDetalhe.direcao = 'asc'
-  }
-}
-
-function compararValoresDetalhe(a, b) {
-  const valorA = a ?? ''
-  const valorB = b ?? ''
-
-  if (typeof valorA === 'number' && typeof valorB === 'number') {
-    return valorA - valorB
-  }
-
-  return String(valorA).localeCompare(String(valorB), 'pt-BR', {
-    numeric: true,
-    sensitivity: 'base'
-  })
-}
-
-function ordenarListaDetalhe(lista, extrair) {
-  if (!ordenacaoDetalhe.coluna) {
-    return lista
-  }
-
-  const sinal = ordenacaoDetalhe.direcao === 'asc' ? 1 : -1
-
-  return [...lista].sort(
-    (a, b) => sinal * compararValoresDetalhe(extrair(a), extrair(b))
-  )
-}
+const {
+  estado: ordenacaoDetalhe,
+  ordenarPor: ordenarDetalhe,
+  resetar: resetarOrdenacaoDetalhe
+} = criarOrdenacaoTabela()
 
 const EXTRATORES_DETALHE = {
   criados: {
@@ -1507,7 +1631,7 @@ function ordenarDetalheImportacao(lista) {
   const extratores = EXTRATORES_DETALHE[detalheImportacao.value] || {}
   const extrair = extratores[ordenacaoDetalhe.coluna]
 
-  return extrair ? ordenarListaDetalhe(lista, extrair) : lista
+  return extrair ? ordenarLista(lista, extrair, ordenacaoDetalhe) : lista
 }
 
 const criadosOrdenados = computed(() =>
@@ -1562,7 +1686,7 @@ const EXTRATORES_ATUALIZADOS_POR_MUDANCA = {
 const atualizadosLinhasFlatOrdenadas = computed(() => {
   const extrair = EXTRATORES_ATUALIZADOS_POR_MUDANCA[ordenacaoDetalhe.coluna]
   return extrair
-    ? ordenarListaDetalhe(atualizadosLinhasFlat.value, extrair)
+    ? ordenarLista(atualizadosLinhasFlat.value, extrair, ordenacaoDetalhe)
     : atualizadosLinhasFlat.value
 })
 
@@ -1708,6 +1832,7 @@ async function analisarPlanilhaUsuarios() {
 
   limparAvisos()
   analisandoUsuarios.value = true
+  resetarOrdenacaoLote()
 
   try {
     const corpo = new FormData()

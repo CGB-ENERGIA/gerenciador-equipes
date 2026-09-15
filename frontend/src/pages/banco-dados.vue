@@ -959,43 +959,109 @@
               </q-chip>
             </div>
 
-            <q-banner
-              v-if="planoAlocacoes.erros?.length"
-              class="bg-red-1 text-negative q-mb-sm"
-              rounded
-            >
-              <div class="text-weight-medium q-mb-xs">
-                {{ planoAlocacoes.erros.length }} linha(s) com problema:
+            <div v-if="planoAlocacoes.erros?.length" class="q-mb-sm">
+              <div class="text-subtitle2 text-negative q-mb-xs">
+                {{ planoAlocacoes.erros.length }} linha(s) com problema
               </div>
-              <div v-for="(item, indice) in planoAlocacoes.erros" :key="indice">
-                Linha {{ item.linha }} ({{ item.equipe }}): {{ item.erro }}
-              </div>
-            </q-banner>
+              <q-markup-table flat dense bordered separator="horizontal" class="tabela-detalhe">
+                <thead>
+                  <tr>
+                    <th class="text-left col-ordenavel" @click="ordenarErrosAlocacoes('linha')">
+                      Linha
+                      <q-icon
+                        v-if="ordenacaoErrosAlocacoes.coluna === 'linha'"
+                        :name="ordenacaoErrosAlocacoes.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarErrosAlocacoes('equipe')">
+                      Equipe
+                      <q-icon
+                        v-if="ordenacaoErrosAlocacoes.coluna === 'equipe'"
+                        :name="ordenacaoErrosAlocacoes.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarErrosAlocacoes('erro')">
+                      Erro
+                      <q-icon
+                        v-if="ordenacaoErrosAlocacoes.coluna === 'erro'"
+                        :name="ordenacaoErrosAlocacoes.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(item, indice) in errosAlocacoesOrdenados" :key="indice">
+                    <td>{{ item.linha }}</td>
+                    <td>{{ item.equipe }}</td>
+                    <td class="text-negative">{{ item.erro }}</td>
+                  </tr>
+                </tbody>
+              </q-markup-table>
+            </div>
 
-            <q-banner
-              v-if="conflitosPendentes.length"
-              class="bg-orange-1 text-orange-9 q-mb-sm"
-              rounded
-            >
-              <div class="text-weight-medium q-mb-xs">
-                Colaborador já alocado em outra equipe — confirme a transferência:
+            <div v-if="conflitosPendentes.length" class="q-mb-sm">
+              <div class="text-subtitle2 text-orange-9 q-mb-xs">
+                Colaborador já alocado em outra equipe — confirme a transferência
               </div>
-              <div
-                v-for="item in conflitosPendentes"
-                :key="item.chapa"
-                class="row items-center q-py-xs"
-              >
-                <q-checkbox
-                  :model-value="conflitosConfirmados.has(item.chapa)"
-                  :label="
-                    `${item.chapa} - ${item.nome} (estava em ${item.alocacao_atual?.equipe || '?'}` +
-                    (item.alocacao_atual?.tipo_equipe ? `, ${item.alocacao_atual.tipo_equipe}` : '') +
-                    ')'
-                  "
-                  @update:model-value="alternarConflito(item.chapa)"
-                />
-              </div>
-            </q-banner>
+              <q-markup-table flat dense bordered separator="horizontal" class="tabela-detalhe">
+                <thead>
+                  <tr>
+                    <th class="text-left col-ordenavel" @click="ordenarConflitosAlocacoes('chapa')">
+                      Chapa
+                      <q-icon
+                        v-if="ordenacaoConflitosAlocacoes.coluna === 'chapa'"
+                        :name="ordenacaoConflitosAlocacoes.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarConflitosAlocacoes('nome')">
+                      Nome
+                      <q-icon
+                        v-if="ordenacaoConflitosAlocacoes.coluna === 'nome'"
+                        :name="ordenacaoConflitosAlocacoes.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarConflitosAlocacoes('equipe_atual')">
+                      Equipe atual
+                      <q-icon
+                        v-if="ordenacaoConflitosAlocacoes.coluna === 'equipe_atual'"
+                        :name="ordenacaoConflitosAlocacoes.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left">Confirmar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in conflitosPendentesOrdenados" :key="item.chapa">
+                    <td>{{ item.chapa }}</td>
+                    <td>{{ item.nome }}</td>
+                    <td>
+                      {{ item.alocacao_atual?.equipe || '?' }}
+                      <span v-if="item.alocacao_atual?.tipo_equipe">
+                        , {{ item.alocacao_atual.tipo_equipe }}
+                      </span>
+                    </td>
+                    <td>
+                      <q-checkbox
+                        :model-value="conflitosConfirmados.has(item.chapa)"
+                        @update:model-value="alternarConflito(item.chapa)"
+                      />
+                    </td>
+                  </tr>
+                </tbody>
+              </q-markup-table>
+            </div>
 
             <q-btn
               color="positive"
@@ -1042,6 +1108,7 @@ import {
   SETOR_TODOS,
   TIPO_TODOS
 } from '../utils/equipes'
+import { criarOrdenacaoTabela, ordenarLista } from '../utils/ordenacaoTabela'
 
 definePage({ meta: { permissao: PODE_VER_EQUIPES } })
 
@@ -1179,6 +1246,50 @@ const conflitosConfirmados = ref(new Set())
 const conflitosPendentes = computed(() =>
   (planoAlocacoes.value?.alocar || []).filter(item => item.conflito)
 )
+
+// ------------------------------------------------------------
+// Ordenação das tabelas de "Alocação em massa" (clique no cabeçalho)
+// ------------------------------------------------------------
+
+const {
+  estado: ordenacaoErrosAlocacoes,
+  ordenarPor: ordenarErrosAlocacoes,
+  resetar: resetarOrdenacaoErrosAlocacoes
+} = criarOrdenacaoTabela()
+
+const {
+  estado: ordenacaoConflitosAlocacoes,
+  ordenarPor: ordenarConflitosAlocacoes,
+  resetar: resetarOrdenacaoConflitosAlocacoes
+} = criarOrdenacaoTabela()
+
+function resetarOrdenacaoAlocacoes() {
+  resetarOrdenacaoErrosAlocacoes()
+  resetarOrdenacaoConflitosAlocacoes()
+}
+
+const errosAlocacoesOrdenados = computed(() => {
+  const extratores = {
+    linha: item => item.linha,
+    equipe: item => item.equipe,
+    erro: item => item.erro
+  }
+  const extrair = extratores[ordenacaoErrosAlocacoes.coluna]
+  const lista = planoAlocacoes.value?.erros || []
+  return extrair ? ordenarLista(lista, extrair, ordenacaoErrosAlocacoes) : lista
+})
+
+const conflitosPendentesOrdenados = computed(() => {
+  const extratores = {
+    chapa: item => item.chapa,
+    nome: item => item.nome,
+    equipe_atual: item => item.alocacao_atual?.equipe
+  }
+  const extrair = extratores[ordenacaoConflitosAlocacoes.coluna]
+  return extrair
+    ? ordenarLista(conflitosPendentes.value, extrair, ordenacaoConflitosAlocacoes)
+    : conflitosPendentes.value
+})
 
 const basesAlocacao = computed(() => {
   return Object.keys(opcoesAlocacao.value)
@@ -1779,6 +1890,7 @@ async function enviarPreviaAlocacoes() {
 
     planoAlocacoes.value = dados
     conflitosConfirmados.value = new Set()
+    resetarOrdenacaoAlocacoes()
   } catch (e) {
     erro.value = e.message || 'Erro ao analisar a planilha.'
   } finally {
@@ -2180,6 +2292,27 @@ watch(
 </script>
 
 <style scoped>
+.tabela-detalhe :deep(th) {
+  font-family: var(--fonte-ui);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+}
+
+.tabela-detalhe :deep(td) {
+  font-size: 0.8rem;
+}
+
+.tabela-detalhe :deep(th.col-ordenavel) {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.tabela-detalhe :deep(th.col-ordenavel:hover) {
+  color: var(--q-primary);
+}
+
 .banco-page :deep(.q-list .q-item__section--main) {
   text-align: center;
 }

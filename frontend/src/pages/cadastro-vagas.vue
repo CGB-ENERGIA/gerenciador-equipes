@@ -893,26 +893,87 @@
 
             <div v-if="planoPlanilha.erros.length">
               <div class="text-subtitle2 text-negative q-mb-xs"> Erros </div>
-              <q-list bordered separator dense>
-                <q-item v-for="e in planoPlanilha.erros" :key="'e' + e.linha">
-                  <q-item-section>
-                    <q-item-label>
-                      Linha {{ e.linha }} — {{ e.equipe }}
-                    </q-item-label>
-                    <q-item-label caption class="text-negative">
-                      {{ e.erro }}
-                    </q-item-label>
-                  </q-item-section>
-                </q-item>
-              </q-list>
+              <q-markup-table flat dense bordered separator="horizontal" class="tabela-detalhe">
+                <thead>
+                  <tr>
+                    <th class="text-left col-ordenavel" @click="ordenarErrosPlanilha('linha')">
+                      Linha
+                      <q-icon
+                        v-if="ordenacaoErrosPlanilha.coluna === 'linha'"
+                        :name="ordenacaoErrosPlanilha.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarErrosPlanilha('equipe')">
+                      Equipe
+                      <q-icon
+                        v-if="ordenacaoErrosPlanilha.coluna === 'equipe'"
+                        :name="ordenacaoErrosPlanilha.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarErrosPlanilha('erro')">
+                      Erro
+                      <q-icon
+                        v-if="ordenacaoErrosPlanilha.coluna === 'erro'"
+                        :name="ordenacaoErrosPlanilha.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="e in errosPlanilhaOrdenados" :key="'e' + e.linha">
+                    <td>{{ e.linha }}</td>
+                    <td>{{ e.equipe }}</td>
+                    <td class="text-negative">{{ e.erro }}</td>
+                  </tr>
+                </tbody>
+              </q-markup-table>
             </div>
 
             <div v-if="planoPlanilha.criar.length">
               <div class="text-subtitle2 q-mb-xs"> Criar </div>
-              <q-list bordered separator dense>
-                <q-item v-for="i in planoPlanilha.criar" :key="'c' + i.linha">
-                  <q-item-section>
-                    <q-item-label>
+              <q-markup-table flat dense bordered separator="horizontal" class="tabela-detalhe">
+                <thead>
+                  <tr>
+                    <th class="text-left col-ordenavel" @click="ordenarCriarPlanilha('linha')">
+                      Linha
+                      <q-icon
+                        v-if="ordenacaoCriarPlanilha.coluna === 'linha'"
+                        :name="ordenacaoCriarPlanilha.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarCriarPlanilha('equipe')">
+                      Equipe
+                      <q-icon
+                        v-if="ordenacaoCriarPlanilha.coluna === 'equipe'"
+                        :name="ordenacaoCriarPlanilha.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarCriarPlanilha('total')">
+                      Vagas
+                      <q-icon
+                        v-if="ordenacaoCriarPlanilha.coluna === 'total'"
+                        :name="ordenacaoCriarPlanilha.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left">Detalhe</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="i in criarPlanilhaOrdenados" :key="'c' + i.linha">
+                    <td>{{ i.linha }}</td>
+                    <td>
                       {{ i.equipe }}
                       <q-badge
                         v-if="i.era_edicao"
@@ -922,48 +983,101 @@
                       >
                         equipe nova
                       </q-badge>
-                    </q-item-label>
-                    <q-item-label caption>
-                      {{ i.total }} vaga(s):
+                      <div v-if="i.era_edicao" class="text-caption text-orange-9">
+                        Estava como "editar", mas essa equipe ainda não existe.
+                      </div>
+                    </td>
+                    <td>{{ i.total }}</td>
+                    <td>
                       {{
                         Object.entries(i.vagas)
                           .map(([f, q]) => q + ' ' + f)
                           .join(', ')
                       }}
-                    </q-item-label>
-                    <q-item-label v-if="i.era_edicao" caption class="text-orange-9">
-                      A linha {{ i.linha }} está como "editar", mas essa equipe
-                      ainda não existe — será criada.
-                    </q-item-label>
-                  </q-item-section>
-                </q-item>
-              </q-list>
+                    </td>
+                  </tr>
+                </tbody>
+              </q-markup-table>
             </div>
 
             <div v-if="planoPlanilha.editar.length">
               <div class="text-subtitle2 q-mb-xs"> Editar </div>
-              <q-list bordered separator dense>
-                <q-item v-for="i in planoPlanilha.editar" :key="'ed' + i.linha">
-                  <q-item-section>
-                    <q-item-label>{{ i.equipe }}</q-item-label>
-                    <q-item-label caption>{{ i.resumo }}</q-item-label>
-                  </q-item-section>
-                </q-item>
-              </q-list>
+              <q-markup-table flat dense bordered separator="horizontal" class="tabela-detalhe">
+                <thead>
+                  <tr>
+                    <th class="text-left col-ordenavel" @click="ordenarEditarPlanilha('linha')">
+                      Linha
+                      <q-icon
+                        v-if="ordenacaoEditarPlanilha.coluna === 'linha'"
+                        :name="ordenacaoEditarPlanilha.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarEditarPlanilha('equipe')">
+                      Equipe
+                      <q-icon
+                        v-if="ordenacaoEditarPlanilha.coluna === 'equipe'"
+                        :name="ordenacaoEditarPlanilha.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left">Resumo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="i in editarPlanilhaOrdenados" :key="'ed' + i.linha">
+                    <td>{{ i.linha }}</td>
+                    <td>{{ i.equipe }}</td>
+                    <td>{{ i.resumo }}</td>
+                  </tr>
+                </tbody>
+              </q-markup-table>
             </div>
 
             <div v-if="planoPlanilha.excluir.length">
               <div class="text-subtitle2 text-negative q-mb-xs"> Excluir </div>
-              <q-list bordered separator dense>
-                <q-item v-for="i in planoPlanilha.excluir" :key="'x' + i.linha">
-                  <q-item-section>
-                    <q-item-label>{{ i.equipe }}</q-item-label>
-                    <q-item-label caption>
-                      perde {{ i.vagas }} vaga(s) cadastrada(s)
-                    </q-item-label>
-                  </q-item-section>
-                </q-item>
-              </q-list>
+              <q-markup-table flat dense bordered separator="horizontal" class="tabela-detalhe">
+                <thead>
+                  <tr>
+                    <th class="text-left col-ordenavel" @click="ordenarExcluirPlanilha('linha')">
+                      Linha
+                      <q-icon
+                        v-if="ordenacaoExcluirPlanilha.coluna === 'linha'"
+                        :name="ordenacaoExcluirPlanilha.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarExcluirPlanilha('equipe')">
+                      Equipe
+                      <q-icon
+                        v-if="ordenacaoExcluirPlanilha.coluna === 'equipe'"
+                        :name="ordenacaoExcluirPlanilha.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarExcluirPlanilha('vagas')">
+                      Vagas perdidas
+                      <q-icon
+                        v-if="ordenacaoExcluirPlanilha.coluna === 'vagas'"
+                        :name="ordenacaoExcluirPlanilha.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="i in excluirPlanilhaOrdenados" :key="'x' + i.linha">
+                    <td>{{ i.linha }}</td>
+                    <td>{{ i.equipe }}</td>
+                    <td>{{ i.vagas }}</td>
+                  </tr>
+                </tbody>
+              </q-markup-table>
             </div>
           </div>
         </q-card-section>
@@ -992,6 +1106,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import CabecalhoApp from '../components/CabecalhoApp.vue'
 import MarcaDaguaFundo from '../components/MarcaDaguaFundo.vue'
 import { PODE_GERENCIAR_VAGAS } from '../composables/useSessao'
+import { criarOrdenacaoTabela, ordenarLista } from '../utils/ordenacaoTabela'
 import {
   equipeCombinaComSetor,
   equipeCombinaComTipo,
@@ -1049,6 +1164,77 @@ const dialogPlanilha = ref(false)
 const baixandoPlanilha = ref(false)
 const analisandoPlanilha = ref(false)
 const aplicandoPlanilha = ref(false)
+
+// ------------------------------------------------------------
+// Ordenação das tabelas de "Conferir mudanças" (clique no cabeçalho)
+// ------------------------------------------------------------
+
+const {
+  estado: ordenacaoErrosPlanilha,
+  ordenarPor: ordenarErrosPlanilha,
+  resetar: resetarOrdenacaoErrosPlanilha
+} = criarOrdenacaoTabela()
+
+const {
+  estado: ordenacaoCriarPlanilha,
+  ordenarPor: ordenarCriarPlanilha,
+  resetar: resetarOrdenacaoCriarPlanilha
+} = criarOrdenacaoTabela()
+
+const {
+  estado: ordenacaoEditarPlanilha,
+  ordenarPor: ordenarEditarPlanilha,
+  resetar: resetarOrdenacaoEditarPlanilha
+} = criarOrdenacaoTabela()
+
+const {
+  estado: ordenacaoExcluirPlanilha,
+  ordenarPor: ordenarExcluirPlanilha,
+  resetar: resetarOrdenacaoExcluirPlanilha
+} = criarOrdenacaoTabela()
+
+function resetarOrdenacaoPlanilha() {
+  resetarOrdenacaoErrosPlanilha()
+  resetarOrdenacaoCriarPlanilha()
+  resetarOrdenacaoEditarPlanilha()
+  resetarOrdenacaoExcluirPlanilha()
+}
+
+const errosPlanilhaOrdenados = computed(() => {
+  const extratores = { linha: e => e.linha, equipe: e => e.equipe, erro: e => e.erro }
+  const extrair = extratores[ordenacaoErrosPlanilha.coluna]
+  const lista = planoPlanilha.value?.erros || []
+  return extrair ? ordenarLista(lista, extrair, ordenacaoErrosPlanilha) : lista
+})
+
+const criarPlanilhaOrdenados = computed(() => {
+  const extratores = {
+    linha: i => i.linha,
+    equipe: i => i.equipe,
+    total: i => i.total
+  }
+  const extrair = extratores[ordenacaoCriarPlanilha.coluna]
+  const lista = planoPlanilha.value?.criar || []
+  return extrair ? ordenarLista(lista, extrair, ordenacaoCriarPlanilha) : lista
+})
+
+const editarPlanilhaOrdenados = computed(() => {
+  const extratores = { linha: i => i.linha, equipe: i => i.equipe }
+  const extrair = extratores[ordenacaoEditarPlanilha.coluna]
+  const lista = planoPlanilha.value?.editar || []
+  return extrair ? ordenarLista(lista, extrair, ordenacaoEditarPlanilha) : lista
+})
+
+const excluirPlanilhaOrdenados = computed(() => {
+  const extratores = {
+    linha: i => i.linha,
+    equipe: i => i.equipe,
+    vagas: i => i.vagas
+  }
+  const extrair = extratores[ordenacaoExcluirPlanilha.coluna]
+  const lista = planoPlanilha.value?.excluir || []
+  return extrair ? ordenarLista(lista, extrair, ordenacaoExcluirPlanilha) : lista
+})
 
 const dialogEdicao = ref(false)
 const equipeEmEdicao = ref(null)
@@ -1397,6 +1583,7 @@ async function analisarPlanilha() {
     }
 
     planoPlanilha.value = dados
+    resetarOrdenacaoPlanilha()
     dialogPlanilha.value = true
   } catch (e) {
     erro.value = e.message || 'Erro ao analisar a planilha.'
@@ -1898,3 +2085,27 @@ onMounted(() => {
   carregarEquipes()
 })
 </script>
+
+<style scoped>
+.tabela-detalhe :deep(th) {
+  font-family: var(--fonte-ui);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+}
+
+.tabela-detalhe :deep(td) {
+  font-size: 0.8rem;
+}
+
+.tabela-detalhe :deep(th.col-ordenavel) {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.tabela-detalhe :deep(th.col-ordenavel:hover) {
+  color: var(--q-primary);
+}
+</style>
+
