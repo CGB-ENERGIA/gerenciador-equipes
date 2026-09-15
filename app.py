@@ -3065,7 +3065,11 @@ def remover_colaborador():
 
         composicao = membro.composicao
         equipe_da_vaga = composicao.equipe if composicao else None
-        if not auth.pode_realizar_operacao(
+
+        # Folguista Extra e a unica remocao liberada para quem nao tem a
+        # permissao REMOVER_ALOCACAO (ex.: usuarios nao administradores).
+        # Qualquer outra vaga continua exigindo a checagem normal.
+        if not (composicao and eh_extra(composicao)) and not auth.pode_realizar_operacao(
             auth.usuario_logado(),
             auth.OPERACAO_REMOVER,
             equipe_da_vaga.BASE if equipe_da_vaga else None,

@@ -376,6 +376,7 @@
                             />
 
                             <q-btn
+                              v-if="podeRemoverVaga(vaga)"
                               flat
                               round
                               dense
@@ -1004,7 +1005,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 
 import CabecalhoApp from '../components/CabecalhoApp.vue'
 import MarcaDaguaFundo from '../components/MarcaDaguaFundo.vue'
-import { PODE_VER_EQUIPES } from '../composables/useSessao'
+import { PODE_REMOVER_ALOCACAO, PODE_VER_EQUIPES, useSessao } from '../composables/useSessao'
 import {
   CHAVE_BASES_SELECIONADAS,
   ehEquipeFolguista,
@@ -1023,6 +1024,14 @@ import {
 } from '../utils/equipes'
 
 definePage({ meta: { permissao: PODE_VER_EQUIPES } })
+
+const { temPermissao } = useSessao()
+
+// Sem a permissão remover_alocacao, a única vaga que dá pra remover é o
+// Folguista Extra (não conta como vaga padrão da equipe).
+function podeRemoverVaga(vaga) {
+  return temPermissao(PODE_REMOVER_ALOCACAO) || Boolean(vaga?.eh_extra)
+}
 
 // ============================================================
 // ESTADO
