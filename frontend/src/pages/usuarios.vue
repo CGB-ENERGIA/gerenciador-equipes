@@ -703,37 +703,173 @@
               <q-markup-table flat dense separator="horizontal" class="tabela-detalhe">
                 <thead>
                   <tr v-if="detalheImportacao === 'criados'">
-                    <th class="text-left">Chapa</th>
-                    <th class="text-left">Nome</th>
-                    <th class="text-left">Função</th>
-                    <th class="text-left">Seção</th>
-                    <th class="text-left">Situação</th>
-                    <th class="text-left">Admissão</th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('chapa')">
+                      Chapa
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'chapa'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('nome')">
+                      Nome
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'nome'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('funcao')">
+                      Função
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'funcao'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('secao')">
+                      Seção
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'secao'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('situacao')">
+                      Situação
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'situacao'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('admissao')">
+                      Admissão
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'admissao'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
                   </tr>
                   <tr v-else-if="detalheImportacao === 'atualizados'">
-                    <th class="text-left">Chapa</th>
-                    <th class="text-left">Nome</th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('chapa')">
+                      Chapa
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'chapa'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('nome')">
+                      Nome
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'nome'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
                     <th class="text-left">Campo</th>
                     <th class="text-left">De</th>
                     <th class="text-left">Para</th>
                   </tr>
                   <tr v-else-if="detalheImportacao === 'rateios'">
-                    <th class="text-left">Chapa</th>
-                    <th class="text-left">Nome</th>
-                    <th class="text-left">Rateio</th>
-                    <th class="text-left">Grupo de custo</th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('chapa')">
+                      Chapa
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'chapa'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('nome')">
+                      Nome
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'nome'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('rateio')">
+                      Rateio
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'rateio'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('grpccusto')">
+                      Grupo de custo
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'grpccusto'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
                   </tr>
                   <tr v-else>
-                    <th class="text-left">Linha</th>
-                    <th class="text-left">Chapa</th>
-                    <th class="text-left">Nome</th>
-                    <th class="text-left">Seção</th>
-                    <th class="text-left">Erro</th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('linha')">
+                      Linha
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'linha'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('chapa')">
+                      Chapa
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'chapa'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('nome')">
+                      Nome
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'nome'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('secao')">
+                      Seção
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'secao'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('erro')">
+                      Erro
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'erro'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
                   </tr>
                 </thead>
 
                 <tbody v-if="detalheImportacao === 'criados'">
-                  <tr v-for="item in resumoColaboradores?.detalhes_criados || []" :key="item.chapa">
+                  <tr v-for="item in criadosOrdenados" :key="item.chapa">
                     <td>{{ item.chapa }}</td>
                     <td>{{ item.nome || '—' }}</td>
                     <td>{{ item.funcao || '—' }}</td>
@@ -746,11 +882,13 @@
                 <!--
                   Atualizados vira uma linha POR MUDANÇA (de-para), não por
                   colaborador: chapa/nome só aparecem na primeira linha de
-                  cada pessoa, pra leitura ficar em bloco.
+                  cada pessoa, pra leitura ficar em bloco. Por isso só Chapa
+                  e Nome (que ordenam os colaboradores, não as mudanças) são
+                  clicáveis aqui — Campo/De/Para quebrariam o agrupamento.
                 -->
                 <tbody v-else-if="detalheImportacao === 'atualizados'">
                   <template
-                    v-for="item in resumoColaboradores?.detalhes_atualizados || []"
+                    v-for="item in atualizadosOrdenados"
                     :key="item.chapa"
                   >
                     <tr v-if="!item.mudancas?.length" class="linha-sem-mudanca">
@@ -778,7 +916,7 @@
 
                 <tbody v-else-if="detalheImportacao === 'rateios'">
                   <tr
-                    v-for="(item, indice) in resumoColaboradores?.detalhes_rateios || []"
+                    v-for="(item, indice) in rateiosOrdenados"
                     :key="indice"
                   >
                     <td>{{ item.chapa }}</td>
@@ -790,7 +928,7 @@
 
                 <tbody v-else>
                   <tr
-                    v-for="(item, indice) in resumoColaboradores?.erros || []"
+                    v-for="(item, indice) in errosOrdenados"
                     :key="indice"
                   >
                     <td>{{ item.linha }}</td>
@@ -1247,8 +1385,102 @@ function abrirDetalheImportacao(tipo) {
   }
 
   detalheImportacao.value = tipo
+  ordenacaoDetalhe.coluna = null
+  ordenacaoDetalhe.direcao = 'asc'
   dialogDetalheImportacao.value = true
 }
+
+// ------------------------------------------------------------
+// Ordenação das tabelas do diálogo de detalhe (clique no cabeçalho)
+// ------------------------------------------------------------
+
+const ordenacaoDetalhe = reactive({ coluna: null, direcao: 'asc' })
+
+function ordenarDetalhe(coluna) {
+  if (ordenacaoDetalhe.coluna === coluna) {
+    ordenacaoDetalhe.direcao = ordenacaoDetalhe.direcao === 'asc' ? 'desc' : 'asc'
+  } else {
+    ordenacaoDetalhe.coluna = coluna
+    ordenacaoDetalhe.direcao = 'asc'
+  }
+}
+
+function compararValoresDetalhe(a, b) {
+  const valorA = a ?? ''
+  const valorB = b ?? ''
+
+  if (typeof valorA === 'number' && typeof valorB === 'number') {
+    return valorA - valorB
+  }
+
+  return String(valorA).localeCompare(String(valorB), 'pt-BR', {
+    numeric: true,
+    sensitivity: 'base'
+  })
+}
+
+function ordenarListaDetalhe(lista, extrair) {
+  if (!ordenacaoDetalhe.coluna) {
+    return lista
+  }
+
+  const sinal = ordenacaoDetalhe.direcao === 'asc' ? 1 : -1
+
+  return [...lista].sort(
+    (a, b) => sinal * compararValoresDetalhe(extrair(a), extrair(b))
+  )
+}
+
+const EXTRATORES_DETALHE = {
+  criados: {
+    chapa: item => item.chapa,
+    nome: item => item.nome,
+    funcao: item => item.funcao,
+    secao: item => item.secao,
+    situacao: item => item.situacao,
+    admissao: item => item.admissao
+  },
+  atualizados: {
+    chapa: item => item.chapa,
+    nome: item => item.nome
+  },
+  rateios: {
+    chapa: item => item.chapa,
+    nome: item => item.nome,
+    rateio: item => item.rateio,
+    grpccusto: item => item.grpccusto
+  },
+  erros: {
+    linha: item => item.linha,
+    chapa: item => item.chapa,
+    nome: item => item.nome,
+    secao: item => item.secao,
+    erro: item => item.erro
+  }
+}
+
+function ordenarDetalheImportacao(lista) {
+  const extratores = EXTRATORES_DETALHE[detalheImportacao.value] || {}
+  const extrair = extratores[ordenacaoDetalhe.coluna]
+
+  return extrair ? ordenarListaDetalhe(lista, extrair) : lista
+}
+
+const criadosOrdenados = computed(() =>
+  ordenarDetalheImportacao(resumoColaboradores.value?.detalhes_criados || [])
+)
+
+const atualizadosOrdenados = computed(() =>
+  ordenarDetalheImportacao(resumoColaboradores.value?.detalhes_atualizados || [])
+)
+
+const rateiosOrdenados = computed(() =>
+  ordenarDetalheImportacao(resumoColaboradores.value?.detalhes_rateios || [])
+)
+
+const errosOrdenados = computed(() =>
+  ordenarDetalheImportacao(resumoColaboradores.value?.erros || [])
+)
 
 async function baixarModeloColaboradores() {
   limparAvisos()
@@ -1529,6 +1761,16 @@ onMounted(carregarTudo)
 
 .tabela-detalhe :deep(td) {
   font-size: 0.8rem;
+}
+
+.tabela-detalhe :deep(th.col-ordenavel) {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.tabela-detalhe :deep(th.col-ordenavel:hover) {
+  color: var(--q-primary);
 }
 
 /* no "de-para", cada colaborador ocupa várias linhas (uma por campo
