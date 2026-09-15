@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="pt-BR" style="scroll-behavior:smooth;">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gerenciador de Equipes — Guia de treinamento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --marca:#711424; --marca-clara:#8d2136; --titulo:#4f1723; --fundo:#f2eeef;
+    --superficie:#ffffff; --superficie-2:#faf7f8; --tinta:#2d2527; --tinta-fraca:#6d5f63;
+    --linha: rgba(113,20,36,.16); --linha-forte: rgba(113,20,36,.32);
+    --folguista:#c9741b; --folguista-fundo:#fbeedd; --negativo:#b3261e; --negativo-fundo:#fbe9e7;
+    --positivo:#1b6b45; --positivo-fundo:#e6f2ea; --neutro:#7a6c70; --realce:#f7e9d7;
+    --disc-poda:#4f7a4a; --disc-linha:#3f6a7a; --disc-jard:#6b4d7a; --disc-manu:#3f7d78; --disc-civil:#7a5a3f;
+    --font-display:'Barlow Semi Condensed',sans-serif;
+    --font-body:'IBM Plex Sans',sans-serif;
+    --font-login:'Inter',sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --marca:#7c1a2c; --marca-clara:#99283f; --titulo:#f2dbe0; --fundo:#171314;
+      --superficie:#221c1e; --superficie-2:#2b2325; --tinta:#f1e9ea; --tinta-fraca:#b7a6aa;
+      --linha: rgba(212,154,85,.2); --linha-forte: rgba(212,154,85,.38);
+      --folguista:#e0a259; --folguista-fundo:#3b2c1c; --negativo:#f08a80; --negativo-fundo:#3d2321;
+      --positivo:#6cc79a; --positivo-fundo:#1e3329; --neutro:#9c8b90; --realce:#382a1c;
+    }
+  }
+  [data-theme="dark"]{
+    --marca:#7c1a2c; --marca-clara:#99283f; --titulo:#f2dbe0; --fundo:#171314;
+    --superficie:#221c1e; --superficie-2:#2b2325; --tinta:#f1e9ea; --tinta-fraca:#b7a6aa;
+    --linha: rgba(212,154,85,.2); --linha-forte: rgba(212,154,85,.38);
+    --folguista:#e0a259; --folguista-fundo:#3b2c1c; --negativo:#f08a80; --negativo-fundo:#3d2321;
+    --positivo:#6cc79a; --positivo-fundo:#1e3329; --neutro:#9c8b90; --realce:#382a1c;
+  }
+  [data-theme="light"]{
+    --marca:#711424; --marca-clara:#8d2136; --titulo:#4f1723; --fundo:#f2eeef;
+    --superficie:#ffffff; --superficie-2:#faf7f8; --tinta:#2d2527; --tinta-fraca:#6d5f63;
+    --linha: rgba(113,20,36,.16); --linha-forte: rgba(113,20,36,.32);
+    --folguista:#c9741b; --folguista-fundo:#fbeedd; --negativo:#b3261e; --negativo-fundo:#fbe9e7;
+    --positivo:#1b6b45; --positivo-fundo:#e6f2ea; --neutro:#7a6c70; --realce:#f7e9d7;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{font-family:var(--font-body);background:var(--fundo);color:var(--tinta);line-height:1.6;transition:background .25s,color .25s;}
+  h1,h2,h3,h4,h5{font-family:var(--font-display);font-weight:700;color:var(--titulo);margin:0 0 .4em;}
+  h1{font-size:2.05rem;}
+  h2{font-size:1.45rem;}
+  h3{font-size:1.1rem;}
+  p{margin:0 0 1em;}
+  a{color:var(--marca);}
+  .muted{color:var(--tinta-fraca);}
+  :focus-visible{outline:3px solid var(--folguista);outline-offset:2px;}
+
+  .app{display:grid;grid-template-columns:250px 1fr;min-height:100vh;}
+
+  /* BARRA LATERAL (cabeçalho vertical) */
+  .sidebar{background:linear-gradient(190deg,var(--marca),var(--marca-clara));color:#f6e6e9;
+    padding:26px 16px;position:sticky;top:0;height:100vh;overflow-y:auto;}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:26px;padding:0 6px;}
+  .brand-mark{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,.9);flex:none;position:relative;}
+  .brand-mark::after{content:'';position:absolute;inset:7px;border-radius:4px;background:var(--folguista);}
+  .brand-text{font-family:var(--font-display);font-weight:700;font-size:1rem;line-height:1.15;}
+  .brand-text span{display:block;font-family:var(--font-body);font-weight:400;font-size:.7rem;color:#e6c3c9;}
+  .nav-group-label{font-size:.7rem;color:#e0b6bc;margin:18px 10px 6px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;}
+  .nav-group-label:first-of-type{margin-top:0;}
+  .nav-item{display:block;padding:9px 11px;border-radius:9px;color:#f4e3e6;text-decoration:none;
+    font-size:.9rem;margin-bottom:2px;}
+  .nav-item:hover{background:rgba(255,255,255,.1);}
+  .nav-item.ativo{background:#fff;color:var(--titulo);font-weight:700;}
+  .tema-toggle{width:100%;margin-top:22px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);
+    color:#f6e6e9;border-radius:9px;padding:9px;font-size:.8rem;font-weight:600;cursor:pointer;font-family:var(--font-body);}
+
+  .content{padding:52px 44px 90px;max-width:1080px;}
+
+  section.bloco{padding-bottom:56px;margin-bottom:56px;border-bottom:1px solid var(--linha);}
+  section.bloco:last-of-type{border-bottom:none;}
+  .kicker{color:var(--folguista);font-weight:700;font-size:.82rem;margin-bottom:8px;font-family:var(--font-display);}
+  .lede{font-size:1.06rem;color:var(--tinta-fraca);}
+
+  /* LAYOUT LADO A LADO: texto explicativo + imagem da tela */
+  .split{display:grid;grid-template-columns:.88fr 1.12fr;gap:32px;align-items:start;margin-top:14px;}
+  .lado-texto{position:relative;}
+  .lado-visual{position:sticky;top:26px;}
+
+  /* JANELA / MOCKUP */
+  .janela{background:var(--superficie);border-radius:12px;overflow:hidden;border:1px solid var(--linha);
+    box-shadow:0 20px 44px -22px rgba(0,0,0,.35);}
+  .janela-barra{background:var(--superficie-2);padding:9px 14px;display:flex;gap:7px;border-bottom:1px solid var(--linha);}
+  .janela-barra .bolinha{width:9px;height:9px;border-radius:50%;background:var(--linha-forte);}
+  .cabecalho-app{background:var(--marca);color:#fff;padding:0 18px;height:56px;display:flex;align-items:center;gap:14px;
+    font-family:var(--font-display);font-size:.96rem;font-weight:700;}
+  .cabecalho-app .cab-spacer{flex:1;}
+  .cabecalho-app .cab-icone{width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,.16);
+    display:flex;align-items:center;justify-content:center;font-size:.78rem;}
+  .cabecalho-app .cab-usuario{font-family:var(--font-body);font-weight:500;font-size:.8rem;
+    background:rgba(255,255,255,.14);padding:5px 11px;border-radius:999px;}
+  .janela-corpo{padding:18px;background:var(--fundo);}
+
+  .barra-filtros{background:linear-gradient(180deg,var(--superficie),var(--superficie-2));border:1px solid var(--linha);
+    border-radius:16px;padding:13px 15px 11px;position:relative;overflow:hidden;margin-bottom:14px;}
+  .barra-filtros::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+    background:linear-gradient(90deg,var(--marca),var(--marca-clara));}
+  .chip{display:inline-flex;align-items:center;background:var(--superficie);border:1px solid var(--linha);
+    border-radius:999px;padding:6px 12px;font-size:.77rem;color:var(--tinta-fraca);font-weight:500;margin:0 6px 6px 0;}
+  .chip.disc{color:#fff;border:none;font-weight:700;}
+  .chip.disc.construcao{background:var(--marca);}
+  .chip.disc.folguista{background:var(--folguista);}
+  .chip.disc.poda{background:var(--disc-poda);}
+  .chip.disc.linha{background:var(--disc-linha);}
+  .chip.disc.manu{background:var(--disc-manu);}
+
+  .cartao{background:var(--superficie);border:1px solid var(--linha);border-radius:8px;padding:15px;margin-bottom:13px;}
+  .cartao h5{margin:0 0 10px;font-size:.92rem;color:var(--titulo);}
+  .linha-cartoes{display:flex;gap:12px;flex-wrap:wrap;}
+  .linha-cartoes .cartao{flex:1;min-width:180px;margin-bottom:0;}
+  .campo{background:var(--fundo);border:1px solid var(--linha);border-radius:7px;padding:8px 11px;
+    font-size:.8rem;color:var(--tinta-fraca);margin-bottom:8px;}
+  .btn{display:inline-block;background:var(--marca);color:#fff;font-weight:700;font-size:.8rem;
+    padding:8px 15px;border-radius:7px;border:none;font-family:var(--font-body);}
+  .btn-exportar{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#1b6b45,#249157);
+    color:#fff;font-weight:700;font-size:.8rem;padding:9px 16px;border-radius:8px;border:none;
+    box-shadow:0 10px 22px -8px rgba(27,107,69,.55);}
+
+  table.tabela{width:100%;border-collapse:collapse;font-size:.83rem;}
+  table.tabela th{background:var(--marca);color:#fff;text-align:left;padding:8px 11px;font-size:.68rem;
+    font-family:var(--font-display);letter-spacing:.06em;text-transform:uppercase;font-weight:600;}
+  table.tabela td{background:var(--superficie);padding:8px 11px;border-bottom:1px solid var(--linha);}
+  .tabela-scroll{overflow-x:auto;border-radius:8px;border:1px solid var(--linha);}
+  .tabela-scroll table.tabela{border:none;}
+
+  .selo{display:inline-block;padding:3px 11px;border-radius:999px;font-size:.73rem;font-weight:700;}
+  .selo-verde{background:var(--positivo-fundo);color:var(--positivo);}
+  .selo-cinza{background:var(--fundo);color:var(--neutro);border:1px solid var(--linha);}
+  .selo-ambar{background:var(--folguista-fundo);color:var(--folguista);}
+  .selo-vermelho{background:var(--negativo-fundo);color:var(--negativo);}
+  .txt-verde{color:var(--positivo);font-weight:700;}
+  .txt-vermelho{color:var(--negativo);font-weight:700;}
+  .txt-cinza{color:var(--neutro);font-weight:700;}
+  .bolinha-status{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;}
+  .bolinha-status.completa{background:var(--positivo);}
+  .bolinha-status.incompleta{background:var(--negativo);}
+
+  ol.passos{list-style:none;margin:0;padding:0;counter-reset:passo;}
+  ol.passos li{counter-increment:passo;position:relative;padding:2px 0 20px 42px;border-left:2px solid var(--linha);margin-left:14px;}
+  ol.passos li:last-child{border-color:transparent;padding-bottom:0;}
+  ol.passos li::before{content:counter(passo);position:absolute;left:-15px;top:-2px;width:30px;height:30px;
+    border-radius:50%;background:var(--marca);color:#fff;display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-display);font-weight:700;font-size:.9rem;}
+
+  .elementos{list-style:none;margin:14px 0;padding:0;}
+  .elementos li{position:relative;padding-left:16px;font-size:.9rem;color:var(--tinta-fraca);margin-bottom:6px;}
+  .elementos li::before{content:'';position:absolute;left:0;top:8px;width:6px;height:6px;border-radius:50%;background:var(--folguista);}
+
+  /* LOGIN */
+  .login-fundo{background:radial-gradient(circle at 1px 1px,rgba(255,255,255,.09) 1.4px,transparent 0) 0 0/18px 18px,
+    linear-gradient(160deg,var(--marca),var(--titulo));border-radius:14px;padding:44px 18px;display:flex;
+    justify-content:center;font-family:var(--font-login);}
+  .login-cartao{background:var(--superficie);border-radius:14px;padding:28px 26px 24px;width:min(320px,100%);
+    box-shadow:0 24px 50px -20px rgba(0,0,0,.5);font-family:var(--font-login);}
+  .login-logo{width:36px;height:36px;border-radius:10px;background:var(--marca);margin-bottom:13px;}
+  .login-selo{display:inline-flex;align-items:center;gap:6px;font-size:.75rem;font-weight:600;color:var(--positivo);margin-bottom:15px;}
+  .login-selo .p{width:7px;height:7px;border-radius:50%;background:var(--positivo);}
+  .login-cartao h5{font-family:var(--font-login);font-weight:800;font-size:1.14rem;color:var(--titulo);margin:0 0 4px;}
+  .login-cartao .sub{font-family:var(--font-login);font-size:.82rem;color:var(--tinta-fraca);margin-bottom:17px;}
+  .login-campo{font-family:var(--font-login);background:var(--fundo);border:1px solid var(--linha);border-radius:9px;
+    padding:10px 12px;font-size:.84rem;color:var(--tinta-fraca);margin-bottom:9px;}
+  .login-btn{font-family:var(--font-login);display:block;text-align:center;width:100%;background:var(--marca);
+    color:#fff;font-weight:700;padding:11px;border-radius:9px;margin-top:7px;}
+  .login-esq{font-family:var(--font-login);display:block;text-align:center;font-size:.76rem;color:var(--tinta-fraca);margin-top:12px;}
+
+  /* VISÃO GERAL — fluxo e camadas */
+  .fluxo{display:flex;align-items:center;gap:10px;margin:22px 0;flex-wrap:wrap;}
+  .fluxo .passo-fluxo{flex:1;min-width:180px;background:var(--superficie);border:1px solid var(--linha);
+    border-radius:12px;padding:16px;}
+  .fluxo .passo-fluxo b{display:block;font-family:var(--font-display);color:var(--marca);margin-bottom:5px;font-size:1rem;}
+  .fluxo .passo-fluxo span{font-size:.86rem;color:var(--tinta-fraca);}
+  .fluxo .seta{font-size:1.4rem;color:var(--linha-forte);flex:none;}
+  .camadas{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:22px 0;}
+  .camada{border-radius:14px;padding:20px;}
+  .camada.dia-a-dia{background:var(--positivo-fundo);border:1px solid var(--positivo);}
+  .camada.admin{background:var(--realce);border:1px solid var(--folguista);}
+  .camada h4{font-family:var(--font-display);margin:0 0 8px;}
+  .camada.dia-a-dia h4{color:var(--positivo);}
+  .camada.admin h4{color:#8a5410;}
+  .camada ul{margin:8px 0 0;padding-left:18px;font-size:.88rem;color:var(--tinta);}
+
+  /* Faixa restrito */
+  .faixa-restrita{background:var(--marca);color:#fff;border-radius:12px;padding:14px 20px;display:flex;
+    align-items:center;gap:12px;margin:18px 0 30px;}
+  .faixa-restrita .selo-restrito{background:rgba(255,255,255,.18);padding:4px 12px;border-radius:999px;
+    font-size:.75rem;font-weight:700;letter-spacing:.03em;white-space:nowrap;}
+  .faixa-restrita p{margin:0;font-size:.92rem;color:#f6e6e9;}
+
+  .subtela{margin-top:46px;}
+  .subtela:first-of-type{margin-top:0;}
+
+  /* Legenda final */
+  .legenda-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:18px 0;}
+  .legenda-item{display:flex;align-items:center;gap:12px;background:var(--superficie);border:1px solid var(--linha);
+    border-radius:12px;padding:12px 16px;}
+  .legenda-item .amostra{width:32px;height:32px;border-radius:9px;flex:none;}
+  .legenda-item b{display:block;font-size:.92rem;}
+  .legenda-item span{font-size:.82rem;color:var(--tinta-fraca);}
+
+  .section-block{margin-top:30px;}
+
+  @media (max-width:980px){
+    .split{grid-template-columns:1fr;}
+    .lado-visual{position:static;}
+  }
+  @media (max-width:820px){
+    .app{grid-template-columns:1fr;}
+    .sidebar{position:relative;height:auto;display:flex;flex-wrap:wrap;align-items:center;gap:4px;}
+    .brand{margin:0 12px 0 0;}
+    .nav-group-label{display:none;}
+    .nav-item{white-space:nowrap;}
+    .tema-toggle{width:auto;margin:0 0 0 auto;}
+    .content{padding:32px 20px 70px;}
+  }
+  @media (max-width:760px){
+    .camadas,.legenda-grid{grid-template-columns:1fr;}
+    .linha-cartoes{flex-direction:column;}
+    h1{font-size:1.6rem;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark"></span>
+      <div class="brand-text">Gerenciador de Equipes<span>Guia de treinamento</span></div>
+    </div>
+    <nav id="nav-lateral">
+      <div class="nav-group-label">Comece aqui</div>
+      <a class="nav-item" href="#inicio" data-alvo="inicio">1. Início</a>
+      <a class="nav-item" href="#visao-geral" data-alvo="visao-geral">2. Visão geral</a>
+      <div class="nav-group-label">Uso do dia a dia</div>
+      <a class="nav-item" href="#resumo" data-alvo="resumo">3. Resumo</a>
+      <a class="nav-item" href="#banco-dados" data-alvo="banco-dados">4. Banco de Dados</a>
+      <div class="nav-group-label">Administração</div>
+      <a class="nav-item" href="#administracao" data-alvo="administracao">5. Vagas e Usuários</a>
+      <div class="nav-group-label">Referência</div>
+      <a class="nav-item" href="#legenda" data-alvo="legenda">Legenda de cores</a>
+    </nav>
+    <button class="tema-toggle" onclick="alternarTema()">Modo claro/escuro</button>
+  </aside>
+
+  <main class="content">
+
+    <!-- 1. INÍCIO -->
+    <section class="bloco" id="inicio">
+      <div class="kicker">1 de 5</div>
+      <h1>Início</h1>
+      <p class="lede">Antes de conhecer as telas, entenda o que é o sistema, para quem ele foi feito e qual problema resolve.</p>
+
+      <div class="linha-cartoes" style="margin-top:16px;">
+        <div class="cartao"><h5>O que é</h5><p style="margin:0;font-size:.9rem;color:var(--tinta-fraca);">Um sistema web para gerenciar as equipes técnicas de campo da CGB Energia — eletricistas, podadores, técnicos de linha viva e outras funções.</p></div>
+        <div class="cartao"><h5>Para quem é</h5><p style="margin:0;font-size:.9rem;color:var(--tinta-fraca);">Gestores, coordenadores, supervisores e analistas — cada um enxergando apenas as bases, equipes e setores pelos quais é responsável.</p></div>
+      </div>
+
+      <p style="margin-top:16px;">O que ele faz: antes, o controle de quem está em qual equipe, quais vagas existem e onde falta ou sobra gente era feito em planilhas soltas. O sistema centraliza tudo isso e adiciona uma camada de controle de acesso — cada usuário só enxerga as bases, equipes e setores pelos quais é responsável.</p>
+
+      <div class="split" style="margin-top:30px;">
+        <div class="lado-texto">
+          <h2>A porta de entrada: tela de Login</h2>
+          <p>Todo usuário passa por aqui, independentemente do seu nível de acesso. O login é feito com usuário e senha cadastrados previamente pelo Administrador — não existe autocadastro.</p>
+          <p>Se alguém esquecer a senha, não há recuperação automática por e-mail: é preciso procurar o Administrador do sistema. Essa é uma decisão deliberada de segurança do projeto, e vale explicar isso logo no treinamento para evitar dúvidas.</p>
+          <div class="section-block">
+            <h3>Passo a passo</h3>
+            <ol class="passos">
+              <li>Digite o usuário e a senha.</li>
+              <li>Clique em <b>LOGIN</b>.</li>
+              <li>O sistema abre direto na tela <b>Resumo</b> — as demais opções do menu aparecem de acordo com a permissão de cada usuário.</li>
+            </ol>
+          </div>
+        </div>
+        <div class="lado-visual">
+          <div class="login-fundo">
+            <div class="login-cartao">
+              <div class="login-logo"></div>
+              <span class="login-selo"><span class="p"></span> Sistema online</span>
+              <h5>Entrar no sistema</h5>
+              <div class="sub">Entre com o seu usuário para continuar</div>
+              <div class="login-campo">Usuário</div>
+              <div class="login-campo">Senha &nbsp; 👁</div>
+              <span class="login-btn">LOGIN</span>
+              <span class="login-esq">Esqueceu a senha? Fale com o Administrador.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. VISÃO GERAL -->
+    <section class="bloco" id="visao-geral">
+      <div class="kicker">2 de 5</div>
+      <h1>Visão geral do sistema</h1>
+      <p class="lede">Com o que o sistema faz em mente, veja como as telas se encaixam e por que este guia segue essa ordem.</p>
+
+      <div class="section-block">
+        <h3>A ordem lógica de uso</h3>
+        <p>O menu do sistema lista as telas em uma ordem, mas o uso segue uma lógica de dependência: primeiro alguém estrutura a equipe, depois as pessoas são colocadas nela, e só então dá para acompanhar o resultado.</p>
+        <div class="fluxo">
+          <div class="passo-fluxo"><b>1. Cadastrar Vagas</b><span>O Administrador cria a equipe e define as vagas necessárias.</span></div>
+          <span class="seta">→</span>
+          <div class="passo-fluxo"><b>2. Alocar pessoas</b><span>No dia a dia, colaboradores são colocados nas vagas livres.</span></div>
+          <span class="seta">→</span>
+          <div class="passo-fluxo"><b>3. Conferir o resultado</b><span>A gestão acompanha déficit e superávit de pessoal.</span></div>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <h3>Duas camadas de uso</h3>
+        <p>Por isso este guia separa o sistema em duas camadas. Na prática, nem todo usuário deveria mexer na estrutura das equipes ou nos acessos de outras pessoas — só quem tem o papel de Administrador.</p>
+        <div class="camadas">
+          <div class="camada dia-a-dia">
+            <h4>Uso do dia a dia</h4>
+            <ul><li><b>Resumo</b> — consultar a situação das equipes</li><li><b>Banco de Dados</b> — alocar e trocar pessoas</li></ul>
+          </div>
+          <div class="camada admin">
+            <h4>Administração do sistema</h4>
+            <ul><li><b>Vagas</b> — criar a estrutura das equipes</li><li><b>Usuários</b> — controlar quem acessa</li></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. RESUMO -->
+    <section class="bloco" id="resumo">
+      <div class="kicker">3 de 5 · uso do dia a dia</div>
+      <h1>Resumo</h1>
+      <p class="lede">A tela de consulta gerencial. Responde à pergunta "como estão as equipes agora?" sem que o gestor precise mexer em nada.</p>
+
+      <div class="split">
+        <div class="lado-texto">
+          <p>Ela mostra quantas vagas existem, quantas estão ocupadas e onde há falta (déficit) ou sobra (superávit) de pessoal — a visão rápida que um gestor abre para acompanhar a operação.</p>
+          <h3>O que você vê nessa tela</h3>
+          <ul class="elementos">
+            <li>Filtros por Base, Tipo de equipe, Setor, Coordenador e Supervisor — eles interagem entre si: escolher um coordenador já restringe as opções de supervisor</li>
+            <li>Chips de atalho por disciplina de equipe, cada uma com sua cor</li>
+            <li>Um cartão por Base, com a tabela de composição</li>
+            <li>Cartão de total geral com déficit e superávit por função</li>
+            <li>Botão de exportar para Excel</li>
+          </ul>
+        </div>
+        <div class="lado-visual">
+          <div class="janela">
+            <div class="janela-barra"><span class="bolinha"></span><span class="bolinha"></span><span class="bolinha"></span></div>
+            <div class="cabecalho-app">Resumo<div class="cab-spacer"></div>
+              <span class="cab-icone">⟳</span><span class="cab-icone">◐</span><span class="cab-icone">☰</span>
+              <span class="cab-usuario">Camila Nunes</span>
+            </div>
+            <div class="janela-corpo">
+              <div class="barra-filtros">
+                <span class="chip">Base</span><span class="chip">Tipo de equipe</span><span class="chip">Setor</span>
+                <span class="chip">Coordenador</span><span class="chip">Supervisor</span>
+                <div style="margin-top:8px;">
+                  <span class="chip disc construcao">Construção</span><span class="chip disc folguista">Folguista</span>
+                  <span class="chip disc poda">Poda</span><span class="chip disc linha">Linha viva</span>
+                </div>
+              </div>
+              <div class="cartao">
+                <h5>Base Bacabal</h5>
+                <div class="tabela-scroll">
+                  <table class="tabela">
+                    <tr><th>Equipe</th><th>Função</th><th>Vagas</th><th>Alocados</th><th>Diferença</th></tr>
+                    <tr><td>CONST-04</td><td>Eletricista</td><td>2</td><td>2</td><td><span class="txt-cinza">0</span></td></tr>
+                    <tr><td>CONST-04</td><td>Podador</td><td>1</td><td>0</td><td><span class="txt-vermelho">-1</span></td></tr>
+                    <tr><td>CONST-05</td><td>Eletricista</td><td>2</td><td>3</td><td><span class="txt-verde">+1</span></td></tr>
+                  </table>
+                </div>
+              </div>
+              <div class="cartao">
+                <h5>Total geral</h5>
+                <span class="chip">Vagas: 42</span><span class="chip">Alocados: 39</span><span class="chip">Diferença: -3</span>
+                <div style="margin-top:10px;">
+                  <button class="btn-exportar">⭳ Exportar Excel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <h3>Tabela: composição das equipes</h3>
+        <div class="tabela-scroll">
+          <table class="tabela">
+            <tr><th>Coluna</th><th>O que mostra</th></tr>
+            <tr><td>Equipe</td><td>Nome ou prefixo da equipe</td></tr>
+            <tr><td>Função</td><td>Cargo necessário, por exemplo eletricista</td></tr>
+            <tr><td>Vagas</td><td>Quantidade de vagas para essa função</td></tr>
+            <tr><td>Alocados</td><td>Quantas pessoas já ocupam essas vagas</td></tr>
+            <tr><td>Diferença</td><td>Alocados menos Vagas — <span class="txt-vermelho">vermelho</span> se falta gente, <span class="txt-verde">verde</span> se sobra, <span class="txt-cinza">cinza</span> se está exato</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <h3>Passo a passo</h3>
+        <ol class="passos">
+          <li>Aplique os filtros desejados.</li>
+          <li>Observe os indicadores gerais ou a composição por equipe.</li>
+          <li>Clique em um número para ver o detalhamento das pessoas envolvidas.</li>
+          <li>Exporte para Excel se precisar levar os dados para outro lugar.</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- 4. BANCO DE DADOS -->
+    <section class="bloco" id="banco-dados">
+      <div class="kicker">4 de 5 · uso do dia a dia</div>
+      <h1>Banco de Dados</h1>
+      <p class="lede">A tela operacional principal. Enquanto o Resumo só mostra números, é aqui que de fato se aloca, troca ou remove um colaborador de uma vaga.</p>
+
+      <div class="split">
+        <div class="lado-texto">
+          <h3>O que você vê nessa tela</h3>
+          <ul class="elementos">
+            <li>Filtros iguais aos do Resumo, mais busca por prefixo, nome ou chapa</li>
+            <li>Alternador Todas / Completas / Incompletas pela situação da equipe</li>
+            <li>Botão "Alocação em massa", para alocar várias pessoas via planilha</li>
+            <li>Lista de equipes expansível, com bolinha verde (completa) ou vermelha (incompleta)</li>
+            <li>Ao expandir, a tabela de vagas da equipe</li>
+            <li>Painel de colaboradores disponíveis, com busca e filtros Alocados/Livres</li>
+          </ul>
+        </div>
+        <div class="lado-visual">
+          <div class="janela">
+            <div class="janela-barra"><span class="bolinha"></span><span class="bolinha"></span><span class="bolinha"></span></div>
+            <div class="cabecalho-app">Banco de Dados<div class="cab-spacer"></div>
+              <span class="cab-icone">⟳</span><span class="cab-icone">◐</span><span class="cab-icone">☰</span>
+              <span class="cab-usuario">Camila Nunes</span>
+            </div>
+            <div class="janela-corpo">
+              <div class="barra-filtros">
+                <span class="chip">Base</span><span class="chip">Tipo</span><span class="chip">Setor</span>
+                <span class="chip">Coordenador</span><span class="chip">Supervisor</span><span class="chip">Buscar por prefixo, nome ou chapa</span>
+                <div style="margin-top:8px;">
+                  <span class="chip" style="font-weight:700;color:var(--marca);">Todas</span>
+                  <span class="chip">Completas</span><span class="chip">Incompletas</span>
+                  <button class="btn" style="margin-left:8px;">Alocação em massa</button>
+                </div>
+              </div>
+              <div class="cartao">
+                <span class="bolinha-status incompleta"></span><b>CONST-04 — Base Bacabal</b> <span class="chip disc construcao" style="margin-left:8px;">Construção</span>
+                <div class="tabela-scroll" style="margin-top:12px;">
+                  <table class="tabela">
+                    <tr><th>Chapa</th><th>Colaborador</th><th>Função cadastrada</th><th>Vaga</th><th>Status</th></tr>
+                    <tr><td>10432</td><td>Raimundo Silva</td><td>Eletricista</td><td>Eletricista</td><td><span class="selo selo-verde">ALOCADO</span></td></tr>
+                    <tr><td>10877</td><td>Ana Costa</td><td>Eletricista</td><td>Eletricista</td><td><span class="selo selo-verde">ALOCADO</span></td></tr>
+                    <tr><td>—</td><td>Vaga livre</td><td>—</td><td>Podador</td><td><span class="selo selo-cinza">LIVRE</span></td></tr>
+                    <tr><td>11290</td><td>José Ferreira</td><td>Auxiliar</td><td>Auxiliar</td><td><span class="selo selo-ambar">EXTRA</span></td></tr>
+                  </table>
+                </div>
+              </div>
+              <div class="cartao">
+                <h5>Colaboradores disponíveis</h5>
+                <span class="chip">Buscar</span><span class="chip" style="font-weight:700;color:var(--marca);">Alocados</span><span class="chip">Livres</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <h3>Tabela: vagas de uma equipe</h3>
+        <div class="tabela-scroll">
+          <table class="tabela">
+            <tr><th>Coluna</th><th>O que mostra</th></tr>
+            <tr><td>Chapa</td><td>Número do funcionário alocado na vaga</td></tr>
+            <tr><td>Colaborador</td><td>Nome da pessoa, ou "Vaga livre"</td></tr>
+            <tr><td>Função cadastrada</td><td>Cargo dela no RH</td></tr>
+            <tr><td>Vaga</td><td>Função que a vaga exige</td></tr>
+            <tr><td>Status</td><td><span class="selo selo-verde">ALOCADO</span> vaga ocupada · <span class="selo selo-cinza">LIVRE</span> sem ninguém · <span class="selo selo-ambar">EXTRA</span> além da vaga prevista</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <h3>Passo a passo: alocar uma pessoa</h3>
+        <ol class="passos">
+          <li>Localize a equipe na lista e expanda-a.</li>
+          <li>No painel de colaboradores, escolha a pessoa — ou clique no ícone de alocar ao lado da vaga livre.</li>
+          <li>Confirme no diálogo que abre.</li>
+          <li>A vaga passa de "LIVRE" para "ALOCADO".</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- 5. ADMINISTRAÇÃO DO SISTEMA -->
+    <section class="bloco" id="administracao">
+      <div class="kicker">5 de 5</div>
+      <h1>Administração do sistema</h1>
+      <div class="faixa-restrita">
+        <span class="selo-restrito">Acesso restrito</span>
+        <p>As duas telas a seguir normalmente não fazem parte do uso diário de um analista ou supervisor comum. Elas envolvem decisões estruturais — criar ou excluir equipes, dar ou tirar acesso de alguém — por isso costumam ficar restritas a quem tem o nível Administrador.</p>
+      </div>
+
+      <div class="subtela" id="vagas">
+        <h2>5.1 Vagas</h2>
+        <div class="split">
+          <div class="lado-texto">
+            <p>É aqui que a estrutura das equipes nasce. Antes de qualquer alocação ser possível no Banco de Dados, alguém precisa ter passado por aqui e criado a equipe com suas vagas.</p>
+            <p class="muted" style="font-size:.9rem;">É a mesma linguagem visual do Banco de Dados — ocupada em verde, livre em cinza — só que do lado de quem configura, não de quem aloca.</p>
+          </div>
+          <div class="lado-visual">
+            <div class="janela">
+              <div class="janela-barra"><span class="bolinha"></span><span class="bolinha"></span><span class="bolinha"></span></div>
+              <div class="cabecalho-app">Cadastro de Vagas<div class="cab-spacer"></div>
+                <span class="cab-icone">⟳</span><span class="cab-icone">◐</span><span class="cab-icone">☰</span>
+                <span class="cab-usuario">Pedro Lima</span>
+              </div>
+              <div class="janela-corpo">
+                <div class="linha-cartoes">
+                  <div class="cartao"><h5>Nova equipe</h5><div class="campo">Base · Bacabal</div><div class="campo">Prefixo · CONST-04</div><span class="btn">Criar equipe</span></div>
+                  <div class="cartao"><h5>Nova vaga</h5><div class="campo">Função · Eletricista</div><div class="campo">Tipo de equipe · Construção</div><span class="btn">Adicionar vaga</span></div>
+                </div>
+                <div class="cartao" style="margin-top:13px;">
+                  <h5>Vagas cadastradas</h5>
+                  <div style="font-size:.84rem;">
+                    CONST-04 · Eletricista &nbsp; <span class="selo selo-verde">OCUPADA</span><br><br>
+                    CONST-04 · Podador &nbsp; <span class="selo selo-cinza">LIVRE</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subtela" id="usuarios">
+        <h2>5.2 Usuários</h2>
+        <div class="split">
+          <div class="lado-texto">
+            <p>Aqui se controla quem pode entrar no sistema, o que cada nível de acesso pode fazer, e sobre quais bases, equipes ou setores cada pessoa tem permissão de atuar — o "vínculo" dela.</p>
+          </div>
+          <div class="lado-visual">
+            <div class="janela">
+              <div class="janela-barra"><span class="bolinha"></span><span class="bolinha"></span><span class="bolinha"></span></div>
+              <div class="cabecalho-app">Usuários<div class="cab-spacer"></div>
+                <span class="cab-icone">⟳</span><span class="cab-icone">◐</span><span class="cab-icone">☰</span>
+                <span class="cab-usuario">Pedro Lima</span>
+              </div>
+              <div class="janela-corpo">
+                <div class="cartao">
+                  <h5>Níveis de acesso</h5>
+                  <div class="tabela-scroll">
+                    <table class="tabela">
+                      <tr><th>Nível</th><th>Ver resumo</th><th>Alocar</th><th>Cadastrar vagas</th><th>Gerenciar usuários</th></tr>
+                      <tr><td>Administrador</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+                      <tr><td>Coordenador</td><td>✓</td><td>✓</td><td>—</td><td>—</td></tr>
+                      <tr><td>Supervisor</td><td>✓</td><td>—</td><td>—</td><td>—</td></tr>
+                    </table>
+                  </div>
+                </div>
+                <div class="cartao">
+                  <h5>Cadastrados</h5>
+                  <div style="font-size:.84rem;">
+                    Camila Nunes · camila.nunes &nbsp; Coordenador &nbsp; <span class="chip">2 vínculos</span><br><br>
+                    Marcos Aurélio · marcos.aurelio &nbsp; Supervisor &nbsp; <span class="chip">Base Bacabal</span><br><br>
+                    Pedro Lima · pedro.lima &nbsp; Administrador &nbsp; <span class="chip">Enxerga todas as equipes</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LEGENDA -->
+    <section class="bloco" id="legenda">
+      <div class="kicker">Referência</div>
+      <h2>Legenda de cores</h2>
+      <p class="lede">Vale a pena conhecer antes de navegar pelo sistema — o mesmo código de cores se repete em todas as telas.</p>
+      <div class="legenda-grid">
+        <div class="legenda-item"><span class="amostra" style="background:var(--positivo);"></span><div><b>Verde</b><span>Alocado, ocupado, completo ou superávit</span></div></div>
+        <div class="legenda-item"><span class="amostra" style="background:var(--neutro);"></span><div><b>Cinza</b><span>Livre ou vago</span></div></div>
+        <div class="legenda-item"><span class="amostra" style="background:var(--folguista);"></span><div><b>Âmbar</b><span>Extra (folguista)</span></div></div>
+        <div class="legenda-item"><span class="amostra" style="background:var(--negativo);"></span><div><b>Vermelho</b><span>Déficit ou erro</span></div></div>
+        <div class="legenda-item"><span class="amostra" style="background:var(--marca);"></span><div><b>Vinho</b><span>Ações principais e cabeçalhos</span></div></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  function alternarTema(){
+    var atual = document.body.getAttribute('data-theme');
+    if(atual === 'dark'){ document.body.setAttribute('data-theme','light'); }
+    else if(atual === 'light'){ document.body.removeAttribute('data-theme'); }
+    else { document.body.setAttribute('data-theme','dark'); }
+  }
+
+  var alvos = document.querySelectorAll('section.bloco[id]');
+  var links = document.querySelectorAll('.nav-item');
+  var observador = new IntersectionObserver(function(entradas){
+    entradas.forEach(function(entrada){
+      if(entrada.isIntersecting){
+        links.forEach(function(l){ l.classList.remove('ativo'); });
+        var ativo = document.querySelector('.nav-item[data-alvo="'+entrada.target.id+'"]');
+        if(ativo) ativo.classList.add('ativo');
+      }
+    });
+  }, {rootMargin:'-40% 0px -50% 0px'});
+  alvos.forEach(function(s){ observador.observe(s); });
+</script>
+</body>
+</html>

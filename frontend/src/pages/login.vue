@@ -36,7 +36,7 @@
           dense
           icon="help_outline"
           aria-label="Ajuda"
-          @click="ajudaAberta = true"
+          @click="abrirAjuda"
         >
           <q-tooltip>Ajuda</q-tooltip>
         </q-btn>
@@ -205,30 +205,6 @@
           </transition-group>
         </div>
 
-        <!-- ------------------------------------------- -->
-        <!-- AJUDA -->
-        <!-- ------------------------------------------- -->
-        <q-dialog v-model="ajudaAberta">
-          <q-card class="cartao-ajuda">
-            <q-card-section class="row items-center q-pb-sm">
-              <q-icon name="support_agent" size="28px" class="q-mr-sm text-primary" />
-              <div class="text-h6">Suporte</div>
-              <q-space />
-              <q-btn v-close-popup flat round dense icon="close" />
-            </q-card-section>
-
-            <q-separator />
-
-            <q-card-section class="text-body2">
-              Para dúvidas de acesso, senha ou vínculo com sua equipe, procure
-              o Administrador do sistema no setor de medição.
-            </q-card-section>
-
-            <q-card-actions align="right">
-              <q-btn v-close-popup color="primary" label="Entendido" />
-            </q-card-actions>
-          </q-card>
-        </q-dialog>
       </q-page>
     </q-page-container>
   </q-layout>
@@ -251,10 +227,13 @@ const senha = ref('')
 const mostrarSenha = ref(false)
 const entrando = ref(false)
 const modoRecuperacao = ref(false)
-const ajudaAberta = ref(false)
 
 // marcado pelo boot quando a API respondeu 401 no meio do uso
 const sessaoExpirou = computed(() => route.query.expirou === '1')
+
+function abrirAjuda() {
+  window.open('/ajuda.html', '_blank', 'noopener')
+}
 
 async function autenticar() {
   entrando.value = true
@@ -904,14 +883,6 @@ onBeforeUnmount(() => {
   transform: translateX(24px);
 }
 
-/* ============================================================ */
-/* AJUDA */
-/* ============================================================ */
-
-.cartao-ajuda {
-  width: 100%;
-  max-width: 380px;
-}
 </style>
 
 <!--

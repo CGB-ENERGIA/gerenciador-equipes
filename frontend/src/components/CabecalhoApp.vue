@@ -85,6 +85,15 @@
 
           <q-separator />
 
+          <q-item v-close-popup clickable @click="abrirAjuda">
+            <q-item-section avatar>
+              <q-icon name="help_outline" />
+            </q-item-section>
+            <q-item-section>Ajuda</q-item-section>
+          </q-item>
+
+          <q-separator />
+
           <q-item v-close-popup clickable @click="abrirTrocaSenha">
             <q-item-section avatar>
               <q-icon name="key" />
@@ -251,6 +260,10 @@ function navegar(pagina) {
 async function encerrar() {
   await sair()
   router.replace('/login')
+}
+
+function abrirAjuda() {
+  window.open('/ajuda.html', '_blank', 'noopener')
 }
 
 // ============================================================
