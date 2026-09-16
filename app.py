@@ -2886,24 +2886,24 @@ def baixar_modelo_planilha_colaboradores():
             "CHAPA",
             "NOME",
             "FUNÇÃO",
-            "TIPO_FUNÇÃO",
             "SEÇÃO",
             "SITUAÇÃO",
             "ADMISSÃO",
             "RATEIO_FUNCIONARIO",
             "GRPCCUSTO",
+            "TIPO_FUNÇÃO",
         ]
         assert set(COLUNAS_OBRIGATORIAS_COLABORADORES) <= set(colunas)
         linha_exemplo = {
             "CHAPA": "12345",
             "NOME": "FULANO DE TAL",
             "FUNÇÃO": "ELETRICISTA",
-            "TIPO_FUNÇÃO": "DIRETO",
             "ADMISSÃO": "01/01/2024",
             "SEÇÃO": "MA-BCB-O007M",
             "SITUAÇÃO": "ATIVO",
             "RATEIO_FUNCIONARIO": "",
             "GRPCCUSTO": "",
+            "TIPO_FUNÇÃO": "DIRETO",
         }
         df = pd.DataFrame([linha_exemplo], columns=colunas)
 

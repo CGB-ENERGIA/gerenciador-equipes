@@ -690,15 +690,6 @@
                         class="q-ml-xs"
                       />
                     </th>
-                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('tipo_funcao')">
-                      Tipo de Função
-                      <q-icon
-                        v-if="ordenacaoDetalhe.coluna === 'tipo_funcao'"
-                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
-                        size="14px"
-                        class="q-ml-xs"
-                      />
-                    </th>
                     <th class="text-left col-ordenavel" @click="ordenarDetalhe('secao')">
                       Seção
                       <q-icon
@@ -721,6 +712,15 @@
                       Admissão
                       <q-icon
                         v-if="ordenacaoDetalhe.coluna === 'admissao'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('tipo_funcao')">
+                      Tipo de Função
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'tipo_funcao'"
                         :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
                         size="14px"
                         class="q-ml-xs"
@@ -866,10 +866,10 @@
                     <td>{{ item.chapa }}</td>
                     <td>{{ item.nome || '—' }}</td>
                     <td>{{ item.funcao || '—' }}</td>
-                    <td>{{ item.tipo_funcao || '—' }}</td>
                     <td>{{ item.secao || '—' }}</td>
                     <td>{{ item.situacao || '—' }}</td>
                     <td>{{ item.admissao }}</td>
+                    <td>{{ item.tipo_funcao || '—' }}</td>
                   </tr>
                 </tbody>
 
