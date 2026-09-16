@@ -1176,6 +1176,12 @@ const colunasAfastados = [
     label: 'SEÇÃO NO SISTEMA',
     field: 'secao_sistema',
     align: 'left'
+  },
+  {
+    name: 'justificativa',
+    label: 'JUSTIFICATIVA',
+    field: 'justificativa',
+    align: 'left'
   }
 ]
 

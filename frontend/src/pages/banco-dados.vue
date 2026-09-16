@@ -527,6 +527,10 @@
                       <q-item-label v-if="colaborador.tipo_ccusto" caption>
                         Tipo de ccusto: {{ colaborador.tipo_ccusto }}
                       </q-item-label>
+
+                      <q-item-label v-if="colaborador.afastado" caption>
+                        Justificativa: {{ colaborador.justificativa_afastamento || 'Não informada' }}
+                      </q-item-label>
                     </q-item-section>
 
                     <q-item-section side class="text-center">
