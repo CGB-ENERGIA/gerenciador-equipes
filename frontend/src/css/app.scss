@@ -112,6 +112,8 @@
   --positivo-fundo: #e6f2ea;
   --neutro: #7a6c70;
   --realce: #f7e9d7;
+  --afastado: #8a5a00;
+  --afastado-fundo: #fdf0cd;
   --sombra: 0 10px 28px rgba(65, 32, 38, 0.09);
 
   // disciplinas com cor propria: construcao usa a cor da marca e folguista o
@@ -174,6 +176,8 @@ body.body--dark {
   --positivo-fundo: #1e3329;
   --neutro: #9c8b90;
   --realce: #382a1c;
+  --afastado: #e0b84c;
+  --afastado-fundo: #3d3218;
   --sombra: 0 10px 28px rgba(0, 0, 0, 0.32);
 
   // no escuro as cores de disciplina precisam clarear para continuarem legiveis
@@ -550,6 +554,14 @@ body.body--dark .filtros-campos .q-field--outlined.q-field--focused .q-field__co
 
 .bg-grey-2 {
   background: var(--superficie-2) !important;
+}
+
+.bg-afastado {
+  background: var(--afastado-fundo) !important;
+}
+
+.text-afastado {
+  color: var(--afastado) !important;
 }
 
 .text-negative {

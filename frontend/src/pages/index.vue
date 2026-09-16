@@ -625,7 +625,7 @@
                         <q-card
                           flat
                           bordered
-                          class="cursor-pointer indicador-compacto bg-amber-2"
+                          class="cursor-pointer indicador-compacto bg-afastado"
                           @click="abrirAfastados"
                         >
                           <q-card-section>
@@ -633,7 +633,7 @@
                               AFASTADO
                             </div>
 
-                            <div class="text-h6 text-amber-9">
+                            <div class="text-h6 text-afastado">
                               {{ afastadosTotal }}
                             </div>
                           </q-card-section>
