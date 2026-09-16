@@ -705,7 +705,15 @@
                     hide-pagination
                     :rows-per-page-options="[0]"
                     no-data-label="Nenhum colaborador encontrado"
-                  />
+                  >
+                    <template #body="props">
+                      <q-tr :props="props" :class="{ 'linha-afastado': props.row.afastado }">
+                        <q-td v-for="col in props.cols" :key="col.name" :props="props">
+                          {{ col.value }}
+                        </q-td>
+                      </q-tr>
+                    </template>
+                  </q-table>
                 </q-card-section>
               </q-card>
             </q-dialog>
@@ -741,7 +749,15 @@
                     hide-pagination
                     :rows-per-page-options="[0]"
                     no-data-label="Nenhum colaborador encontrado"
-                  />
+                  >
+                    <template #body="props">
+                      <q-tr :props="props" :class="{ 'linha-afastado': props.row.afastado }">
+                        <q-td v-for="col in props.cols" :key="col.name" :props="props">
+                          {{ col.value }}
+                        </q-td>
+                      </q-tr>
+                    </template>
+                  </q-table>
                 </q-card-section>
               </q-card>
             </q-dialog>
@@ -1190,31 +1206,43 @@ const colunasNaoAlocadosDetalhes = [
     name: 'chapa',
     label: 'CHAPA',
     field: 'chapa',
-    align: 'left'
+    align: 'left',
+    sortable: true
   },
   {
     name: 'nome',
     label: 'COLABORADOR',
     field: 'nome',
-    align: 'left'
+    align: 'left',
+    sortable: true
   },
   {
     name: 'funcao',
     label: 'FUNÇÃO NO SISTEMA',
     field: 'funcao',
-    align: 'left'
+    align: 'left',
+    sortable: true
   },
   {
     name: 'secao',
     label: 'SEÇÃO NO SISTEMA',
     field: 'base',
-    align: 'left'
+    align: 'left',
+    sortable: true
   },
   {
     name: 'codigo',
     label: 'BASE',
     field: 'codigo',
-    align: 'center'
+    align: 'center',
+    sortable: true
+  },
+  {
+    name: 'justificativa',
+    label: 'JUSTIFICATIVA',
+    field: 'justificativa',
+    align: 'left',
+    sortable: true
   }
 ]
 
@@ -1252,43 +1280,57 @@ const colunasDetalhes = [
     name: 'equipe',
     label: 'EQUIPE',
     field: 'equipe',
-    align: 'left'
+    align: 'left',
+    sortable: true
   },
   {
     name: 'chapa',
     label: 'CHAPA',
     field: 'chapa',
-    align: 'left'
+    align: 'left',
+    sortable: true
   },
   {
     name: 'nome',
     label: 'COLABORADOR',
     field: 'nome',
-    align: 'left'
+    align: 'left',
+    sortable: true
   },
   {
     name: 'funcao_sistema',
     label: 'FUNÇÃO NO SISTEMA',
     field: 'funcao_sistema',
-    align: 'left'
+    align: 'left',
+    sortable: true
   },
   {
     name: 'vaga',
     label: 'VAGA',
     field: 'vaga',
-    align: 'left'
+    align: 'left',
+    sortable: true
   },
   {
     name: 'secao_sistema',
     label: 'SEÇÃO NO SISTEMA',
     field: 'secao_sistema',
-    align: 'left'
+    align: 'left',
+    sortable: true
   },
   {
     name: 'base',
     label: 'BASE',
     field: 'base',
-    align: 'left'
+    align: 'left',
+    sortable: true
+  },
+  {
+    name: 'justificativa',
+    label: 'JUSTIFICATIVA',
+    field: 'justificativa',
+    align: 'left',
+    sortable: true
   }
 ]
 
@@ -1452,7 +1494,7 @@ const pessoasDisponiveisFiltradas = computed(() => {
 })
 
 const detalhesExibidos = computed(() => {
-  return pessoasDisponiveisFiltradas.value
+  const linhas = pessoasDisponiveisFiltradas.value
     .filter(
       base =>
         !detalheSelecionado.value.codigo ||
@@ -1465,6 +1507,9 @@ const detalhesExibidos = computed(() => {
         ? base.detalhes?.[detalheSelecionado.value.funcao] || []
         : Object.values(base.detalhes || {}).flat()
     )
+
+  // ordem padrão (antes de clicar em qualquer cabeçalho): afastados primeiro
+  return linhas.slice().sort((a, b) => Number(b.afastado) - Number(a.afastado))
 })
 
 const detalheTitulo = computed(() => {
@@ -1514,7 +1559,10 @@ async function abrirNaoAlocados(funcao, codigo = '') {
       throw new Error(dados.erro || 'Erro ao carregar as pessoas não alocadas.')
     }
 
+    // ordem padrão (antes de clicar em qualquer cabeçalho): afastados primeiro
     naoAlocadosDetalhes.value = dados
+      .slice()
+      .sort((a, b) => Number(b.afastado) - Number(a.afastado))
   } catch (e) {
     erro.value = e.message || 'Erro ao carregar as pessoas não alocadas.'
   } finally {

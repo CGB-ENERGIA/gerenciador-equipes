@@ -530,6 +530,12 @@ def obter_resumo():
                         if colaborador.SEÇÃO_TRATADA
                         else base_da_secao(colaborador.SEÇÃO)["nome"],
                         "vaga": str(composicao.FUNÇÃO_ER).strip() if composicao.FUNÇÃO_ER else "",
+                        # quem esta alocado numa vaga nunca esta afastado (marcar
+                        # afastado libera a vaga -- ver /api/colaboradores/afastar),
+                        # mas o campo entra aqui tambem pra tabela ter a mesma
+                        # coluna dos nao alocados.
+                        "afastado": False,
+                        "justificativa": "",
                     })
 
         resultado = []
@@ -733,6 +739,8 @@ def obter_pessoas_nao_alocadas():
                 "secao": secao,
                 "base": dados_base["nome"],
                 "codigo": dados_base["codigo"],
+                "afastado": bool(colab.AFASTADO),
+                "justificativa": colab.JUSTIFICATIVA_AFASTAMENTO or "",
             })
 
         return jsonify(resultado)

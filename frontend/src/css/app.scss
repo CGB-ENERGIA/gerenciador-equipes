@@ -560,6 +560,10 @@ body.body--dark .filtros-campos .q-field--outlined.q-field--focused .q-field__co
   background: var(--afastado-fundo) !important;
 }
 
+.q-table tbody tr.linha-afastado {
+  background: var(--afastado-fundo) !important;
+}
+
 .text-afastado {
   color: var(--afastado) !important;
 }
