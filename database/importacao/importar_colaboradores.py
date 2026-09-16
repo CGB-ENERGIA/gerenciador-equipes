@@ -8,7 +8,11 @@ from database.models import Colaborador, Rateio
 
 ARQUIVO_EXCEL = Path(__file__).resolve().parent / "cadastro.xlsx"
 
-COLUNAS_OBRIGATORIAS = ("CHAPA", "NOME", "FUNÇÃO", "ADMISSÃO", "SEÇÃO", "SITUAÇÃO")
+COLUNAS_OBRIGATORIAS = (
+    "CHAPA", "NOME", "FUNÇÃO", "ADMISSÃO", "SEÇÃO", "SITUAÇÃO", "TIPO_FUNÇÃO",
+)
+
+TIPOS_FUNCAO_VALIDOS = ("DIRETO", "INDIRETO")
 
 
 def normalizar_linha_colaborador(linha):
@@ -30,6 +34,17 @@ def normalizar_linha_colaborador(linha):
     nome_bruto = linha.get("NOME")
     if nome_bruto is None or (isinstance(nome_bruto, float) and pd.isna(nome_bruto)) or not str(nome_bruto).strip():
         return None, "NOME não informado."
+
+    tipo_funcao_bruto = linha.get("TIPO_FUNÇÃO")
+    if (
+        tipo_funcao_bruto is None
+        or (isinstance(tipo_funcao_bruto, float) and pd.isna(tipo_funcao_bruto))
+        or not str(tipo_funcao_bruto).strip()
+    ):
+        return None, "TIPO_FUNÇÃO não informado."
+    tipo_funcao = str(tipo_funcao_bruto).strip().upper()
+    if tipo_funcao not in TIPOS_FUNCAO_VALIDOS:
+        return None, f"TIPO_FUNÇÃO deve ser {' ou '.join(TIPOS_FUNCAO_VALIDOS)}."
 
     admissao = pd.to_datetime(linha.get("ADMISSÃO"), dayfirst=True, errors="coerce")
     admissao = None if pd.isna(admissao) else admissao.date()
@@ -56,6 +71,7 @@ def normalizar_linha_colaborador(linha):
         "ADMISSÃO": admissao,
         "SEÇÃO": texto(linha.get("SEÇÃO")),
         "SITUAÇÃO": texto(linha.get("SITUAÇÃO")),
+        "TIPO_FUNÇÃO": tipo_funcao,
         "rateio_funcionario": rateio_funcionario,
         "grpccusto": grpccusto,
     }, None
@@ -67,6 +83,7 @@ RÓTULOS_CAMPOS = {
     "ADMISSÃO": "Admissão",
     "SEÇÃO": "Seção",
     "SITUAÇÃO": "Situação",
+    "TIPO_FUNÇÃO": "Tipo de Função",
 }
 
 
@@ -180,7 +197,7 @@ def processar_planilha_colaboradores(arquivo, session, aplicar):
         chapa = dados["chapa"]
         campos = {
             campo: dados[campo]
-            for campo in ("NOME", "FUNÇÃO", "ADMISSÃO", "SEÇÃO", "SITUAÇÃO")
+            for campo in ("NOME", "FUNÇÃO", "ADMISSÃO", "SEÇÃO", "SITUAÇÃO", "TIPO_FUNÇÃO")
         }
 
         primeira_vez = chapa not in chapas_ja_contadas
@@ -218,6 +235,7 @@ def processar_planilha_colaboradores(arquivo, session, aplicar):
                     "funcao": campos["FUNÇÃO"] or "",
                     "secao": campos["SEÇÃO"] or "",
                     "situacao": campos["SITUAÇÃO"] or "",
+                    "tipo_funcao": campos["TIPO_FUNÇÃO"] or "",
                     "admissao": _texto_exibicao(campos["ADMISSÃO"]),
                 })
 

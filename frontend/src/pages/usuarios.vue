@@ -690,6 +690,15 @@
                         class="q-ml-xs"
                       />
                     </th>
+                    <th class="text-left col-ordenavel" @click="ordenarDetalhe('tipo_funcao')">
+                      Tipo de Função
+                      <q-icon
+                        v-if="ordenacaoDetalhe.coluna === 'tipo_funcao'"
+                        :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                        size="14px"
+                        class="q-ml-xs"
+                      />
+                    </th>
                     <th class="text-left col-ordenavel" @click="ordenarDetalhe('secao')">
                       Seção
                       <q-icon
@@ -857,6 +866,7 @@
                     <td>{{ item.chapa }}</td>
                     <td>{{ item.nome || '—' }}</td>
                     <td>{{ item.funcao || '—' }}</td>
+                    <td>{{ item.tipo_funcao || '—' }}</td>
                     <td>{{ item.secao || '—' }}</td>
                     <td>{{ item.situacao || '—' }}</td>
                     <td>{{ item.admissao }}</td>
@@ -1695,6 +1705,7 @@ const EXTRATORES_DETALHE = {
     chapa: item => item.chapa,
     nome: item => item.nome,
     funcao: item => item.funcao,
+    tipo_funcao: item => item.tipo_funcao,
     secao: item => item.secao,
     situacao: item => item.situacao,
     admissao: item => item.admissao

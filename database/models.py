@@ -28,6 +28,11 @@ class Colaborador(Base):
     SEÇÃO = Column(String)
     SITUAÇÃO = Column(String)
 
+    # "DIRETO" ou "INDIRETO" -- so colaboradores DIRETO entram no conjunto
+    # de disponiveis para alocacao (ver app.py: obter_colaboradores e
+    # obter_pessoas_nao_alocadas).
+    TIPO_FUNÇÃO = Column(String)
+
     # Calculados a partir do de-para importado uma unica vez de uma
     # planilha do RH (ver database/depara.py) -- persistidos (nao so
     # calculados na hora de exibir) pra tela e exportacao sempre baterem,

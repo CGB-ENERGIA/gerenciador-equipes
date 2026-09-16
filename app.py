@@ -653,9 +653,11 @@ def obter_resumo():
         # So busca as 3 colunas usadas aqui (nao o objeto Colaborador inteiro):
         # mais barato de montar quando a tabela tem alguns milhares de linhas.
         nao_alocados = {}
-        colaboradores_cols = session.query(
-            Colaborador.CHAPA, Colaborador.SEÇÃO, Colaborador.FUNÇÃO
-        ).all()
+        colaboradores_cols = (
+            session.query(Colaborador.CHAPA, Colaborador.SEÇÃO, Colaborador.FUNÇÃO)
+            .filter(Colaborador.TIPO_FUNÇÃO == "DIRETO")
+            .all()
+        )
         for chapa, secao, funcao_bruta in colaboradores_cols:
             if str(chapa).strip() in chapas_alocadas:
                 continue
@@ -718,8 +720,17 @@ def obter_pessoas_nao_alocadas():
     try:
         chapas_alocadas = chapas_alocadas_do_banco(session)
 
+        # so "DIRETO" entra no conjunto disponivel pra alocacao (ver
+        # obter_colaboradores, mesmo criterio)
+        colaboradores_diretos = (
+            session.query(Colaborador)
+            .filter(Colaborador.TIPO_FUNÇÃO == "DIRETO")
+            .order_by(Colaborador.NOME)
+            .all()
+        )
+
         resultado = []
-        for colab in session.query(Colaborador).order_by(Colaborador.NOME).all():
+        for colab in colaboradores_diretos:
             chapa = str(colab.CHAPA).strip()
             if chapa in chapas_alocadas:
                 continue
@@ -2814,7 +2825,14 @@ def obter_opcoes_alocacao():
 def obter_colaboradores():
     session = SessionLocal()
     try:
-        colaboradores = session.query(Colaborador).order_by(Colaborador.NOME).all()
+        # so "DIRETO" entra no conjunto disponivel pra alocacao -- "INDIRETO"
+        # nao aparece aqui (ver migrations/012_add_tipo_funcao.sql)
+        colaboradores = (
+            session.query(Colaborador)
+            .filter(Colaborador.TIPO_FUNÇÃO == "DIRETO")
+            .order_by(Colaborador.NOME)
+            .all()
+        )
         chapas_alocadas = chapas_alocadas_do_banco(session)
 
         resultado = []
@@ -2868,6 +2886,7 @@ def baixar_modelo_planilha_colaboradores():
             "CHAPA",
             "NOME",
             "FUNÇÃO",
+            "TIPO_FUNÇÃO",
             "SEÇÃO",
             "SITUAÇÃO",
             "ADMISSÃO",
@@ -2879,6 +2898,7 @@ def baixar_modelo_planilha_colaboradores():
             "CHAPA": "12345",
             "NOME": "FULANO DE TAL",
             "FUNÇÃO": "ELETRICISTA",
+            "TIPO_FUNÇÃO": "DIRETO",
             "ADMISSÃO": "01/01/2024",
             "SEÇÃO": "MA-BCB-O007M",
             "SITUAÇÃO": "ATIVO",
