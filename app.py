@@ -3150,6 +3150,53 @@ def afastar_colaborador():
 
 
 # ============================================================
+# REMOVER O AFASTAMENTO (VOLTA A FICAR LIVRE)
+# ============================================================
+
+@app.route("/api/colaboradores/reativar", methods=["POST"])
+@exige_permissao(auth.VER_EQUIPES)
+def reativar_colaborador():
+    dados = request.get_json()
+    if not dados:
+        return jsonify({"erro": "Dados não enviados."}), 400
+
+    chapa = str(dados.get("chapa", "")).strip()
+    if not chapa:
+        return jsonify({"erro": "CHAPA não informada."}), 400
+
+    session = SessionLocal()
+    try:
+        with session.begin():
+            colaborador = (
+                session.query(Colaborador)
+                .filter(Colaborador.CHAPA == chapa)
+                .first()
+            )
+            if not colaborador:
+                return jsonify({"erro": "Colaborador não encontrado."}), 404
+
+            colaborador.AFASTADO = False
+            colaborador.JUSTIFICATIVA_AFASTAMENTO = None
+
+        return jsonify({
+            "sucesso": True,
+            "mensagem": "Afastamento removido.",
+            "colaborador": {
+                "chapa": chapa,
+                "nome": colaborador.NOME or "",
+                "afastado": False,
+                "justificativa_afastamento": "",
+            },
+        })
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] reativar_colaborador: {erro}")
+        return jsonify({"erro": "Não foi possível remover o afastamento."}), 500
+    finally:
+        session.close()
+
+
+# ============================================================
 # REMOVER COLABORADOR
 # ============================================================
 

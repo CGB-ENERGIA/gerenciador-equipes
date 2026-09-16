@@ -639,6 +639,10 @@
           />
 
           <template v-if="!afastadoAlocacao">
+            <div v-if="colaboradorEraAfastado && !vagaAlocacao" class="text-caption text-grey-7 q-mb-sm">
+              Sem escolher uma vaga, "Confirmar" só remove o afastamento e o colaborador volta a ficar livre.
+            </div>
+
             <q-select
               v-model="baseAlocacao"
               :options="basesAlocacao"
@@ -705,12 +709,26 @@
           />
 
           <q-btn
-            v-else
+            v-else-if="vagaAlocacao"
             color="primary"
             label="Alocar"
             :loading="carregandoAlocacao"
-            :disable="!vagaAlocacao"
             @click="alocarColaborador"
+          />
+
+          <q-btn
+            v-else-if="colaboradorEraAfastado"
+            color="primary"
+            label="Confirmar"
+            :loading="carregandoAlocacao"
+            @click="reativarColaborador"
+          />
+
+          <q-btn
+            v-else
+            color="primary"
+            label="Alocar"
+            disable
           />
         </q-card-actions>
       </q-card>
@@ -1282,6 +1300,7 @@ const equipeAlocacao = ref(null)
 const vagaAlocacao = ref(null)
 const afastadoAlocacao = ref(false)
 const justificativaAfastamento = ref('')
+const colaboradorEraAfastado = ref(false)
 
 // Editar alocação (trocar colaborador de uma vaga ocupada)
 const dialogEdicaoAlocacao = ref(false)
@@ -1760,6 +1779,7 @@ function selecionarColaborador(colaborador) {
   opcoesColaboradoresAlocacao.value = opcoesColaboradoresParaFiltro()
   afastadoAlocacao.value = Boolean(colaborador.afastado)
   justificativaAfastamento.value = colaborador.justificativa_afastamento || ''
+  colaboradorEraAfastado.value = Boolean(colaborador.afastado)
 
   dialogAlocacao.value = true
 }
@@ -1773,6 +1793,7 @@ function abrirAlocacaoParaVaga(equipe, vaga) {
   opcoesColaboradoresAlocacao.value = opcoesColaboradoresParaFiltro()
   afastadoAlocacao.value = false
   justificativaAfastamento.value = ''
+  colaboradorEraAfastado.value = false
   dialogAlocacao.value = true
 }
 
@@ -1785,6 +1806,7 @@ function filtrarColaboradoresAlocacao(valor, atualizar) {
 function atualizarAfastamentoSelecionado(colaborador) {
   afastadoAlocacao.value = Boolean(colaborador?.afastado)
   justificativaAfastamento.value = colaborador?.justificativa_afastamento || ''
+  colaboradorEraAfastado.value = Boolean(colaborador?.afastado)
 }
 
 function limparEquipeAlocacao() {
@@ -2176,6 +2198,7 @@ async function alocarColaborador(confirmarTransferencia = false) {
     vagaAlocacao.value = null
     afastadoAlocacao.value = false
     justificativaAfastamento.value = ''
+    colaboradorEraAfastado.value = false
 
     // reflete na hora e só depois relê o banco: a tela não some, a rolagem
     // fica onde está e a equipe aberta continua aberta. A rebusca ainda
@@ -2221,10 +2244,52 @@ async function afastarColaborador() {
     vagaAlocacao.value = null
     afastadoAlocacao.value = false
     justificativaAfastamento.value = ''
+    colaboradorEraAfastado.value = false
 
     await carregarDados()
   } catch (e) {
     erro.value = e.message || 'Erro ao marcar colaborador como afastado.'
+  } finally {
+    carregandoAlocacao.value = false
+  }
+}
+
+async function reativarColaborador() {
+  if (!colaboradorSelecionado.value) {
+    return
+  }
+
+  carregandoAlocacao.value = true
+
+  try {
+    const resposta = await fetch('/api/colaboradores/reativar', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        chapa: colaboradorSelecionado.value.chapa
+      })
+    })
+
+    const dados = await resposta.json()
+
+    if (!resposta.ok || dados.erro) {
+      throw new Error(dados.erro || 'Erro ao remover o afastamento.')
+    }
+
+    dialogAlocacao.value = false
+    colaboradorSelecionado.value = null
+    baseAlocacao.value = null
+    equipeAlocacao.value = null
+    vagaAlocacao.value = null
+    afastadoAlocacao.value = false
+    justificativaAfastamento.value = ''
+    colaboradorEraAfastado.value = false
+
+    await carregarDados()
+  } catch (e) {
+    erro.value = e.message || 'Erro ao remover o afastamento.'
   } finally {
     carregandoAlocacao.value = false
   }
