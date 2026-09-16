@@ -42,6 +42,11 @@ class Colaborador(Base):
     SEÇÃO_TRATADA = Column(String)
     TIPO_CCUSTO = Column(String)
 
+    # Status de afastamento -- independe de alocacao (base/equipe/vaga):
+    # marcado na tela Banco de Dados > Colaboradores, exige justificativa.
+    AFASTADO = Column(Boolean, nullable=False, default=False)
+    JUSTIFICATIVA_AFASTAMENTO = Column(String)
+
     rateios = relationship(
         "Rateio",
         back_populates="colaborador",

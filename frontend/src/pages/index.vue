@@ -620,6 +620,25 @@
                           </q-card-section>
                         </q-card>
                       </div>
+
+                      <div class="col-12 col-sm-6">
+                        <q-card
+                          flat
+                          bordered
+                          class="cursor-pointer indicador-compacto bg-amber-2"
+                          @click="abrirAfastados"
+                        >
+                          <q-card-section>
+                            <div class="text-caption text-grey-8">
+                              AFASTADO
+                            </div>
+
+                            <div class="text-h6 text-amber-9">
+                              {{ afastadosTotal }}
+                            </div>
+                          </q-card-section>
+                        </q-card>
+                      </div>
                     </div>
 
                     <div class="row justify-center q-mt-lg q-col-gutter-sm">
@@ -722,6 +741,34 @@
                     hide-pagination
                     :rows-per-page-options="[0]"
                     no-data-label="Nenhum colaborador encontrado"
+                  />
+                </q-card-section>
+              </q-card>
+            </q-dialog>
+
+            <q-dialog v-model="afastadosAbertos">
+              <q-card class="detalhes-disponiveis tabela-afastados">
+                <q-card-section class="row items-center q-pb-sm">
+                  <div class="text-h6">Afastados</div>
+
+                  <q-space />
+
+                  <q-btn v-close-popup flat round dense icon="close" />
+                </q-card-section>
+
+                <q-separator />
+
+                <q-card-section>
+                  <q-table
+                    flat
+                    bordered
+                    dense
+                    :rows="afastadosDetalhes"
+                    :columns="colunasAfastados"
+                    :loading="carregandoAfastados"
+                    hide-pagination
+                    :rows-per-page-options="[0]"
+                    no-data-label="Nenhum colaborador afastado"
                   />
                 </q-card-section>
               </q-card>
@@ -836,6 +883,11 @@ const necessidadeSelecionada = ref({
   codigo: '',
   tipo: 'deficit'
 })
+
+const afastadosTotal = ref(0)
+const afastadosDetalhes = ref([])
+const carregandoAfastados = ref(false)
+const afastadosAbertos = ref(false)
 
 // ============================================================
 // OPÇÕES DE BASE
@@ -1099,6 +1151,33 @@ const colunasDisponiveis = computed(() => {
 
   return colunas
 })
+
+const colunasAfastados = [
+  {
+    name: 'chapa',
+    label: 'CHAPA',
+    field: 'chapa',
+    align: 'left'
+  },
+  {
+    name: 'nome',
+    label: 'COLABORADOR',
+    field: 'nome',
+    align: 'left'
+  },
+  {
+    name: 'funcao_sistema',
+    label: 'FUNÇÃO NO SISTEMA',
+    field: 'funcao_sistema',
+    align: 'left'
+  },
+  {
+    name: 'secao_sistema',
+    label: 'SEÇÃO NO SISTEMA',
+    field: 'secao_sistema',
+    align: 'left'
+  }
+]
 
 const colunasNaoAlocadosDetalhes = [
   {
@@ -1442,6 +1521,27 @@ function abrirNecessidades(funcao, codigo = '', tipo = 'deficit') {
   necessidadesAbertas.value = true
 }
 
+async function abrirAfastados() {
+  afastadosAbertos.value = true
+
+  carregandoAfastados.value = true
+
+  try {
+    const resposta = await fetch('/api/pessoas-afastadas')
+    const dados = await resposta.json()
+
+    if (!resposta.ok || dados.erro) {
+      throw new Error(dados.erro || 'Erro ao carregar os afastados.')
+    }
+
+    afastadosDetalhes.value = dados
+  } catch (e) {
+    erro.value = e.message || 'Erro ao carregar os afastados.'
+  } finally {
+    carregandoAfastados.value = false
+  }
+}
+
 function escaparCsv(valor) {
   return `"${String(valor ?? '').replaceAll('"', '""')}"`
 }
@@ -1577,6 +1677,7 @@ async function carregarResumo() {
     pessoasDisponiveis.value = dados.pessoas_disponiveis || []
 
     naoAlocadosPorBase.value = dados.nao_alocados_por_base || []
+    afastadosTotal.value = dados.afastados_total || 0
   } catch (e) {
     console.error(e)
 

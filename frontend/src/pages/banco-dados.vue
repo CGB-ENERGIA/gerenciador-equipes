@@ -190,6 +190,12 @@
                   {{ colaboradoresLivres }} livres
                 </q-chip>
               </div>
+
+              <div class="col-auto">
+                <q-chip color="amber-8" text-color="white">
+                  {{ colaboradoresAfastados }} afastados
+                </q-chip>
+              </div>
             </div>
           </q-card-section>
         </q-card>
@@ -484,6 +490,17 @@
                       @click="statusColaborador = 'LIVRES'"
                     />
                   </div>
+
+                  <div class="col-auto">
+                    <q-btn
+                      :color="
+                        statusColaborador === 'AFASTADOS' ? 'amber-8' : 'grey-7'
+                      "
+                      outline
+                      :label="`Afastados (${colaboradoresAfastados})`"
+                      @click="statusColaborador = 'AFASTADOS'"
+                    />
+                  </div>
                 </div>
 
                 <q-list bordered separator class="rounded-borders">
@@ -520,6 +537,15 @@
                         size="sm"
                       >
                         ALOCADO
+                      </q-chip>
+
+                      <q-chip
+                        v-else-if="colaborador.afastado"
+                        color="amber-8"
+                        text-color="white"
+                        size="sm"
+                      >
+                        AFASTADO
                       </q-chip>
 
                       <q-chip
@@ -571,6 +597,7 @@
             class="q-mb-md"
             hint="Pesquise pelo nome ou pela CHAPA"
             @filter="filtrarColaboradoresAlocacao"
+            @update:model-value="atualizarAfastamentoSelecionado"
           >
             <template #option="scope">
               <q-item v-bind="scope.itemProps">
@@ -601,43 +628,62 @@
             </template>
           </q-select>
 
-          <q-select
-            v-model="baseAlocacao"
-            :options="basesAlocacao"
-            label="Base"
-            outlined
-            dense
-            emit-value
-            map-options
-            clearable
-            @update:model-value="limparEquipeAlocacao"
+          <q-checkbox
+            v-model="afastadoAlocacao"
+            label="Marcar como afastado"
+            class="q-mb-md"
           />
 
-          <q-select
-            v-if="baseAlocacao"
-            v-model="equipeAlocacao"
-            :options="equipesAlocacao"
-            label="Equipe"
-            outlined
-            dense
-            emit-value
-            map-options
-            clearable
-            class="q-mt-md"
-            @update:model-value="limparVagaAlocacao"
-          />
+          <template v-if="!afastadoAlocacao">
+            <q-select
+              v-model="baseAlocacao"
+              :options="basesAlocacao"
+              label="Base"
+              outlined
+              dense
+              emit-value
+              map-options
+              clearable
+              @update:model-value="limparEquipeAlocacao"
+            />
 
-          <q-select
-            v-if="equipeAlocacao"
-            v-model="vagaAlocacao"
-            :options="vagasAlocacao"
-            label="Vaga"
+            <q-select
+              v-if="baseAlocacao"
+              v-model="equipeAlocacao"
+              :options="equipesAlocacao"
+              label="Equipe"
+              outlined
+              dense
+              emit-value
+              map-options
+              clearable
+              class="q-mt-md"
+              @update:model-value="limparVagaAlocacao"
+            />
+
+            <q-select
+              v-if="equipeAlocacao"
+              v-model="vagaAlocacao"
+              :options="vagasAlocacao"
+              label="Vaga"
+              outlined
+              dense
+              emit-value
+              map-options
+              clearable
+              class="q-mt-md"
+            />
+          </template>
+
+          <q-input
+            v-else
+            v-model="justificativaAfastamento"
+            label="Justificativa"
+            type="textarea"
             outlined
             dense
-            emit-value
-            map-options
-            clearable
-            class="q-mt-md"
+            autogrow
+            hint="Obrigatória para confirmar o afastamento"
           />
         </q-card-section>
 
@@ -645,6 +691,17 @@
           <q-btn flat label="Cancelar" v-close-popup />
 
           <q-btn
+            v-if="afastadoAlocacao"
+            color="warning"
+            text-color="white"
+            label="Confirmar afastamento"
+            :loading="carregandoAlocacao"
+            :disable="!colaboradorSelecionado || !justificativaAfastamento.trim()"
+            @click="afastarColaborador"
+          />
+
+          <q-btn
+            v-else
             color="primary"
             label="Alocar"
             :loading="carregandoAlocacao"
@@ -1219,6 +1276,8 @@ const removendoComposicaoId = ref(null)
 const baseAlocacao = ref(null)
 const equipeAlocacao = ref(null)
 const vagaAlocacao = ref(null)
+const afastadoAlocacao = ref(false)
+const justificativaAfastamento = ref('')
 
 // Editar alocação (trocar colaborador de uma vaga ocupada)
 const dialogEdicaoAlocacao = ref(false)
@@ -1533,7 +1592,8 @@ const colaboradoresFiltrados = computed(() => {
     const correspondeStatus =
       statusColaborador.value === 'TODOS' ||
       (statusColaborador.value === 'ALOCADOS' && colaborador.alocado) ||
-      (statusColaborador.value === 'LIVRES' && !colaborador.alocado)
+      (statusColaborador.value === 'LIVRES' && !colaborador.alocado && !colaborador.afastado) ||
+      (statusColaborador.value === 'AFASTADOS' && colaborador.afastado)
 
     const correspondeTexto =
       !filtro ||
@@ -1561,7 +1621,13 @@ const colaboradoresAlocados = computed(() => {
 })
 
 const colaboradoresLivres = computed(() => {
-  return colaboradoresBase.value.filter(colaborador => !colaborador.alocado)
+  return colaboradoresBase.value.filter(
+    colaborador => !colaborador.alocado && !colaborador.afastado
+  ).length
+})
+
+const colaboradoresAfastados = computed(() => {
+  return colaboradoresBase.value.filter(colaborador => colaborador.afastado)
     .length
 })
 
@@ -1688,6 +1754,8 @@ function selecionarColaborador(colaborador) {
   colaboradorSelecionado.value = colaborador
   chapaExcluidaAlocacao.value = ''
   opcoesColaboradoresAlocacao.value = opcoesColaboradoresParaFiltro()
+  afastadoAlocacao.value = Boolean(colaborador.afastado)
+  justificativaAfastamento.value = colaborador.justificativa_afastamento || ''
 
   dialogAlocacao.value = true
 }
@@ -1699,6 +1767,8 @@ function abrirAlocacaoParaVaga(equipe, vaga) {
   vagaAlocacao.value = vaga.id
   chapaExcluidaAlocacao.value = ''
   opcoesColaboradoresAlocacao.value = opcoesColaboradoresParaFiltro()
+  afastadoAlocacao.value = false
+  justificativaAfastamento.value = ''
   dialogAlocacao.value = true
 }
 
@@ -1706,6 +1776,11 @@ function filtrarColaboradoresAlocacao(valor, atualizar) {
   atualizar(() => {
     opcoesColaboradoresAlocacao.value = opcoesColaboradoresParaFiltro(valor)
   })
+}
+
+function atualizarAfastamentoSelecionado(colaborador) {
+  afastadoAlocacao.value = Boolean(colaborador?.afastado)
+  justificativaAfastamento.value = colaborador?.justificativa_afastamento || ''
 }
 
 function limparEquipeAlocacao() {
@@ -2095,6 +2170,8 @@ async function alocarColaborador(confirmarTransferencia = false) {
     baseAlocacao.value = null
     equipeAlocacao.value = null
     vagaAlocacao.value = null
+    afastadoAlocacao.value = false
+    justificativaAfastamento.value = ''
 
     // reflete na hora e só depois relê o banco: a tela não some, a rolagem
     // fica onde está e a equipe aberta continua aberta. A rebusca ainda
@@ -2103,6 +2180,47 @@ async function alocarColaborador(confirmarTransferencia = false) {
     await carregarDados()
   } catch (e) {
     erro.value = e.message || 'Erro ao alocar colaborador.'
+  } finally {
+    carregandoAlocacao.value = false
+  }
+}
+
+async function afastarColaborador() {
+  if (!colaboradorSelecionado.value || !justificativaAfastamento.value.trim()) {
+    return
+  }
+
+  carregandoAlocacao.value = true
+
+  try {
+    const resposta = await fetch('/api/colaboradores/afastar', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        chapa: colaboradorSelecionado.value.chapa,
+        justificativa: justificativaAfastamento.value.trim()
+      })
+    })
+
+    const dados = await resposta.json()
+
+    if (!resposta.ok || dados.erro) {
+      throw new Error(dados.erro || 'Erro ao marcar colaborador como afastado.')
+    }
+
+    dialogAlocacao.value = false
+    colaboradorSelecionado.value = null
+    baseAlocacao.value = null
+    equipeAlocacao.value = null
+    vagaAlocacao.value = null
+    afastadoAlocacao.value = false
+    justificativaAfastamento.value = ''
+
+    await carregarDados()
+  } catch (e) {
+    erro.value = e.message || 'Erro ao marcar colaborador como afastado.'
   } finally {
     carregandoAlocacao.value = false
   }

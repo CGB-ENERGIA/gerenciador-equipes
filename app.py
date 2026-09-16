@@ -668,6 +668,10 @@ def obter_resumo():
 
         bases_filtro = [{"base": item["base"], "codigo": item["codigo"]} for item in resultado]
 
+        total_afastados = (
+            session.query(Colaborador).filter(Colaborador.AFASTADO.is_(True)).count()
+        )
+
         return jsonify({
             "bases": resultado,
             "total": total,
@@ -683,6 +687,7 @@ def obter_resumo():
             "supervisor_selecionado": filtro_supervisor,
             "pessoas_disponiveis": lista_disponiveis,
             "nao_alocados_por_base": list(nao_alocados.values()),
+            "afastados_total": total_afastados,
         })
     except Exception as erro:
         print(f"[ERRO] obter_resumo: {erro}")
@@ -734,6 +739,40 @@ def obter_pessoas_nao_alocadas():
     except Exception as erro:
         print(f"[ERRO] obter_pessoas_nao_alocadas: {erro}")
         return jsonify({"erro": "Não foi possível carregar os não alocados."}), 500
+    finally:
+        session.close()
+
+
+@app.route("/api/pessoas-afastadas", methods=["GET"])
+@exige_permissao(auth.VER_RESUMO)
+def obter_pessoas_afastadas():
+    """Chapa, nome, função e seção (do sistema) de quem está marcado como
+    afastado -- separado do resumo pelo mesmo motivo de /api/pessoas-nao-alocadas:
+    o card so precisa da contagem, os nomes vem sob demanda ao abrir a tabela."""
+    session = SessionLocal()
+    try:
+        resultado = []
+        colaboradores = (
+            session.query(Colaborador)
+            .filter(Colaborador.AFASTADO.is_(True))
+            .order_by(Colaborador.NOME)
+            .all()
+        )
+        for colaborador in colaboradores:
+            resultado.append({
+                "chapa": str(colaborador.CHAPA).strip(),
+                "nome": str(colaborador.NOME).strip() if colaborador.NOME else "",
+                "funcao_sistema": str(colaborador.FUNÇÃO).strip() if colaborador.FUNÇÃO else "",
+                "secao_sistema": str(colaborador.SEÇÃO_TRATADA).strip()
+                if colaborador.SEÇÃO_TRATADA
+                else base_da_secao(colaborador.SEÇÃO)["nome"],
+                "justificativa": colaborador.JUSTIFICATIVA_AFASTAMENTO or "",
+            })
+
+        return jsonify(resultado)
+    except Exception as erro:
+        print(f"[ERRO] obter_pessoas_afastadas: {erro}")
+        return jsonify({"erro": "Não foi possível carregar os afastados."}), 500
     finally:
         session.close()
 
@@ -2785,6 +2824,8 @@ def obter_colaboradores():
                 "base": dados_base["nome"],
                 "codigo_base": dados_base["codigo"],
                 "alocado": chapa in chapas_alocadas,
+                "afastado": bool(colaborador.AFASTADO),
+                "justificativa_afastamento": colaborador.JUSTIFICATIVA_AFASTAMENTO or "",
             })
 
         return jsonify(resultado)
@@ -3011,6 +3052,10 @@ def alocar_colaborador():
             membro = MembroEquipe(composicao_id=composicao_id, CHAPA=chapa)
             session.add(membro)
 
+            # sendo alocado numa vaga, o colaborador volta a estar ativo
+            colaborador.AFASTADO = False
+            colaborador.JUSTIFICATIVA_AFASTAMENTO = None
+
         return jsonify({
             "sucesso": True,
             "mensagem": "Colaborador alocado com sucesso.",
@@ -3027,6 +3072,71 @@ def alocar_colaborador():
         session.rollback()
         print(f"[ERRO] alocar_colaborador: {erro}")
         return jsonify({"erro": "Não foi possível alocar o colaborador."}), 500
+    finally:
+        session.close()
+
+
+# ============================================================
+# MARCAR COLABORADOR COMO AFASTADO
+# ============================================================
+#
+# Afastado e um status do colaborador, independente de base/equipe/vaga --
+# por isso nao passa pela rota de alocar. Se o colaborador estiver ocupando
+# uma vaga no momento, a alocacao e desfeita (ele nao pode seguir "no
+# trabalho" numa equipe estando afastado). Voltar a ser alocado numa vaga
+# (rota /api/equipes/alocar) desfaz o afastamento automaticamente.
+
+@app.route("/api/colaboradores/afastar", methods=["POST"])
+@exige_permissao(auth.VER_EQUIPES)
+def afastar_colaborador():
+    dados = request.get_json()
+    if not dados:
+        return jsonify({"erro": "Dados não enviados."}), 400
+
+    chapa = str(dados.get("chapa", "")).strip()
+    justificativa = str(dados.get("justificativa", "")).strip()
+
+    if not chapa:
+        return jsonify({"erro": "CHAPA não informada."}), 400
+    if not justificativa:
+        return jsonify({"erro": "A justificativa é obrigatória."}), 400
+
+    session = SessionLocal()
+    try:
+        with session.begin():
+            colaborador = (
+                session.query(Colaborador)
+                .filter(Colaborador.CHAPA == chapa)
+                .first()
+            )
+            if not colaborador:
+                return jsonify({"erro": "Colaborador não encontrado."}), 404
+
+            alocacao_existente = (
+                session.query(MembroEquipe)
+                .filter(MembroEquipe.CHAPA == chapa)
+                .first()
+            )
+            if alocacao_existente:
+                session.delete(alocacao_existente)
+
+            colaborador.AFASTADO = True
+            colaborador.JUSTIFICATIVA_AFASTAMENTO = justificativa
+
+        return jsonify({
+            "sucesso": True,
+            "mensagem": "Colaborador marcado como afastado.",
+            "colaborador": {
+                "chapa": chapa,
+                "nome": colaborador.NOME or "",
+                "afastado": True,
+                "justificativa_afastamento": justificativa,
+            },
+        })
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] afastar_colaborador: {erro}")
+        return jsonify({"erro": "Não foi possível marcar o colaborador como afastado."}), 500
     finally:
         session.close()
 
