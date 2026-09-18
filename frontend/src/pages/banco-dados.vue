@@ -287,7 +287,8 @@
                         <div class="col-12 col-sm-3">Colaborador</div>
                         <div class="col-12 col-sm-2">Função cadastrada</div>
                         <div class="col-12 col-sm-2">Vaga</div>
-                        <div class="col-12 col-sm-3">Status</div>
+                        <div class="col-12 col-sm-1">Equipe</div>
+                        <div class="col-12 col-sm-2">Status</div>
                       </div>
 
                       <div v-if="!equipe.vagas.length" class="text-grey-7">
@@ -316,8 +317,12 @@
                           {{ vaga.funcao_er || 'Não informada' }}
                         </div>
 
+                        <div class="col-12 col-sm-1 text-caption">
+                          {{ vaga.tipo || '-' }}
+                        </div>
+
                         <div
-                          class="col-12 col-sm-3 flex justify-center items-center"
+                          class="col-12 col-sm-2 flex justify-center items-center"
                         >
                           <q-chip
                             v-if="vaga.eh_extra"
