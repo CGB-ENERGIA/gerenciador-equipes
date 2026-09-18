@@ -56,81 +56,158 @@
                   <template #prepend>
                     <q-icon name="place" size="20px" />
                   </template>
+                  <template #option="scope">
+                    <q-item v-bind="scope.itemProps">
+                      <q-item-section side>
+                        <q-checkbox
+                          :model-value="scope.selected"
+                          @update:model-value="scope.toggleOption(scope.opt)"
+                        />
+                      </q-item-section>
+                      <q-item-section>
+                        <q-item-label>{{ scope.opt.label }}</q-item-label>
+                      </q-item-section>
+                    </q-item>
+                  </template>
                 </q-select>
               </div>
 
               <div class="col-6 col-md">
                 <q-select
-                  v-model="tipoSelecionado"
+                  :model-value="tipoSelecionado"
                   :options="opcoesTipos"
                   label="Tipo de equipe"
                   outlined
                   dense
                   rounded
+                  clearable
+                  multiple
+                  use-chips
                   emit-value
                   map-options
                   class="campo-filtro"
-                  @update:model-value="carregarResumo"
+                  @update:model-value="atualizarSelecaoTipo"
                 >
                   <template #prepend>
                     <q-icon name="category" size="20px" />
+                  </template>
+                  <template #option="scope">
+                    <q-item v-bind="scope.itemProps">
+                      <q-item-section side>
+                        <q-checkbox
+                          :model-value="scope.selected"
+                          @update:model-value="scope.toggleOption(scope.opt)"
+                        />
+                      </q-item-section>
+                      <q-item-section>
+                        <q-item-label>{{ scope.opt.label }}</q-item-label>
+                      </q-item-section>
+                    </q-item>
                   </template>
                 </q-select>
               </div>
 
               <div class="col-6 col-md">
                 <q-select
-                  v-model="setorSelecionado"
+                  :model-value="setorSelecionado"
                   :options="opcoesSetores"
                   label="Setor"
                   outlined
                   dense
                   rounded
+                  clearable
+                  multiple
+                  use-chips
                   emit-value
                   map-options
                   class="campo-filtro"
-                  @update:model-value="carregarResumo"
+                  @update:model-value="atualizarSelecaoSetor"
                 >
                   <template #prepend>
                     <q-icon name="apartment" size="20px" />
+                  </template>
+                  <template #option="scope">
+                    <q-item v-bind="scope.itemProps">
+                      <q-item-section side>
+                        <q-checkbox
+                          :model-value="scope.selected"
+                          @update:model-value="scope.toggleOption(scope.opt)"
+                        />
+                      </q-item-section>
+                      <q-item-section>
+                        <q-item-label>{{ scope.opt.label }}</q-item-label>
+                      </q-item-section>
+                    </q-item>
                   </template>
                 </q-select>
               </div>
 
               <div class="col-6 col-md">
                 <q-select
-                  v-model="coordenadorSelecionado"
+                  :model-value="coordenadorSelecionado"
                   :options="opcoesCoordenadores"
                   label="Coordenador"
                   outlined
                   dense
                   rounded
+                  clearable
+                  multiple
+                  use-chips
                   emit-value
                   map-options
                   class="campo-filtro"
-                  @update:model-value="carregarResumo"
+                  @update:model-value="atualizarSelecaoCoordenador"
                 >
                   <template #prepend>
                     <q-icon name="badge" size="20px" />
+                  </template>
+                  <template #option="scope">
+                    <q-item v-bind="scope.itemProps">
+                      <q-item-section side>
+                        <q-checkbox
+                          :model-value="scope.selected"
+                          @update:model-value="scope.toggleOption(scope.opt)"
+                        />
+                      </q-item-section>
+                      <q-item-section>
+                        <q-item-label>{{ scope.opt.label }}</q-item-label>
+                      </q-item-section>
+                    </q-item>
                   </template>
                 </q-select>
               </div>
 
               <div class="col-6 col-md">
                 <q-select
-                  v-model="supervisorSelecionado"
+                  :model-value="supervisorSelecionado"
                   :options="opcoesSupervisores"
                   label="Supervisor"
                   outlined
                   dense
                   rounded
+                  clearable
+                  multiple
+                  use-chips
                   emit-value
                   map-options
                   class="campo-filtro"
-                  @update:model-value="carregarResumo"
+                  @update:model-value="atualizarSelecaoSupervisor"
                 >
                   <template #prepend>
                     <q-icon name="engineering" size="20px" />
+                  </template>
+                  <template #option="scope">
+                    <q-item v-bind="scope.itemProps">
+                      <q-item-section side>
+                        <q-checkbox
+                          :model-value="scope.selected"
+                          @update:model-value="scope.toggleOption(scope.opt)"
+                        />
+                      </q-item-section>
+                      <q-item-section>
+                        <q-item-label>{{ scope.opt.label }}</q-item-label>
+                      </q-item-section>
+                    </q-item>
                   </template>
                 </q-select>
               </div>
@@ -834,7 +911,8 @@ import {
   FUNCOES_SISTEMA,
   normalizarSelecaoBases,
   OPCAO_TODAS_BASES,
-  proximaSelecaoBases
+  proximaSelecaoBases,
+  proximaSelecaoMultipla
 } from '../utils/equipes'
 
 // mantem /resumo valendo como atalho para a tela principal
@@ -849,13 +927,13 @@ const bases = ref([])
 const basesFiltro = ref([])
 
 const baseSelecionada = ref([])
-const tipoSelecionado = ref('')
+const tipoSelecionado = ref([])
 const tiposFiltro = ref([])
-const setorSelecionado = ref('')
+const setorSelecionado = ref([])
 const setoresFiltro = ref([])
-const coordenadorSelecionado = ref('')
+const coordenadorSelecionado = ref([])
 const coordenadoresFiltro = ref([])
-const supervisorSelecionado = ref('')
+const supervisorSelecionado = ref([])
 const supervisoresFiltro = ref([])
 
 const visaoIndicadores = ref('tabela')
@@ -952,6 +1030,27 @@ const opcoesBases = computed(() => {
 
 function atualizarSelecaoBases(selecao) {
   baseSelecionada.value = proximaSelecaoBases(baseSelecionada.value, selecao)
+}
+
+// as opcoes "Todos" destes 4 filtros usam '' como valor-sentinela
+function atualizarSelecaoTipo(selecao) {
+  tipoSelecionado.value = proximaSelecaoMultipla(tipoSelecionado.value, selecao, '')
+  carregarResumo()
+}
+
+function atualizarSelecaoSetor(selecao) {
+  setorSelecionado.value = proximaSelecaoMultipla(setorSelecionado.value, selecao, '')
+  carregarResumo()
+}
+
+function atualizarSelecaoCoordenador(selecao) {
+  coordenadorSelecionado.value = proximaSelecaoMultipla(coordenadorSelecionado.value, selecao, '')
+  carregarResumo()
+}
+
+function atualizarSelecaoSupervisor(selecao) {
+  supervisorSelecionado.value = proximaSelecaoMultipla(supervisorSelecionado.value, selecao, '')
+  carregarResumo()
 }
 
 const basesExibidas = computed(() => {
@@ -1112,16 +1211,22 @@ function corDoTipo(grupo) {
   return coresPorTipo.value[grupo.tipo] || 'var(--tipo-outro)'
 }
 
-// clicar no chip liga o filtro daquele tipo; clicar de novo desliga
+// clicar no chip liga o filtro daquele tipo; clicar de novo desliga (sem
+// mexer nos demais tipos ja selecionados no combo)
 function alternarFiltroTipo(grupo) {
   const alvo = grupo.folguista ? 'FOLGUISTA' : grupo.tipo
-  tipoSelecionado.value = tipoSelecionado.value === alvo ? '' : alvo
+  const atual = tipoSelecionado.value.filter(Boolean)
+
+  tipoSelecionado.value = atual.includes(alvo)
+    ? atual.filter(tipo => tipo !== alvo)
+    : [...atual, alvo]
+
   carregarResumo()
 }
 
 function tipoEstaFiltrado(grupo) {
   const alvo = grupo.folguista ? 'FOLGUISTA' : grupo.tipo
-  return tipoSelecionado.value === alvo
+  return tipoSelecionado.value.includes(alvo)
 }
 
 function rotuloCurto(grupo) {
@@ -1688,18 +1793,17 @@ async function carregarResumo() {
 
   try {
     const parametros = new URLSearchParams()
-    if (tipoSelecionado.value) {
-      parametros.set('tipo', tipoSelecionado.value)
+    for (const valor of tipoSelecionado.value) {
+      if (valor) parametros.append('tipo', valor)
     }
-    if (setorSelecionado.value) {
-      parametros.set('setor', setorSelecionado.value)
+    for (const valor of setorSelecionado.value) {
+      if (valor) parametros.append('setor', valor)
     }
-    if (coordenadorSelecionado.value) {
-      parametros.set('coordenador', coordenadorSelecionado.value)
+    for (const valor of coordenadorSelecionado.value) {
+      if (valor) parametros.append('coordenador', valor)
     }
-
-    if (supervisorSelecionado.value) {
-      parametros.set('supervisor', supervisorSelecionado.value)
+    for (const valor of supervisorSelecionado.value) {
+      if (valor) parametros.append('supervisor', valor)
     }
 
     const resposta = await fetch(`/api/resumo?${parametros}`)

@@ -54,69 +54,150 @@
                   <template #prepend>
                     <q-icon name="place" size="20px" />
                   </template>
+                  <template #option="scope">
+                    <q-item v-bind="scope.itemProps">
+                      <q-item-section side>
+                        <q-checkbox
+                          :model-value="scope.selected"
+                          @update:model-value="scope.toggleOption(scope.opt)"
+                        />
+                      </q-item-section>
+                      <q-item-section>
+                        <q-item-label>{{ scope.opt.label }}</q-item-label>
+                      </q-item-section>
+                    </q-item>
+                  </template>
                 </q-select>
               </div>
 
               <div class="col-12 col-sm-6 col-md">
                 <q-select
-                  v-model="tipoSelecionado"
+                  :model-value="tipoSelecionado"
                   :options="opcoesTipos"
                   label="Tipo"
                   outlined
                   dense
+                  clearable
+                  multiple
+                  use-chips
                   emit-value
                   map-options
+                  @update:model-value="atualizarSelecaoTipo"
                 >
                   <template #prepend>
                     <q-icon name="category" size="20px" />
                   </template>
+                  <template #option="scope">
+                    <q-item v-bind="scope.itemProps">
+                      <q-item-section side>
+                        <q-checkbox
+                          :model-value="scope.selected"
+                          @update:model-value="scope.toggleOption(scope.opt)"
+                        />
+                      </q-item-section>
+                      <q-item-section>
+                        <q-item-label>{{ scope.opt.label }}</q-item-label>
+                      </q-item-section>
+                    </q-item>
+                  </template>
                 </q-select>
               </div>
 
               <div class="col-12 col-sm-6 col-md">
                 <q-select
-                  v-model="setorSelecionado"
+                  :model-value="setorSelecionado"
                   :options="opcoesSetores"
                   label="Setor"
                   outlined
                   dense
+                  clearable
+                  multiple
+                  use-chips
                   emit-value
                   map-options
+                  @update:model-value="atualizarSelecaoSetor"
                 >
                   <template #prepend>
                     <q-icon name="apartment" size="20px" />
                   </template>
-                </q-select>
-              </div>
-
-              <div class="col-12 col-sm-6 col-md">
-                <q-select
-                  v-model="coordenadorSelecionado"
-                  :options="opcoesCoordenadores"
-                  label="Coordenador"
-                  outlined
-                  dense
-                  emit-value
-                  map-options
-                >
-                  <template #prepend>
-                    <q-icon name="badge" size="20px" />
+                  <template #option="scope">
+                    <q-item v-bind="scope.itemProps">
+                      <q-item-section side>
+                        <q-checkbox
+                          :model-value="scope.selected"
+                          @update:model-value="scope.toggleOption(scope.opt)"
+                        />
+                      </q-item-section>
+                      <q-item-section>
+                        <q-item-label>{{ scope.opt.label }}</q-item-label>
+                      </q-item-section>
+                    </q-item>
                   </template>
                 </q-select>
               </div>
 
               <div class="col-12 col-sm-6 col-md">
                 <q-select
-                  v-model="supervisorSelecionado"
+                  :model-value="coordenadorSelecionado"
+                  :options="opcoesCoordenadores"
+                  label="Coordenador"
+                  outlined
+                  dense
+                  clearable
+                  multiple
+                  use-chips
+                  emit-value
+                  map-options
+                  @update:model-value="atualizarSelecaoCoordenador"
+                >
+                  <template #prepend>
+                    <q-icon name="badge" size="20px" />
+                  </template>
+                  <template #option="scope">
+                    <q-item v-bind="scope.itemProps">
+                      <q-item-section side>
+                        <q-checkbox
+                          :model-value="scope.selected"
+                          @update:model-value="scope.toggleOption(scope.opt)"
+                        />
+                      </q-item-section>
+                      <q-item-section>
+                        <q-item-label>{{ scope.opt.label }}</q-item-label>
+                      </q-item-section>
+                    </q-item>
+                  </template>
+                </q-select>
+              </div>
+
+              <div class="col-12 col-sm-6 col-md">
+                <q-select
+                  :model-value="supervisorSelecionado"
                   :options="opcoesSupervisores"
                   label="Supervisor"
                   outlined
                   dense
+                  clearable
+                  multiple
+                  use-chips
                   emit-value
                   map-options
+                  @update:model-value="atualizarSelecaoSupervisor"
                 >
                   <template #prepend>
                     <q-icon name="engineering" size="20px" />
+                  </template>
+                  <template #option="scope">
+                    <q-item v-bind="scope.itemProps">
+                      <q-item-section side>
+                        <q-checkbox
+                          :model-value="scope.selected"
+                          @update:model-value="scope.toggleOption(scope.opt)"
+                        />
+                      </q-item-section>
+                      <q-item-section>
+                        <q-item-label>{{ scope.opt.label }}</q-item-label>
+                      </q-item-section>
+                    </q-item>
                   </template>
                 </q-select>
               </div>
@@ -1183,6 +1264,7 @@ import {
   opcoesSetorFiltro,
   opcoesTipoFiltro,
   proximaSelecaoBases,
+  proximaSelecaoMultipla,
   RESPONSAVEL_TODOS,
   SETOR_TODOS,
   TIPO_TODOS
@@ -1225,10 +1307,10 @@ const primeiraCarga = ref(true)
 const erro = ref('')
 
 const baseSelecionada = ref([])
-const tipoSelecionado = ref(TIPO_TODOS)
-const setorSelecionado = ref(SETOR_TODOS)
-const coordenadorSelecionado = ref(RESPONSAVEL_TODOS)
-const supervisorSelecionado = ref(RESPONSAVEL_TODOS)
+const tipoSelecionado = ref([TIPO_TODOS])
+const setorSelecionado = ref([SETOR_TODOS])
+const coordenadorSelecionado = ref([RESPONSAVEL_TODOS])
+const supervisorSelecionado = ref([RESPONSAVEL_TODOS])
 const filtroEquipe = ref('')
 const situacaoAlocacao = ref('TODAS')
 const limpandoAlocacoes = ref(false)
@@ -1434,6 +1516,30 @@ function equipePreenchida(equipe) {
 
 function atualizarSelecaoBases(bases) {
   baseSelecionada.value = proximaSelecaoBases(baseSelecionada.value, bases)
+}
+
+function atualizarSelecaoTipo(selecao) {
+  tipoSelecionado.value = proximaSelecaoMultipla(tipoSelecionado.value, selecao, TIPO_TODOS)
+}
+
+function atualizarSelecaoSetor(selecao) {
+  setorSelecionado.value = proximaSelecaoMultipla(setorSelecionado.value, selecao, SETOR_TODOS)
+}
+
+function atualizarSelecaoCoordenador(selecao) {
+  coordenadorSelecionado.value = proximaSelecaoMultipla(
+    coordenadorSelecionado.value,
+    selecao,
+    RESPONSAVEL_TODOS
+  )
+}
+
+function atualizarSelecaoSupervisor(selecao) {
+  supervisorSelecionado.value = proximaSelecaoMultipla(
+    supervisorSelecionado.value,
+    selecao,
+    RESPONSAVEL_TODOS
+  )
 }
 
 // nome da base -> sigla, montado a partir do que o servidor manda em cada

@@ -31,14 +31,20 @@ export function tiposDaEquipe(equipe) {
   return Array.isArray(equipe?.tipos) ? equipe.tipos : []
 }
 
+// Aceita tanto um valor unico quanto uma lista (filtro com multipla
+// selecao): a equipe entra se bater com QUALQUER um dos tipos escolhidos.
 export function equipeCombinaComTipo(equipe, tipoFiltro) {
-  if (!tipoFiltro || tipoFiltro === TIPO_TODOS) {
+  const filtros = Array.isArray(tipoFiltro) ? tipoFiltro : tipoFiltro ? [tipoFiltro] : []
+
+  if (!filtros.length || filtros.includes(TIPO_TODOS)) {
     return true
   }
-  if (tipoFiltro === TIPO_FOLGUISTA) {
-    return ehEquipeFolguista(equipe)
-  }
-  return tiposDaEquipe(equipe).includes(tipoFiltro)
+
+  return filtros.some(filtro =>
+    filtro === TIPO_FOLGUISTA
+      ? ehEquipeFolguista(equipe)
+      : tiposDaEquipe(equipe).includes(filtro)
+  )
 }
 
 // Monta as opcoes do filtro de tipo a partir das disciplinas que existem de
@@ -77,12 +83,15 @@ export function setoresDaEquipe(equipe) {
   return Array.isArray(equipe?.setores) ? equipe.setores : []
 }
 
+// Idem equipeCombinaComTipo: aceita um valor unico ou uma lista.
 export function equipeCombinaComSetor(equipe, setorFiltro) {
-  if (!setorFiltro || setorFiltro === SETOR_TODOS) {
+  const filtros = Array.isArray(setorFiltro) ? setorFiltro : setorFiltro ? [setorFiltro] : []
+
+  if (!filtros.length || filtros.includes(SETOR_TODOS)) {
     return true
   }
 
-  return setoresDaEquipe(equipe).includes(setorFiltro)
+  return setoresDaEquipe(equipe).some(setor => filtros.includes(setor))
 }
 
 export function opcoesSetorFiltro(equipes) {
@@ -127,12 +136,15 @@ export function responsaveisDaEquipe(equipe, campo) {
   return [...valores]
 }
 
+// Idem equipeCombinaComTipo: aceita um valor unico ou uma lista.
 export function equipeCombinaComResponsavel(equipe, campo, filtro) {
-  if (!filtro || filtro === RESPONSAVEL_TODOS) {
+  const filtros = Array.isArray(filtro) ? filtro : filtro ? [filtro] : []
+
+  if (!filtros.length || filtros.includes(RESPONSAVEL_TODOS)) {
     return true
   }
 
-  return responsaveisDaEquipe(equipe, campo).includes(filtro)
+  return responsaveisDaEquipe(equipe, campo).some(valor => filtros.includes(valor))
 }
 
 export function opcoesResponsavelFiltro(equipes, campo, rotuloTodos) {
@@ -192,6 +204,42 @@ export function equipeNaSelecaoDeBases(equipe, selecao) {
   }
 
   return selecao.includes(String(equipe?.base || '').trim())
+}
+
+// ------------------------------------------------------------
+// Selecao multipla generica (tipo/setor/coordenador/supervisor), com a
+// mesma regra da selecao de bases: marcar a opcao "Todos" com outras ja
+// selecionadas tira as outras da selecao, nao o contrario.
+// ------------------------------------------------------------
+
+export function normalizarSelecaoMultipla(selecao, opcaoTodos) {
+  if (!Array.isArray(selecao)) {
+    return []
+  }
+
+  // filtra so null/undefined (nao Boolean): a opcao "Todos" de alguns
+  // filtros usa '' como sentinela, que Boolean descartaria
+  const valores = [...new Set(selecao.filter(valor => valor !== null && valor !== undefined))]
+
+  if (valores.includes(opcaoTodos)) {
+    return [opcaoTodos]
+  }
+
+  return valores
+}
+
+export function proximaSelecaoMultipla(selecaoAtual, novaSelecao, opcaoTodos) {
+  const selecao = Array.isArray(novaSelecao) ? novaSelecao : []
+
+  if (
+    selecao.includes(opcaoTodos) &&
+    selecaoAtual.includes(opcaoTodos) &&
+    selecao.length > 1
+  ) {
+    return selecao.filter(valor => valor !== opcaoTodos)
+  }
+
+  return normalizarSelecaoMultipla(selecao, opcaoTodos)
 }
 
 // ============================================================

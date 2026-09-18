@@ -346,32 +346,49 @@ def obter_resumo():
         usuario = auth.usuario_logado()
 
         filtro_base = request.args.get("base", "").strip()
-        filtro_tipo = request.args.get("tipo", "").strip()
-        filtro_setor = request.args.get("setor", "").strip()
-        filtro_coordenador = request.args.get("coordenador", "").strip()
-        filtro_supervisor = request.args.get("supervisor", "").strip()
+        # cada filtro aceita multiplos valores agora (?tipo=A&tipo=B): a vaga
+        # bate se corresponder a QUALQUER um dos valores escolhidos naquela
+        # dimensao (OR dentro do filtro, AND entre filtros diferentes)
+        filtro_tipos = [t.strip() for t in request.args.getlist("tipo") if t.strip()]
+        filtro_setores = [s.strip() for s in request.args.getlist("setor") if s.strip()]
+        filtro_coordenadores = [c.strip() for c in request.args.getlist("coordenador") if c.strip()]
+        filtro_supervisores = [s.strip() for s in request.args.getlist("supervisor") if s.strip()]
 
-        filtrando_folguista = normalizar(filtro_tipo) == "FOLGUISTA"
+        tipos_normalizados = {normalizar(t) for t in filtro_tipos}
+        setores_normalizados = {normalizar(s) for s in filtro_setores}
+        coordenadores_normalizados = {normalizar(c) for c in filtro_coordenadores}
+        supervisores_normalizados = {normalizar(s) for s in filtro_supervisores}
+
+        filtrando_folguista = "FOLGUISTA" in tipos_normalizados
+        tipos_normalizados_sem_folguista = tipos_normalizados - {"FOLGUISTA"}
+
+        def tipo_bate(tipo, folguista):
+            if not tipos_normalizados:
+                return True
+            if folguista and filtrando_folguista:
+                return True
+            return bool(tipos_normalizados_sem_folguista) and normalizar(tipo) in tipos_normalizados_sem_folguista
+
+        def campo_bate(valor, normalizados):
+            if not normalizados:
+                return True
+            return normalizar(valor or "") in normalizados
 
         def vaga_bate_outros_filtros(composicao, tipo, folguista, ignorar):
             """Confere se a vaga bate com os filtros ativos, exceto a
             dimensao 'ignorar' — usado para montar as opcoes de CADA filtro
             considerando os demais ja selecionados (filtros em cascata),
             sem que um filtro restrinja a si mesmo."""
-            if ignorar != "tipo" and filtro_tipo:
-                if filtrando_folguista:
-                    if not folguista:
-                        return False
-                elif normalizar(tipo) != normalizar(filtro_tipo):
-                    return False
-
-            if ignorar != "setor" and filtro_setor and normalizar(composicao.SETOR or "") != normalizar(filtro_setor):
+            if ignorar != "tipo" and not tipo_bate(tipo, folguista):
                 return False
 
-            if ignorar != "coordenador" and filtro_coordenador and normalizar(composicao.COORDENADOR or "") != normalizar(filtro_coordenador):
+            if ignorar != "setor" and not campo_bate(composicao.SETOR, setores_normalizados):
                 return False
 
-            if ignorar != "supervisor" and filtro_supervisor and normalizar(composicao.SUPERVISOR or "") != normalizar(filtro_supervisor):
+            if ignorar != "coordenador" and not campo_bate(composicao.COORDENADOR, coordenadores_normalizados):
+                return False
+
+            if ignorar != "supervisor" and not campo_bate(composicao.SUPERVISOR, supervisores_normalizados):
                 return False
 
             return True
@@ -464,22 +481,16 @@ def obter_resumo():
             for composicao in composicoes_visiveis:
                 tipo = tipo_equipe_da_vaga(composicao)
 
-                if filtro_tipo:
-                    # "FOLGUISTA" filtra pela equipe ser folguista, em qualquer
-                    # disciplina; os demais filtram pela disciplina da vaga
-                    if filtrando_folguista:
-                        if not folguista:
-                            continue
-                    elif normalizar(tipo) != normalizar(filtro_tipo):
-                        continue
-
-                if filtro_setor and normalizar(composicao.SETOR or "") != normalizar(filtro_setor):
+                if not tipo_bate(tipo, folguista):
                     continue
 
-                if filtro_coordenador and normalizar(composicao.COORDENADOR or "") != normalizar(filtro_coordenador):
+                if not campo_bate(composicao.SETOR, setores_normalizados):
                     continue
 
-                if filtro_supervisor and normalizar(composicao.SUPERVISOR or "") != normalizar(filtro_supervisor):
+                if not campo_bate(composicao.COORDENADOR, coordenadores_normalizados):
+                    continue
+
+                if not campo_bate(composicao.SUPERVISOR, supervisores_normalizados):
                     continue
 
                 funcao_exibicao = padronizar_funcao(composicao.FUNÇÃO_ER)
@@ -686,13 +697,13 @@ def obter_resumo():
             "bases_filtro": bases_filtro,
             "base_selecionada": filtro_base,
             "tipos_filtro": sorted(tipos_existentes),
-            "tipo_selecionado": filtro_tipo,
+            "tipos_selecionados": filtro_tipos,
             "setores_filtro": sorted(setores_existentes),
-            "setor_selecionado": filtro_setor,
+            "setores_selecionados": filtro_setores,
             "coordenadores_filtro": sorted(coordenadores_existentes),
-            "coordenador_selecionado": filtro_coordenador,
+            "coordenadores_selecionados": filtro_coordenadores,
             "supervisores_filtro": sorted(supervisores_existentes),
-            "supervisor_selecionado": filtro_supervisor,
+            "supervisores_selecionados": filtro_supervisores,
             "pessoas_disponiveis": lista_disponiveis,
             "nao_alocados_por_base": list(nao_alocados.values()),
             "afastados_total": total_afastados,
