@@ -506,6 +506,10 @@
                         Tipo de ccusto: {{ colaborador.tipo_ccusto }}
                       </q-item-label>
 
+                      <q-item-label v-if="colaborador.alocado" caption class="text-weight-medium">
+                        EQUIPE: {{ equipeAtualDoColaborador(colaborador.chapa) }}
+                      </q-item-label>
+
                       <q-item-label v-if="colaborador.afastado" caption>
                         Justificativa: {{ colaborador.justificativa_afastamento || 'Não informada' }}
                       </q-item-label>
@@ -1694,6 +1698,16 @@ function descricaoAlocacaoAtual(chapa) {
     return 'Alocado em outra equipe'
   }
   return `Alocado em ${atual.prefixo} (${atual.base})`
+}
+
+// Rotulo curto (sem "Alocado em") pra exibir na lista de Colaboradores,
+// facilitando ver de relance em qual equipe cada folguista alocado esta.
+function equipeAtualDoColaborador(chapa) {
+  const atual = mapaEquipeAtualPorChapa.value.get(String(chapa))
+  if (!atual) {
+    return 'outra equipe'
+  }
+  return `${atual.prefixo} (${atual.base})`
 }
 
 // ============================================================
