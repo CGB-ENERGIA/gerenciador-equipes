@@ -87,6 +87,18 @@
                 />
               </div>
 
+              <div class="col-auto">
+                <q-btn
+                  flat
+                  dense
+                  rounded
+                  no-caps
+                  icon="filter_alt_off"
+                  label="Limpar filtros"
+                  color="grey-8"
+                  @click="limparFiltros"
+                />
+              </div>
             </div>
 
             <q-separator class="q-my-md" />
@@ -1426,6 +1438,16 @@ function atualizarSelecaoSupervisor(selecao) {
     selecao,
     RESPONSAVEL_TODOS
   )
+}
+
+function limparFiltros() {
+  baseSelecionada.value = [OPCAO_TODAS_BASES]
+  tipoSelecionado.value = [TIPO_TODOS]
+  setorSelecionado.value = [SETOR_TODOS]
+  coordenadorSelecionado.value = [RESPONSAVEL_TODOS]
+  supervisorSelecionado.value = [RESPONSAVEL_TODOS]
+  filtroEquipe.value = ''
+  situacaoAlocacao.value = 'TODAS'
 }
 
 // nome da base -> sigla, montado a partir do que o servidor manda em cada

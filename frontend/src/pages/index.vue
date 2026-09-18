@@ -36,7 +36,7 @@
 
         <q-card flat bordered class="q-mb-md barra-filtros">
           <q-card-section>
-            <div class="row q-col-gutter-md">
+            <div class="row q-col-gutter-md items-end">
               <div class="col-6 col-md">
                 <SelectFiltroMultiplo
                   :model-value="baseSelecionada"
@@ -94,6 +94,19 @@
                   rounded
                   class="campo-filtro"
                   @update:model-value="atualizarSelecaoSupervisor"
+                />
+              </div>
+
+              <div class="col-auto">
+                <q-btn
+                  flat
+                  dense
+                  rounded
+                  no-caps
+                  icon="filter_alt_off"
+                  label="Limpar filtros"
+                  color="grey-8"
+                  @click="limparFiltros"
                 />
               </div>
             </div>
@@ -936,6 +949,15 @@ function atualizarSelecaoCoordenador(selecao) {
 
 function atualizarSelecaoSupervisor(selecao) {
   supervisorSelecionado.value = proximaSelecaoMultipla(supervisorSelecionado.value, selecao, '')
+  carregarResumo()
+}
+
+function limparFiltros() {
+  baseSelecionada.value = [OPCAO_TODAS_BASES]
+  tipoSelecionado.value = []
+  setorSelecionado.value = []
+  coordenadorSelecionado.value = []
+  supervisorSelecionado.value = []
   carregarResumo()
 }
 
