@@ -38,178 +38,63 @@
           <q-card-section>
             <div class="row q-col-gutter-md">
               <div class="col-6 col-md">
-                <q-select
+                <SelectFiltroMultiplo
                   :model-value="baseSelecionada"
                   :options="opcoesBases"
+                  icon="place"
                   label="Base"
-                  outlined
-                  dense
                   rounded
-                  clearable
-                  multiple
-                  use-chips
-                  emit-value
-                  map-options
                   class="campo-filtro"
                   @update:model-value="atualizarSelecaoBases"
-                >
-                  <template #prepend>
-                    <q-icon name="place" size="20px" />
-                  </template>
-                  <template #option="scope">
-                    <q-item v-bind="scope.itemProps">
-                      <q-item-section side>
-                        <q-checkbox
-                          :model-value="scope.selected"
-                          @update:model-value="scope.toggleOption(scope.opt)"
-                        />
-                      </q-item-section>
-                      <q-item-section>
-                        <q-item-label>{{ scope.opt.label }}</q-item-label>
-                      </q-item-section>
-                    </q-item>
-                  </template>
-                </q-select>
+                />
               </div>
 
               <div class="col-6 col-md">
-                <q-select
+                <SelectFiltroMultiplo
                   :model-value="tipoSelecionado"
                   :options="opcoesTipos"
+                  icon="category"
                   label="Tipo de equipe"
-                  outlined
-                  dense
                   rounded
-                  clearable
-                  multiple
-                  use-chips
-                  emit-value
-                  map-options
                   class="campo-filtro"
                   @update:model-value="atualizarSelecaoTipo"
-                >
-                  <template #prepend>
-                    <q-icon name="category" size="20px" />
-                  </template>
-                  <template #option="scope">
-                    <q-item v-bind="scope.itemProps">
-                      <q-item-section side>
-                        <q-checkbox
-                          :model-value="scope.selected"
-                          @update:model-value="scope.toggleOption(scope.opt)"
-                        />
-                      </q-item-section>
-                      <q-item-section>
-                        <q-item-label>{{ scope.opt.label }}</q-item-label>
-                      </q-item-section>
-                    </q-item>
-                  </template>
-                </q-select>
+                />
               </div>
 
               <div class="col-6 col-md">
-                <q-select
+                <SelectFiltroMultiplo
                   :model-value="setorSelecionado"
                   :options="opcoesSetores"
+                  icon="apartment"
                   label="Setor"
-                  outlined
-                  dense
                   rounded
-                  clearable
-                  multiple
-                  use-chips
-                  emit-value
-                  map-options
                   class="campo-filtro"
                   @update:model-value="atualizarSelecaoSetor"
-                >
-                  <template #prepend>
-                    <q-icon name="apartment" size="20px" />
-                  </template>
-                  <template #option="scope">
-                    <q-item v-bind="scope.itemProps">
-                      <q-item-section side>
-                        <q-checkbox
-                          :model-value="scope.selected"
-                          @update:model-value="scope.toggleOption(scope.opt)"
-                        />
-                      </q-item-section>
-                      <q-item-section>
-                        <q-item-label>{{ scope.opt.label }}</q-item-label>
-                      </q-item-section>
-                    </q-item>
-                  </template>
-                </q-select>
+                />
               </div>
 
               <div class="col-6 col-md">
-                <q-select
+                <SelectFiltroMultiplo
                   :model-value="coordenadorSelecionado"
                   :options="opcoesCoordenadores"
+                  icon="badge"
                   label="Coordenador"
-                  outlined
-                  dense
                   rounded
-                  clearable
-                  multiple
-                  use-chips
-                  emit-value
-                  map-options
                   class="campo-filtro"
                   @update:model-value="atualizarSelecaoCoordenador"
-                >
-                  <template #prepend>
-                    <q-icon name="badge" size="20px" />
-                  </template>
-                  <template #option="scope">
-                    <q-item v-bind="scope.itemProps">
-                      <q-item-section side>
-                        <q-checkbox
-                          :model-value="scope.selected"
-                          @update:model-value="scope.toggleOption(scope.opt)"
-                        />
-                      </q-item-section>
-                      <q-item-section>
-                        <q-item-label>{{ scope.opt.label }}</q-item-label>
-                      </q-item-section>
-                    </q-item>
-                  </template>
-                </q-select>
+                />
               </div>
 
               <div class="col-6 col-md">
-                <q-select
+                <SelectFiltroMultiplo
                   :model-value="supervisorSelecionado"
                   :options="opcoesSupervisores"
+                  icon="engineering"
                   label="Supervisor"
-                  outlined
-                  dense
                   rounded
-                  clearable
-                  multiple
-                  use-chips
-                  emit-value
-                  map-options
                   class="campo-filtro"
                   @update:model-value="atualizarSelecaoSupervisor"
-                >
-                  <template #prepend>
-                    <q-icon name="engineering" size="20px" />
-                  </template>
-                  <template #option="scope">
-                    <q-item v-bind="scope.itemProps">
-                      <q-item-section side>
-                        <q-checkbox
-                          :model-value="scope.selected"
-                          @update:model-value="scope.toggleOption(scope.opt)"
-                        />
-                      </q-item-section>
-                      <q-item-section>
-                        <q-item-label>{{ scope.opt.label }}</q-item-label>
-                      </q-item-section>
-                    </q-item>
-                  </template>
-                </q-select>
+                />
               </div>
             </div>
           </q-card-section>
@@ -905,6 +790,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 
 import CabecalhoApp from '../components/CabecalhoApp.vue'
 import MarcaDaguaFundo from '../components/MarcaDaguaFundo.vue'
+import SelectFiltroMultiplo from '../components/SelectFiltroMultiplo.vue'
 import { PODE_VER_RESUMO } from '../composables/useSessao'
 import {
   CHAVE_BASES_SELECIONADAS,
