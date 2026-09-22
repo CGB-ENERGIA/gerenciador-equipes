@@ -160,7 +160,11 @@
               <div class="text-caption text-grey-7 q-mt-sm">
                 Traz as colunas certas e uma linha de exemplo — preencha uma
                 linha por colaborador (e uma linha extra por rateio, se houver
-                mais de um) e envie abaixo.
+                mais de um) e envie abaixo. Vem também com 2 abas extras:
+                <strong>Análise Função x Tipo</strong> (tipo majoritário de
+                cada função e quem está com um tipo fora do padrão da própria
+                função) e <strong>Consulta Colaboradores</strong> (lista
+                completa do cadastro atual).
               </div>
             </div>
 

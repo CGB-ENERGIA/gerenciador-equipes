@@ -2883,13 +2883,116 @@ def obter_colaboradores():
 # upsert dentro de uma transação e dá rollback no final, em vez de manter um
 # segundo caminho de código só para simular o resultado.
 
+def _ajustar_larguras_planilha(planilha, minimo=14, maximo=None):
+    for coluna in planilha.columns:
+        largura = max(
+            len(str(celula.value)) if celula.value is not None else 0
+            for celula in coluna
+        )
+        largura = max(minimo, largura + 3)
+        if maximo is not None:
+            largura = min(largura, maximo)
+        planilha.column_dimensions[coluna[0].column_letter].width = largura
+
+
+def montar_analise_funcao_tipo(colaboradores):
+    """Duas tabelas para a aba "Análise Função x Tipo": (1) o tipo
+    (DIRETO/INDIRETO) majoritário de cada função e (2) os colaboradores cuja
+    função está cadastrada com um tipo diferente da maioria da própria
+    função — ex.: 39 "MOTORISTA OPERADOR DE GUINCHO" como DIRETO e 1 como
+    INDIRETO, a exceção é esse 1 fora do padrão."""
+    linhas_base = [
+        {"FUNÇÃO": c.FUNÇÃO.strip(), "TIPO_FUNÇÃO": (c.TIPO_FUNÇÃO or "").strip()}
+        for c in colaboradores
+        if (c.FUNÇÃO or "").strip()
+    ]
+    if not linhas_base:
+        colunas_maioria = ["FUNÇÃO", "TIPO_MAJORITARIO", "TOTAL", "QTD_MAJORITARIO", "QTD_MINORITARIO"]
+        colunas_excecoes = ["CHAPA", "NOME", "FUNÇÃO", "TIPO_FUNÇÃO", "TIPO_MAJORITARIO_DA_FUNÇÃO"]
+        return pd.DataFrame(columns=colunas_maioria), pd.DataFrame(columns=colunas_excecoes)
+
+    df_base = pd.DataFrame(linhas_base)
+    contagem = (
+        df_base.groupby(["FUNÇÃO", "TIPO_FUNÇÃO"]).size().reset_index(name="QUANTIDADE")
+    )
+    totais = df_base.groupby("FUNÇÃO").size().reset_index(name="TOTAL")
+
+    # em empate, TIPO_FUNÇÃO em ordem alfabética decide de forma
+    # determinística (não importa qual, só não pode variar a cada chamada)
+    majoritario = (
+        contagem.sort_values(
+            ["FUNÇÃO", "QUANTIDADE", "TIPO_FUNÇÃO"], ascending=[True, False, True]
+        )
+        .drop_duplicates("FUNÇÃO", keep="first")
+        .rename(columns={"TIPO_FUNÇÃO": "TIPO_MAJORITARIO", "QUANTIDADE": "QTD_MAJORITARIO"})
+    )
+
+    df_funcao_tipo = majoritario.merge(totais, on="FUNÇÃO")
+    df_funcao_tipo["QTD_MINORITARIO"] = df_funcao_tipo["TOTAL"] - df_funcao_tipo["QTD_MAJORITARIO"]
+    df_funcao_tipo = df_funcao_tipo[
+        ["FUNÇÃO", "TIPO_MAJORITARIO", "TOTAL", "QTD_MAJORITARIO", "QTD_MINORITARIO"]
+    ].sort_values("FUNÇÃO").reset_index(drop=True)
+
+    mapa_majoritario = dict(zip(df_funcao_tipo["FUNÇÃO"], df_funcao_tipo["TIPO_MAJORITARIO"]))
+
+    excecoes = []
+    for c in colaboradores:
+        funcao = (c.FUNÇÃO or "").strip()
+        if not funcao:
+            continue
+        tipo_atual = (c.TIPO_FUNÇÃO or "").strip()
+        tipo_esperado = mapa_majoritario.get(funcao)
+        if tipo_esperado and tipo_atual != tipo_esperado:
+            excecoes.append({
+                "CHAPA": c.CHAPA,
+                "NOME": c.NOME,
+                "FUNÇÃO": funcao,
+                "TIPO_FUNÇÃO": tipo_atual,
+                "TIPO_MAJORITARIO_DA_FUNÇÃO": tipo_esperado,
+            })
+
+    df_excecoes = pd.DataFrame(
+        excecoes,
+        columns=["CHAPA", "NOME", "FUNÇÃO", "TIPO_FUNÇÃO", "TIPO_MAJORITARIO_DA_FUNÇÃO"],
+    ).sort_values(["FUNÇÃO", "NOME"]).reset_index(drop=True)
+
+    return df_funcao_tipo, df_excecoes
+
+
+def montar_consulta_colaboradores(colaboradores):
+    """Aba de consulta com TODOS os colaboradores cadastrados (DIRETO e
+    INDIRETO, qualquer SITUAÇÃO) — só pra leitura, não é lida de volta na
+    hora de aplicar planilha."""
+    linhas = [
+        {
+            "CHAPA": c.CHAPA,
+            "NOME": c.NOME,
+            "FUNÇÃO": c.FUNÇÃO or "",
+            "TIPO_FUNÇÃO": c.TIPO_FUNÇÃO or "",
+            "SEÇÃO": c.SEÇÃO_TRATADA or c.SEÇÃO or "",
+            "SITUAÇÃO": c.SITUAÇÃO or "",
+            "ADMISSÃO": c.ADMISSÃO,
+            "RATEIO_FUNCIONARIO": c.RATEIO_FUNCIONARIO or "",
+            "GRPCCUSTO": c.GRPCCUSTO or "",
+        }
+        for c in colaboradores
+    ]
+    colunas = [
+        "CHAPA", "NOME", "FUNÇÃO", "TIPO_FUNÇÃO", "SEÇÃO", "SITUAÇÃO",
+        "ADMISSÃO", "RATEIO_FUNCIONARIO", "GRPCCUSTO",
+    ]
+    return pd.DataFrame(linhas, columns=colunas)
+
+
 @app.route("/api/colaboradores/planilha/modelo", methods=["GET"])
 @exige_permissao(auth.GERENCIAR_COLABORADORES)
 def baixar_modelo_planilha_colaboradores():
-    """Planilha em branco (só cabeçalho + 1 linha de exemplo) com as colunas
-    que processar_planilha_colaboradores espera — ponto de partida pra quem
-    vai montar a lista de colaboradores, sem precisar adivinhar os nomes das
-    colunas."""
+    """Planilha modelo (cabeçalho + 1 linha de exemplo) com as colunas que
+    processar_planilha_colaboradores espera, mais 2 abas de apoio calculadas
+    a partir do cadastro real: "Análise Função x Tipo" (tipo majoritário de
+    cada função + quem está com um tipo fora do padrão da própria função) e
+    "Consulta Colaboradores" (lista completa do cadastro atual)."""
+    session = SessionLocal()
     try:
         # ordem pedida pelo Igor — não é a ordem de COLUNAS_OBRIGATORIAS
         # (que só define o que é exigido, não a disposição na planilha)
@@ -2918,19 +3021,40 @@ def baixar_modelo_planilha_colaboradores():
         }
         df = pd.DataFrame([linha_exemplo], columns=colunas)
 
+        colaboradores = session.query(Colaborador).order_by(Colaborador.NOME).all()
+        df_funcao_tipo, df_excecoes = montar_analise_funcao_tipo(colaboradores)
+        df_consulta = montar_consulta_colaboradores(colaboradores)
+
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
             df.to_excel(writer, index=False, sheet_name="Colaboradores")
-            planilha = writer.sheets["Colaboradores"]
-            for coluna in planilha.columns:
-                largura = max(
-                    len(str(celula.value)) if celula.value is not None else 0
-                    for celula in coluna
-                )
-                planilha.column_dimensions[coluna[0].column_letter].width = max(
-                    14, largura + 3
-                )
-            planilha.freeze_panes = "A2"
+            _ajustar_larguras_planilha(writer.sheets["Colaboradores"])
+            writer.sheets["Colaboradores"].freeze_panes = "A2"
+
+            LINHA_TABELA_EXCECOES = len(df_funcao_tipo) + 3
+            df_funcao_tipo.to_excel(
+                writer, index=False, sheet_name="Análise Função x Tipo", startrow=1
+            )
+            planilha_analise = writer.sheets["Análise Função x Tipo"]
+            planilha_analise["A1"] = "Tipo majoritário por função"
+            planilha_analise["A1"].font = Font(bold=True)
+
+            planilha_analise[f"A{LINHA_TABELA_EXCECOES}"] = (
+                "Colaboradores com tipo diferente da maioria da própria função"
+            )
+            planilha_analise[f"A{LINHA_TABELA_EXCECOES}"].font = Font(bold=True)
+            df_excecoes.to_excel(
+                writer,
+                index=False,
+                sheet_name="Análise Função x Tipo",
+                startrow=LINHA_TABELA_EXCECOES,
+            )
+            _ajustar_larguras_planilha(planilha_analise, maximo=48)
+
+            df_consulta.to_excel(writer, index=False, sheet_name="Consulta Colaboradores")
+            planilha_consulta = writer.sheets["Consulta Colaboradores"]
+            _ajustar_larguras_planilha(planilha_consulta, maximo=48)
+            planilha_consulta.freeze_panes = "A2"
 
         buffer.seek(0)
         return send_file(
@@ -2945,6 +3069,8 @@ def baixar_modelo_planilha_colaboradores():
     except Exception as erro:
         print(f"[ERRO] baixar_modelo_planilha_colaboradores: {erro}")
         return jsonify({"erro": "Não foi possível gerar o modelo."}), 500
+    finally:
+        session.close()
 
 
 @app.route("/api/colaboradores/planilha/previa", methods=["POST"])
