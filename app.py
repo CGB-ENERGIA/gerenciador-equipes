@@ -2959,12 +2959,31 @@ def montar_analise_funcao_tipo(colaboradores):
     return df_funcao_tipo, df_excecoes
 
 
-def montar_consulta_colaboradores(colaboradores):
+def montar_consulta_colaboradores(session, colaboradores):
     """Aba de consulta com TODOS os colaboradores cadastrados (DIRETO e
     INDIRETO, qualquer SITUAÇÃO) — só pra leitura, não é lida de volta na
-    hora de aplicar planilha."""
-    linhas = [
-        {
+    hora de aplicar planilha.
+
+    RATEIO_FUNCIONARIO/GRPCCUSTO vêm da tabela Rateio (1 linha por rateio),
+    não das colunas de mesmo nome em Colaborador — a importação (ver
+    processar_planilha_colaboradores) só grava rateio ali, nunca no
+    colaborador, então ler do colaborador deixava essas colunas sempre em
+    branco aqui. Quem tem mais de um rateio aparece com os códigos juntos
+    (" / "), igual a montar_planilha_ativos."""
+    rateios_por_chapa = {}
+    for chapa, rateio, grupo in session.query(
+        Rateio.CHAPA, Rateio.RATEIO_FUNCIONARIO, Rateio.GRPCCUSTO
+    ).all():
+        dados = rateios_por_chapa.setdefault(chapa, {"rateios": [], "grupos": []})
+        if rateio and rateio not in dados["rateios"]:
+            dados["rateios"].append(rateio)
+        if grupo and grupo not in dados["grupos"]:
+            dados["grupos"].append(grupo)
+
+    linhas = []
+    for c in colaboradores:
+        rateio = rateios_por_chapa.get(c.CHAPA, {})
+        linhas.append({
             "CHAPA": c.CHAPA,
             "NOME": c.NOME,
             "FUNÇÃO": c.FUNÇÃO or "",
@@ -2972,11 +2991,9 @@ def montar_consulta_colaboradores(colaboradores):
             "SEÇÃO": c.SEÇÃO_TRATADA or c.SEÇÃO or "",
             "SITUAÇÃO": c.SITUAÇÃO or "",
             "ADMISSÃO": c.ADMISSÃO,
-            "RATEIO_FUNCIONARIO": c.RATEIO_FUNCIONARIO or "",
-            "GRPCCUSTO": c.GRPCCUSTO or "",
-        }
-        for c in colaboradores
-    ]
+            "RATEIO_FUNCIONARIO": " / ".join(rateio.get("rateios", [])),
+            "GRPCCUSTO": " / ".join(rateio.get("grupos", [])),
+        })
     colunas = [
         "CHAPA", "NOME", "FUNÇÃO", "TIPO_FUNÇÃO", "SEÇÃO", "SITUAÇÃO",
         "ADMISSÃO", "RATEIO_FUNCIONARIO", "GRPCCUSTO",
@@ -3023,7 +3040,7 @@ def baixar_modelo_planilha_colaboradores():
 
         colaboradores = session.query(Colaborador).order_by(Colaborador.NOME).all()
         df_funcao_tipo, df_excecoes = montar_analise_funcao_tipo(colaboradores)
-        df_consulta = montar_consulta_colaboradores(colaboradores)
+        df_consulta = montar_consulta_colaboradores(session, colaboradores)
 
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
