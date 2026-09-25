@@ -35,6 +35,7 @@ from database.models import (
     Equipe,
     MembroEquipe,
     Rateio,
+    TentativaLogin,
     Usuario,
 )
 
@@ -56,7 +57,22 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=bool(os.getenv("VERCEL")),
+    # Teto do corpo da requisicao (uploads de planilha). A maior planilha
+    # real hoje (cadastro bruto, ~1.200 linhas) tem ~280 KB: 4 MB da folga de
+    # sobra e fica abaixo do limite da propria Vercel (4,5 MB), para quem
+    # passar dele receber a mensagem abaixo e nao o erro generico da Vercel.
+    MAX_CONTENT_LENGTH=4 * 1024 * 1024,
 )
+
+
+@app.errorhandler(413)
+def arquivo_grande_demais(_erro):
+    # sem isto o Werkzeug responde uma pagina HTML, fora do formato
+    # {"erro": ...} que as telas leem
+    return jsonify({
+        "erro": "Arquivo grande demais. O limite é 4 MB — confira se a "
+        "planilha não tem abas ou linhas sobrando."
+    }), 413
 
 # Diferente do projeto original (Render): aqui o Flask NÃO serve os arquivos
 # do frontend. No Vercel, `frontend/dist/spa` é publicado como site estático
@@ -219,26 +235,167 @@ def exigir_sessao():
 # API - SESSÃO
 # ============================================================
 
+def corpo_json():
+    """Corpo da requisicao como dicionario, ou None.
+
+    request.get_json() puro, com corpo invalido ou sem Content-Type JSON,
+    responde um 400/415 em HTML do Werkzeug, fora do formato {"erro": ...}
+    que a tela espera. E um JSON valido que nao e objeto (uma lista, um
+    numero) quebraria no dados.get(...) e viraria 500. Aqui os dois casos
+    viram None, e cada rota ja responde "Dados não enviados." com 400.
+    """
+    dados = request.get_json(silent=True)
+    return dados if isinstance(dados, dict) else None
+
+
+# Limite contra forca bruta no login. As falhas ficam no banco (tabela
+# tentativas_login, migration 013) e nao em memoria: na Vercel cada requisicao
+# pode cair numa instancia diferente, e um contador local nao limitaria nada.
+# Dois limites: por login digitado (quem insiste numa conta) e por IP (quem
+# testa muitas contas, uma senha de cada vez).
+JANELA_TENTATIVAS_LOGIN = timedelta(minutes=15)
+MAX_FALHAS_POR_USUARIO = 5
+MAX_FALHAS_POR_IP = 30
+MENSAGEM_MUITAS_TENTATIVAS = (
+    "Muitas tentativas sem sucesso. Aguarde 15 minutos e tente de novo."
+)
+
+
+def ip_da_requisicao():
+    # Na Vercel o IP real chega em X-Real-IP (preenchido pela propria
+    # plataforma, nao pelo navegador). Fora dela, vale o endereco da conexao.
+    if os.getenv("VERCEL"):
+        return request.headers.get("X-Real-IP") or request.remote_addr
+    return request.remote_addr
+
+
+def limite_de_tentativas_atingido(chave_usuario, ip):
+    """True se o login ou o IP ja passou do limite de falhas na janela.
+
+    Se a tabela nao existir (migration 013 ainda nao rodada) ou o banco
+    falhar aqui, deixa passar: o limite e uma protecao extra, e trava-lo
+    impediria todo mundo de entrar.
+    """
+    session = SessionLocal()
+    try:
+        desde = datetime.now(timezone.utc) - JANELA_TENTATIVAS_LOGIN
+        falhas_usuario = (
+            session.query(func.count(TentativaLogin.id))
+            .filter(
+                TentativaLogin.USUARIO == chave_usuario,
+                TentativaLogin.CRIADO_EM >= desde,
+            )
+            .scalar()
+        )
+        if falhas_usuario >= MAX_FALHAS_POR_USUARIO:
+            return True
+
+        if ip:
+            falhas_ip = (
+                session.query(func.count(TentativaLogin.id))
+                .filter(
+                    TentativaLogin.IP == ip,
+                    TentativaLogin.CRIADO_EM >= desde,
+                )
+                .scalar()
+            )
+            if falhas_ip >= MAX_FALHAS_POR_IP:
+                return True
+
+        return False
+    except Exception as erro:
+        print(f"[AVISO] limite_de_tentativas_atingido: {erro}")
+        return False
+    finally:
+        session.close()
+
+
+def registrar_falha_login(chave_usuario, ip):
+    session = SessionLocal()
+    try:
+        session.add(TentativaLogin(USUARIO=chave_usuario, IP=ip))
+        # faxina: o que passou de 1 dia nao conta para limite nenhum
+        limite_faxina = datetime.now(timezone.utc) - timedelta(days=1)
+        session.query(TentativaLogin).filter(
+            TentativaLogin.CRIADO_EM < limite_faxina
+        ).delete(synchronize_session=False)
+        session.commit()
+    except Exception as erro:
+        session.rollback()
+        print(f"[AVISO] registrar_falha_login: {erro}")
+    finally:
+        session.close()
+
+
+def chave_troca_senha(usuario_id):
+    # falhas da senha atual em /api/minha-senha: contadas a parte das de
+    # entrar, para uma nao somar na outra
+    return f"#TROCA_SENHA:{usuario_id}"
+
+
+def chaves_bloqueadas(session):
+    """Chaves (login digitado ou troca de senha) que estao travadas agora,
+    para a tela de Usuarios mostrar quem esta bloqueado. Sem a tabela
+    (migration 013 nao rodada), ninguem aparece bloqueado."""
+    try:
+        desde = datetime.now(timezone.utc) - JANELA_TENTATIVAS_LOGIN
+        linhas = (
+            session.query(TentativaLogin.USUARIO)
+            .filter(TentativaLogin.CRIADO_EM >= desde)
+            .group_by(TentativaLogin.USUARIO)
+            .having(func.count(TentativaLogin.id) >= MAX_FALHAS_POR_USUARIO)
+            .all()
+        )
+        return {linha[0] for linha in linhas}
+    except Exception as erro:
+        session.rollback()
+        print(f"[AVISO] chaves_bloqueadas: {erro}")
+        return set()
+
+
+def limpar_falhas_login(chave_usuario):
+    session = SessionLocal()
+    try:
+        session.query(TentativaLogin).filter(
+            TentativaLogin.USUARIO == chave_usuario
+        ).delete(synchronize_session=False)
+        session.commit()
+    except Exception as erro:
+        session.rollback()
+        print(f"[AVISO] limpar_falhas_login: {erro}")
+    finally:
+        session.close()
+
+
 @app.route("/api/login", methods=["POST"])
 def entrar():
-    dados = request.get_json(silent=True) or {}
+    dados = corpo_json() or {}
     nome_usuario = str(dados.get("usuario", "")).strip()
     senha = str(dados.get("senha", ""))
 
     if not nome_usuario or not senha:
         return jsonify({"erro": "Informe usuário e senha."}), 400
 
+    chave_usuario = nome_usuario.upper()
+    ip = ip_da_requisicao()
+
+    # checa antes de conferir a senha: travado, nem a senha certa entra,
+    # senao o limite nao impediria de continuar testando
+    if limite_de_tentativas_atingido(chave_usuario, ip):
+        return jsonify({"erro": MENSAGEM_MUITAS_TENTATIVAS}), 429
+
     session = SessionLocal()
     try:
         usuario = (
             session.query(Usuario)
-            .filter(func.upper(Usuario.USUARIO) == nome_usuario.upper())
+            .filter(func.upper(Usuario.USUARIO) == chave_usuario)
             .first()
         )
 
         # mesma mensagem para usuario inexistente e senha errada, para nao
         # entregar quais usuarios existem
         if not usuario or not auth.senha_confere(usuario, senha):
+            registrar_falha_login(chave_usuario, ip)
             return jsonify({"erro": "Usuário ou senha inválidos."}), 401
 
         if not usuario.ATIVO:
@@ -249,6 +406,7 @@ def entrar():
         session.commit()
 
         auth.registrar_login(usuario)
+        limpar_falhas_login(chave_usuario)
 
         return jsonify({"sucesso": True, "usuario": dados_usuario})
     except Exception as erro:
@@ -309,7 +467,7 @@ def niveis_para_tela(session=None):
 @app.route("/api/niveis/<nivel>/permissoes", methods=["PUT"])
 @exige_permissao(auth.GERENCIAR_USUARIOS)
 def atualizar_permissoes_nivel(nivel):
-    dados = request.get_json()
+    dados = corpo_json()
     if not dados:
         return jsonify({"erro": "Dados não enviados."}), 400
 
@@ -547,6 +705,8 @@ def obter_resumo():
                         # coluna dos nao alocados.
                         "afastado": False,
                         "justificativa": "",
+                        "afastado_por": "",
+                        "afastado_em": "",
                     })
 
         resultado = []
@@ -763,6 +923,7 @@ def obter_pessoas_nao_alocadas():
                 "codigo": dados_base["codigo"],
                 "afastado": bool(colab.AFASTADO),
                 "justificativa": colab.JUSTIFICATIVA_AFASTAMENTO or "",
+                **dados_afastamento(colab),
             })
 
         return jsonify(resultado)
@@ -797,6 +958,7 @@ def obter_pessoas_afastadas():
                 if colaborador.SEÇÃO_TRATADA
                 else base_da_secao(colaborador.SEÇÃO)["nome"],
                 "justificativa": colaborador.JUSTIFICATIVA_AFASTAMENTO or "",
+                **dados_afastamento(colaborador),
             })
 
         return jsonify(resultado)
@@ -898,7 +1060,7 @@ def obter_equipes():
 @app.route("/api/equipes", methods=["POST"])
 @exige_permissao(auth.GERENCIAR_VAGAS)
 def criar_equipe():
-    dados = request.get_json()
+    dados = corpo_json()
     if not dados:
         return jsonify({"erro": "Dados não enviados."}), 400
 
@@ -942,7 +1104,7 @@ def criar_equipe():
 @app.route("/api/equipes/<int:equipe_id>", methods=["PUT"])
 @exige_permissao(auth.GERENCIAR_VAGAS)
 def atualizar_equipe(equipe_id):
-    dados = request.get_json()
+    dados = corpo_json()
     if not dados:
         return jsonify({"erro": "Dados não enviados."}), 400
 
@@ -1003,7 +1165,7 @@ def atualizar_equipe(equipe_id):
             for vaga in dados.get("vagas") or []:
                 tipo = str(vaga.get("tipo", "")).strip().upper() or TIPO_EQUIPE_PADRAO
                 funcao = str(vaga.get("funcao", "")).strip()
-                quantidade = int(vaga.get("quantidade") or 0)
+                quantidade = quantidade_do_formulario(vaga.get("quantidade"), funcao)
                 if not funcao or quantidade < 0:
                     continue
                 por_tipo.setdefault(tipo, {})[funcao] = quantidade
@@ -1049,6 +1211,9 @@ def atualizar_equipe(equipe_id):
             "sucesso": True,
             "equipe": {"id": equipe.id, "base": equipe.BASE, "prefixo": equipe.PREFIXO},
         })
+    except EntradaInvalida as erro:
+        session.rollback()
+        return jsonify({"erro": str(erro)}), 400
     except IntegrityError:
         session.rollback()
         return jsonify({"erro": "Já existe uma equipe com essa base e prefixo."}), 400
@@ -1072,7 +1237,7 @@ def editar_equipes_em_massa():
     exatamente o que atualizar_equipe ja faz para uma equipe soh, aqui
     estendido para varias na mesma chamada/transacao.
     """
-    dados = request.get_json()
+    dados = corpo_json()
     itens = (dados or {}).get("equipes") or []
     if not itens:
         return jsonify({"erro": "Nenhuma equipe informada."}), 400
@@ -1138,7 +1303,13 @@ def editar_equipes_em_massa():
             for vaga in item.get("vagas") or []:
                 tipo = str(vaga.get("tipo", "")).strip().upper() or TIPO_EQUIPE_PADRAO
                 funcao = str(vaga.get("funcao", "")).strip()
-                quantidade = int(vaga.get("quantidade") or 0)
+                try:
+                    quantidade = quantidade_do_formulario(vaga.get("quantidade"), funcao)
+                except EntradaInvalida as erro:
+                    # diz em qual das equipes da grade esta o valor errado
+                    raise EntradaInvalida(
+                        f"{rotulo_item or equipe.PREFIXO}: {erro}"
+                    ) from None
                 if not funcao or quantidade < 0:
                     continue
                 por_tipo.setdefault(tipo, {})[funcao] = quantidade
@@ -1203,6 +1374,9 @@ def editar_equipes_em_massa():
             "sucesso": True,
             "equipes_editadas": len(plano["editar"]),
         })
+    except EntradaInvalida as erro:
+        session.rollback()
+        return jsonify({"erro": str(erro)}), 400
     except IntegrityError:
         session.rollback()
         return jsonify({"erro": "Já existe uma equipe com essa base e prefixo."}), 400
@@ -1474,13 +1648,52 @@ def montar_planilha_equipes(session):
     return pd.DataFrame(linhas, columns=list(COLUNAS_FIXAS_PLANILHA) + funcoes)
 
 
+def dados_afastamento(colaborador):
+    """Quem marcou o afastamento e quando, no formato das tabelas."""
+    return {
+        "afastado_por": colaborador.AFASTADO_POR or "",
+        "afastado_em": (
+            colaborador.AFASTADO_EM.isoformat() if colaborador.AFASTADO_EM else ""
+        ),
+    }
+
+
+class EntradaInvalida(ValueError):
+    """Valor digitado/enviado que nao da para usar. A mensagem vai para a
+    tela como esta (400), apontando o campo — em vez de cair no except
+    generico da rota e virar um 500 "Não foi possível..."."""
+
+
 def quantidade_da_celula(valor):
+    """Quantidade de vagas vinda da planilha ou da tela. Vazio conta como 0.
+
+    Recusa o que nao for inteiro (ValueError): antes, int(float("2.5"))
+    virava 2 em silencio. Aceita virgula decimal ("2,0") porque e assim que
+    o Excel em portugues escreve.
+    """
     if valor is None or (isinstance(valor, float) and pd.isna(valor)):
         return 0
-    texto = str(valor).strip()
+    if isinstance(valor, bool):
+        raise ValueError("booleano não é quantidade")
+    texto = str(valor).strip().replace(",", ".")
     if not texto or texto.lower() == "nan":
         return 0
-    return int(float(texto))
+    numero = float(texto)
+    if not numero.is_integer():
+        raise ValueError(f"{valor} não é inteiro")
+    return int(numero)
+
+
+def quantidade_do_formulario(valor, funcao):
+    """quantidade_da_celula para o corpo JSON das telas: erro vira
+    EntradaInvalida com o nome da funcao, para a mensagem dizer qual campo."""
+    try:
+        return quantidade_da_celula(valor)
+    except (TypeError, ValueError):
+        raise EntradaInvalida(
+            f"Quantidade inválida para {funcao or 'a vaga'}: '{valor}'. "
+            "Use um número inteiro (0, 1, 2...)."
+        ) from None
 
 
 def texto_da_celula(valor):
@@ -1628,13 +1841,23 @@ def analisar_planilha_equipes(arquivo, session):
             continue
         vistas.add(chave_linha)
 
-        try:
-            alvos = {
-                nome: quantidade_da_celula(linha[colunas[nome]])
-                for nome in colunas_funcao
-            }
-        except (TypeError, ValueError):
-            registrar_erro(numero, rotulo, "As quantidades precisam ser números inteiros.")
+        alvos = {}
+        celula_invalida = None
+        for nome in colunas_funcao:
+            bruto = linha[colunas[nome]]
+            try:
+                alvos[nome] = quantidade_da_celula(bruto)
+            except (TypeError, ValueError):
+                celula_invalida = (nome, bruto)
+                break
+        if celula_invalida:
+            nome, bruto = celula_invalida
+            registrar_erro(
+                numero,
+                rotulo,
+                f"Quantidade inválida na coluna {nome}: '{bruto}'. "
+                "Use um número inteiro (0, 1, 2...).",
+            )
             continue
 
         if any(q < 0 for q in alvos.values()):
@@ -2055,7 +2278,7 @@ def aplicar_planilha_equipes():
 @app.route("/api/equipes/vagas", methods=["POST"])
 @exige_permissao(auth.GERENCIAR_VAGAS)
 def criar_vaga():
-    dados = request.get_json()
+    dados = corpo_json()
     if not dados:
         return jsonify({"erro": "Dados não enviados."}), 400
 
@@ -2657,7 +2880,7 @@ def adicionar_folguista_extra(equipe_id):
     """Aloca um colaborador extra numa equipe Folguista, sem alterar a
     quantidade padrao de vagas (a vaga criada aqui tem ORIGEM=EXTRA e fica
     fora do alcance da planilha de equipes e dos calculos de 'vagas')."""
-    dados = request.get_json()
+    dados = corpo_json()
     if not dados:
         return jsonify({"erro": "Dados não enviados."}), 400
 
@@ -2863,6 +3086,7 @@ def obter_colaboradores():
                 "alocado": chapa in chapas_alocadas,
                 "afastado": bool(colaborador.AFASTADO),
                 "justificativa_afastamento": colaborador.JUSTIFICATIVA_AFASTAMENTO or "",
+                **dados_afastamento(colaborador),
             })
 
         return jsonify(resultado)
@@ -3150,7 +3374,7 @@ def aplicar_planilha_colaboradores():
 @app.route("/api/equipes/alocar", methods=["POST"])
 @exige_permissao(auth.VER_EQUIPES)
 def alocar_colaborador():
-    dados = request.get_json()
+    dados = corpo_json()
     if not dados:
         return jsonify({"erro": "Dados não enviados."}), 400
 
@@ -3237,6 +3461,8 @@ def alocar_colaborador():
             # sendo alocado numa vaga, o colaborador volta a estar ativo
             colaborador.AFASTADO = False
             colaborador.JUSTIFICATIVA_AFASTAMENTO = None
+            colaborador.AFASTADO_POR = None
+            colaborador.AFASTADO_EM = None
 
         return jsonify({
             "sucesso": True,
@@ -3271,7 +3497,7 @@ def alocar_colaborador():
 @app.route("/api/colaboradores/afastar", methods=["POST"])
 @exige_permissao(auth.VER_EQUIPES)
 def afastar_colaborador():
-    dados = request.get_json()
+    dados = corpo_json()
     if not dados:
         return jsonify({"erro": "Dados não enviados."}), 400
 
@@ -3304,6 +3530,9 @@ def afastar_colaborador():
 
             colaborador.AFASTADO = True
             colaborador.JUSTIFICATIVA_AFASTAMENTO = justificativa
+            colaborador.AFASTADO_POR = (auth.usuario_logado() or {}).get("nome")
+            colaborador.AFASTADO_EM = datetime.now(timezone.utc)
+            dados_resposta_afastamento = dados_afastamento(colaborador)
 
         return jsonify({
             "sucesso": True,
@@ -3313,6 +3542,7 @@ def afastar_colaborador():
                 "nome": colaborador.NOME or "",
                 "afastado": True,
                 "justificativa_afastamento": justificativa,
+                **dados_resposta_afastamento,
             },
         })
     except Exception as erro:
@@ -3330,7 +3560,7 @@ def afastar_colaborador():
 @app.route("/api/colaboradores/reativar", methods=["POST"])
 @exige_permissao(auth.VER_EQUIPES)
 def reativar_colaborador():
-    dados = request.get_json()
+    dados = corpo_json()
     if not dados:
         return jsonify({"erro": "Dados não enviados."}), 400
 
@@ -3351,6 +3581,8 @@ def reativar_colaborador():
 
             colaborador.AFASTADO = False
             colaborador.JUSTIFICATIVA_AFASTAMENTO = None
+            colaborador.AFASTADO_POR = None
+            colaborador.AFASTADO_EM = None
 
         return jsonify({
             "sucesso": True,
@@ -3360,6 +3592,8 @@ def reativar_colaborador():
                 "nome": colaborador.NOME or "",
                 "afastado": False,
                 "justificativa_afastamento": "",
+                "afastado_por": "",
+                "afastado_em": "",
             },
         })
     except Exception as erro:
@@ -3377,7 +3611,7 @@ def reativar_colaborador():
 @app.route("/api/equipes/remover", methods=["POST"])
 @exige_permissao(auth.VER_EQUIPES)
 def remover_colaborador():
-    dados = request.get_json()
+    dados = corpo_json()
     if not dados:
         return jsonify({"erro": "Dados não enviados."}), 400
 
@@ -3445,7 +3679,7 @@ def remover_colaborador():
 @app.route("/api/equipes/editar-alocacao", methods=["POST"])
 @exige_permissao(auth.VER_EQUIPES)
 def editar_alocacao():
-    dados = request.get_json()
+    dados = corpo_json()
     if not dados:
         return jsonify({"erro": "Dados não enviados."}), 400
 
@@ -3651,7 +3885,18 @@ def listar_usuarios():
             .all()
         )
 
-        return jsonify([auth.descrever_usuario(u, session=session) for u in usuarios])
+        bloqueadas = chaves_bloqueadas(session)
+
+        resposta = []
+        for u in usuarios:
+            dados_usuario = auth.descrever_usuario(u, session=session)
+            dados_usuario["bloqueado"] = (
+                u.USUARIO.upper() in bloqueadas
+                or chave_troca_senha(u.id) in bloqueadas
+            )
+            resposta.append(dados_usuario)
+
+        return jsonify(resposta)
     except Exception as erro:
         print(f"[ERRO] listar_usuarios: {erro}")
         return jsonify({"erro": "Não foi possível carregar os usuários."}), 500
@@ -3662,7 +3907,7 @@ def listar_usuarios():
 @app.route("/api/usuarios", methods=["POST"])
 @exige_permissao(auth.GERENCIAR_USUARIOS)
 def criar_usuario():
-    dados = request.get_json(silent=True) or {}
+    dados = corpo_json() or {}
     campos, problema = dados_do_formulario_usuario(dados)
 
     if problema:
@@ -3734,7 +3979,7 @@ def criar_usuario():
 @app.route("/api/usuarios/<int:usuario_id>", methods=["PUT"])
 @exige_permissao(auth.GERENCIAR_USUARIOS)
 def atualizar_usuario(usuario_id):
-    dados = request.get_json(silent=True) or {}
+    dados = corpo_json() or {}
     campos, problema = dados_do_formulario_usuario(dados)
 
     if problema:
@@ -3835,6 +4080,38 @@ def contar_administradores_ativos(session, ignorando=None):
         consulta = consulta.filter(Usuario.id != ignorando)
 
     return consulta.count()
+
+
+@app.route("/api/usuarios/<int:usuario_id>/desbloquear", methods=["POST"])
+@exige_permissao(auth.GERENCIAR_USUARIOS)
+def desbloquear_usuario(usuario_id):
+    """Libera o login travado por excesso de senhas erradas (ver
+    limite_de_tentativas_atingido) sem esperar os 15 minutos. Apaga as falhas
+    do login e as da troca de senha dessa conta.
+
+    O limite por IP nao e mexido aqui: ele nao pertence a uma conta so, e
+    cai sozinho quando a janela passa.
+    """
+    session = SessionLocal()
+    try:
+        usuario = session.query(Usuario).filter(Usuario.id == usuario_id).first()
+        if not usuario:
+            return jsonify({"erro": "Usuário não encontrado."}), 404
+
+        session.query(TentativaLogin).filter(
+            TentativaLogin.USUARIO.in_(
+                [usuario.USUARIO.upper(), chave_troca_senha(usuario.id)]
+            )
+        ).delete(synchronize_session=False)
+        session.commit()
+
+        return jsonify({"sucesso": True, "mensagem": "Acesso liberado."})
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] desbloquear_usuario: {erro}")
+        return jsonify({"erro": "Não foi possível liberar o acesso."}), 500
+    finally:
+        session.close()
 
 
 @app.route("/api/usuarios/<int:usuario_id>", methods=["DELETE"])
@@ -4489,9 +4766,14 @@ def aplicar_planilha_usuarios():
 
 
 @app.route("/api/minha-senha", methods=["PUT"])
+@auth.exige_login
 def trocar_propria_senha():
-    """Qualquer pessoa logada pode trocar a propria senha, informando a atual."""
-    dados = request.get_json(silent=True) or {}
+    """Qualquer pessoa logada pode trocar a propria senha, informando a atual.
+
+    Usa exige_login, e nao exige_permissao, porque nao depende de nivel:
+    todo usuario logado pode trocar a propria senha.
+    """
+    dados = corpo_json() or {}
     senha_atual = str(dados.get("senha_atual", ""))
     senha_nova = str(dados.get("senha_nova", ""))
 
@@ -4499,19 +4781,30 @@ def trocar_propria_senha():
     if problema:
         return jsonify({"erro": problema}), 400
 
+    id_usuario = auth.usuario_logado()["id"]
+
+    # a senha atual tambem e alvo de forca bruta (sessao esquecida aberta num
+    # computador compartilhado): mesmo limite do login, com chave propria
+    # para nao misturar com as falhas de entrar
+    chave_senha = chave_troca_senha(id_usuario)
+    if limite_de_tentativas_atingido(chave_senha, None):
+        return jsonify({"erro": MENSAGEM_MUITAS_TENTATIVAS}), 429
+
     session = SessionLocal()
     try:
         usuario = (
             session.query(Usuario)
-            .filter(Usuario.id == auth.usuario_logado()["id"])
+            .filter(Usuario.id == id_usuario)
             .first()
         )
 
         if not usuario or not auth.senha_confere(usuario, senha_atual):
+            registrar_falha_login(chave_senha, None)
             return jsonify({"erro": "Senha atual incorreta."}), 400
 
         usuario.SENHA_HASH = auth.gerar_hash_senha(senha_nova)
         session.commit()
+        limpar_falhas_login(chave_senha)
 
         return jsonify({"sucesso": True, "mensagem": "Senha alterada."})
     except Exception as erro:

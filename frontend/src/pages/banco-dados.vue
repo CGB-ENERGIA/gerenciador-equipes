@@ -518,6 +518,10 @@
                       <q-item-label v-if="colaborador.afastado" caption>
                         Justificativa: {{ colaborador.justificativa_afastamento || 'Não informada' }}
                       </q-item-label>
+
+                      <q-item-label v-if="colaborador.afastado" caption>
+                        Afastado por: {{ descreverAfastadoPor(colaborador) }}
+                      </q-item-label>
                     </q-item-section>
 
                     <q-item-section side class="text-center">
@@ -1158,8 +1162,9 @@ import {
   PODE_VER_EQUIPES,
   useSessao
 } from '../composables/useSessao'
+import { useConfirmacao } from '../composables/useConfirmacao'
 import {
-  CHAVE_BASES_SELECIONADAS,
+  descreverAfastadoPor,
   ehEquipeFolguista,
   equipeCombinaComResponsavel,
   equipeCombinaComSetor,
@@ -1180,7 +1185,9 @@ import { criarOrdenacaoTabela, ordenarLista } from '../utils/ordenacaoTabela'
 
 definePage({ meta: { permissao: PODE_VER_EQUIPES } })
 
-const { temPermissao } = useSessao()
+const { temPermissao, lerBasesSelecionadas, gravarBasesSelecionadas } =
+  useSessao()
+const { confirmar } = useConfirmacao()
 
 // Sem a permissão remover_alocacao, a única vaga que dá pra remover é o
 // Folguista Extra (não conta como vaga padrão da equipe).
@@ -1719,7 +1726,14 @@ function equipeAtualDoColaborador(chapa) {
 // CARREGAR DADOS
 // ============================================================
 
+// Chamada depois de cada alocação/remoção/afastamento; se duas se cruzam, só
+// a última disparada grava na tela (mesmo padrão de carregarResumo, no
+// Resumo), para uma resposta antiga não desfazer o que acabou de mudar.
+let sequenciaDados = 0
+
 async function carregarDados() {
+  const minhaSequencia = ++sequenciaDados
+
   carregando.value = true
 
   erro.value = ''
@@ -1751,6 +1765,10 @@ async function carregarDados() {
       throw new Error(dadosColaboradores.erro)
     }
 
+    if (minhaSequencia !== sequenciaDados) {
+      return
+    }
+
     equipes.value = dadosEquipes
 
     colaboradores.value = dadosColaboradores
@@ -1767,14 +1785,20 @@ async function carregarDados() {
       throw new Error(dadosOpcoes.erro)
     }
 
-    opcoesAlocacao.value = dadosOpcoes
+    if (minhaSequencia === sequenciaDados) {
+      opcoesAlocacao.value = dadosOpcoes
+    }
   } catch (e) {
     console.error(e)
 
-    erro.value = e.message || 'Erro ao carregar dados.'
+    if (minhaSequencia === sequenciaDados) {
+      erro.value = e.message || 'Erro ao carregar dados.'
+    }
   } finally {
-    carregando.value = false
-    primeiraCarga.value = false
+    if (minhaSequencia === sequenciaDados) {
+      carregando.value = false
+      primeiraCarga.value = false
+    }
   }
 }
 
@@ -2329,7 +2353,7 @@ async function reativarColaborador() {
 }
 
 async function removerColaborador(composicaoId) {
-  if (!window.confirm('Deseja realmente remover este colaborador da equipe?')) {
+  if (!await confirmar('Deseja realmente remover este colaborador da equipe?')) {
     return
   }
 
@@ -2366,7 +2390,7 @@ async function removerColaborador(composicaoId) {
 }
 
 async function excluirVagaExtra(equipe, vaga) {
-  if (!window.confirm('Deseja realmente excluir esta vaga de Folguista Extra?')) {
+  if (!await confirmar('Deseja realmente excluir esta vaga de Folguista Extra?')) {
     return
   }
 
@@ -2393,7 +2417,7 @@ async function excluirVagaExtra(equipe, vaga) {
 
 async function removerTodasAlocacoes() {
   if (
-    !window.confirm(
+    !await confirmar(
       `Remover as ${colaboradoresAlocados.value} alocações de TODAS as bases?
 
 ` +
@@ -2431,7 +2455,7 @@ async function liberarEquipe(equipe) {
   }
 
   if (
-    !window.confirm(
+    !await confirmar(
       `Remover os ${ocupadas.length} colaboradores da equipe ${equipe.prefixo}?`
     )
   ) {
@@ -2467,9 +2491,7 @@ onMounted(() => {
   carregarSetoresNegocio()
   carregarDados().then(() => {
     try {
-      const filtroSalvo = JSON.parse(
-        localStorage.getItem(CHAVE_BASES_SELECIONADAS) || '[]'
-      )
+      const filtroSalvo = lerBasesSelecionadas()
 
       if (Array.isArray(filtroSalvo)) {
         if (filtroSalvo.length === 0) {
@@ -2502,10 +2524,7 @@ watch(
       return
     }
 
-    localStorage.setItem(
-      CHAVE_BASES_SELECIONADAS,
-      JSON.stringify(basesNormalizadas)
-    )
+    gravarBasesSelecionadas(basesNormalizadas)
   },
   { deep: true }
 )

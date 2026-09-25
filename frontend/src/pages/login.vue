@@ -235,6 +235,17 @@ function abrirAjuda() {
   window.open('/ajuda.html', '_blank', 'noopener')
 }
 
+// O `destino` vem da URL, então qualquer um pode montar um link com ele. Só
+// aceita caminho interno: começa com uma única "/" (bloqueia "//site.com",
+// "/\site.com" e "https://...") e não aponta de volta para o login.
+function destinoSeguro(destino) {
+  if (typeof destino !== 'string' || !/^\/(?![/\\])/.test(destino)) {
+    return '/'
+  }
+  const caminho = destino.split(/[?#]/)[0]
+  return caminho === '/login' ? '/' : destino
+}
+
 async function autenticar() {
   entrando.value = true
 
@@ -243,10 +254,7 @@ async function autenticar() {
     avisar('Login efetuado com sucesso.', 'sucesso')
 
     // volta para a tela que a pessoa tentou abrir antes do login
-    const destino = route.query.destino
-    await router.replace(
-      typeof destino === 'string' && destino !== '/login' ? destino : '/'
-    )
+    await router.replace(destinoSeguro(route.query.destino))
   } catch (e) {
     avisar(e.message || 'Não foi possível entrar.', 'erro')
     senha.value = ''

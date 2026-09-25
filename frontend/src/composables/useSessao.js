@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import { CHAVE_BASES_SELECIONADAS } from '../utils/equipes'
 
 // Estado fora da função: quem está logado é um dado só, compartilhado por
 // todas as telas e pelo guarda de rota.
@@ -60,10 +61,57 @@ async function entrar(login, senha) {
   return usuario.value
 }
 
+// O filtro de base fica no localStorage, que é do navegador e não da conta.
+// Sem o id do usuário na chave, quem entrasse depois no mesmo computador
+// herdaria o filtro de quem saiu.
+function chaveBasesSelecionadas() {
+  const id = usuario.value?.id
+  return id == null ? null : `${CHAVE_BASES_SELECIONADAS}_${id}`
+}
+
+function lerBasesSelecionadas() {
+  const chave = chaveBasesSelecionadas()
+  if (!chave) {
+    return []
+  }
+  try {
+    const salvo = JSON.parse(localStorage.getItem(chave) || '[]')
+    return Array.isArray(salvo) ? salvo : []
+  } catch {
+    return []
+  }
+}
+
+function gravarBasesSelecionadas(bases) {
+  const chave = chaveBasesSelecionadas()
+  if (!chave) {
+    return
+  }
+  try {
+    localStorage.setItem(chave, JSON.stringify(bases))
+  } catch {
+    // sem localStorage (aba anônima, bloqueio): o filtro só não persiste
+  }
+}
+
+function limparBasesSelecionadas() {
+  try {
+    const chave = chaveBasesSelecionadas()
+    if (chave) {
+      localStorage.removeItem(chave)
+    }
+    // chave antiga, global, gravada antes de o filtro ser separado por conta
+    localStorage.removeItem(CHAVE_BASES_SELECIONADAS)
+  } catch {
+    // nada a limpar se o localStorage não está disponível
+  }
+}
+
 async function sair() {
   try {
     await fetch('/api/logout', { method: 'POST' })
   } finally {
+    limparBasesSelecionadas()
     usuario.value = null
     carregada.value = true
   }
@@ -88,6 +136,8 @@ export function useSessao() {
     buscarSessao,
     entrar,
     sair,
+    lerBasesSelecionadas,
+    gravarBasesSelecionadas,
     marcarSessaoExpirada
   }
 }

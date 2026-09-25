@@ -1106,6 +1106,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import CabecalhoApp from '../components/CabecalhoApp.vue'
 import MarcaDaguaFundo from '../components/MarcaDaguaFundo.vue'
 import { PODE_GERENCIAR_VAGAS } from '../composables/useSessao'
+import { useConfirmacao } from '../composables/useConfirmacao'
 import { criarOrdenacaoTabela, ordenarLista } from '../utils/ordenacaoTabela'
 import {
   equipeCombinaComSetor,
@@ -1121,6 +1122,8 @@ import {
 } from '../utils/equipes'
 
 definePage({ meta: { permissao: PODE_GERENCIAR_VAGAS } })
+
+const { confirmar } = useConfirmacao()
 
 // ============================================================
 // ESTADO
@@ -1408,7 +1411,15 @@ function filtrarEquipesOpcoes(termo, update) {
 // AÇÕES
 // ============================================================
 
+// carregarEquipes é chamada depois de cada criação/edição; se duas chamadas
+// se cruzam, só a última disparada grava na tela (mesmo padrão de
+// carregarResumo, no Resumo) — senão uma resposta antiga pode apagar a vaga
+// que acabou de ser criada.
+let sequenciaEquipes = 0
+
 async function carregarEquipes() {
+  const minhaSequencia = ++sequenciaEquipes
+
   carregando.value = true
 
   try {
@@ -1419,12 +1430,18 @@ async function carregarEquipes() {
       throw new Error(dados.erro || 'Erro ao carregar as equipes.')
     }
 
-    equipes.value = dados
+    if (minhaSequencia === sequenciaEquipes) {
+      equipes.value = dados
+    }
   } catch (e) {
-    erro.value = e.message || 'Erro ao carregar as equipes.'
+    if (minhaSequencia === sequenciaEquipes) {
+      erro.value = e.message || 'Erro ao carregar as equipes.'
+    }
   } finally {
-    carregando.value = false
-    primeiraCarga.value = false
+    if (minhaSequencia === sequenciaEquipes) {
+      carregando.value = false
+      primeiraCarga.value = false
+    }
   }
 }
 
@@ -1502,7 +1519,7 @@ async function criarVaga() {
 }
 
 async function removerVaga(vaga) {
-  if (!window.confirm('Deseja realmente excluir esta vaga?')) {
+  if (!await confirmar('Deseja realmente excluir esta vaga?')) {
     return
   }
 
@@ -1710,7 +1727,7 @@ async function salvarEdicaoEquipe(confirmarRemocoesIds = null) {
 
   if (
     edicaoResponsavelDivergente.value &&
-    !window.confirm(
+    !await confirmar(
       'Esta equipe tem Setor/Supervisor/Coordenador diferentes entre ' +
         'disciplinas. Salvar agora vai igualar todas as disciplinas ao ' +
         'valor preenchido no formulário. Confirma?'
@@ -1735,7 +1752,7 @@ async function salvarEdicaoEquipe(confirmarRemocoesIds = null) {
         .join('\n')
 
       if (
-        !window.confirm(
+        !await confirmar(
           'Reduzir a quantidade vai remover colaborador(es) já alocado(s):\n\n' +
             `${detalhe}\n\n` +
             'Confirma a remoção desses colaboradores?'
@@ -1881,7 +1898,7 @@ async function salvarEdicaoMassa() {
   if (equipesDivergentes.length) {
     const lista = equipesDivergentes.map(e => `${e.prefixo} / ${e.base}`).join('\n')
     if (
-      !window.confirm(
+      !await confirmar(
         'Estas equipes têm Setor/Supervisor/Coordenador diferentes entre ' +
           'disciplinas. Salvar agora vai igualar todas as disciplinas de ' +
           `cada uma ao valor preenchido na grade:\n\n${lista}\n\nConfirma?`
@@ -1912,7 +1929,7 @@ async function salvarEdicaoMassa() {
       .join('\n')
 
     if (
-      !window.confirm(
+      !await confirmar(
         'Reduzir a quantidade de vagas vai remover colaborador(es) já alocado(s):\n\n' +
           `${detalhe}\n\n` +
           'Confirma a remoção desses colaboradores em todas as equipes listadas?'
@@ -1989,7 +2006,7 @@ async function liberarEquipe(equipe) {
   }
 
   if (
-    !window.confirm(
+    !await confirmar(
       `Remover os ${ocupadas.length} colaboradores da equipe ${equipe.prefixo}?`
     )
   ) {
@@ -2020,7 +2037,7 @@ async function liberarEquipe(equipe) {
 
 async function removerEquipe(equipe) {
   if (
-    !window.confirm(
+    !await confirmar(
       `Deseja realmente excluir a equipe ${equipe.prefixo} e todas as suas vagas?`
     )
   ) {
@@ -2070,15 +2087,29 @@ watch(vagaEquipe, id => {
       : 'Construção'
 })
 
-watch(vagaExistenteDoTipo, vaga => {
-  if (!vaga) {
-    return
-  }
+// Setor/Supervisor/Coordenador seguem a vaga que já existe para a equipe +
+// disciplina escolhidas. Trocar para uma combinação SEM vaga limpa os três:
+// antes eles ficavam com os valores da disciplina anterior, e a vaga nova
+// era criada com metadados de outra disciplina sem ninguém perceber. Só a
+// troca de seleção limpa — recarregar a lista de equipes (depois de criar
+// uma vaga, por exemplo) não apaga o que foi digitado.
+watch(
+  [vagaEquipe, vagaEstrutura, vagaExistenteDoTipo],
+  ([equipe, estrutura, vaga], [equipeAnterior, estruturaAnterior]) => {
+    if (vaga) {
+      vagaSetor.value = vaga.setor || ''
+      vagaSupervisor.value = vaga.supervisor || ''
+      vagaCoordenador.value = vaga.coordenador || ''
+      return
+    }
 
-  vagaSetor.value = vaga.setor || ''
-  vagaSupervisor.value = vaga.supervisor || ''
-  vagaCoordenador.value = vaga.coordenador || ''
-})
+    if (equipe !== equipeAnterior || estrutura !== estruturaAnterior) {
+      vagaSetor.value = ''
+      vagaSupervisor.value = ''
+      vagaCoordenador.value = ''
+    }
+  }
+)
 
 onMounted(() => {
   carregarSetoresNegocio()

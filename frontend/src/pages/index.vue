@@ -804,9 +804,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import CabecalhoApp from '../components/CabecalhoApp.vue'
 import MarcaDaguaFundo from '../components/MarcaDaguaFundo.vue'
 import SelectFiltroMultiplo from '../components/SelectFiltroMultiplo.vue'
-import { PODE_VER_RESUMO } from '../composables/useSessao'
+import { PODE_VER_RESUMO, useSessao } from '../composables/useSessao'
 import {
-  CHAVE_BASES_SELECIONADAS,
+  descreverAfastadoPor,
   FUNCOES_SISTEMA,
   normalizarSelecaoBases,
   OPCAO_TODAS_BASES,
@@ -816,6 +816,8 @@ import {
 
 // mantem /resumo valendo como atalho para a tela principal
 definePage({ alias: '/resumo', meta: { permissao: PODE_VER_RESUMO } })
+
+const { lerBasesSelecionadas, gravarBasesSelecionadas } = useSessao()
 
 // ============================================================
 // ESTADO
@@ -1211,6 +1213,14 @@ const colunasAfastados = [
     label: 'JUSTIFICATIVA',
     field: 'justificativa',
     align: 'left'
+  },
+  {
+    name: 'afastado_por',
+    label: 'AFASTADO POR',
+    // a tabela de afastados só lista afastados: sem registro = anterior
+    // à migration 014
+    field: pessoa => descreverAfastadoPor({ ...pessoa, afastado: true }),
+    align: 'left'
   }
 ]
 
@@ -1254,6 +1264,13 @@ const colunasNaoAlocadosDetalhes = [
     name: 'justificativa',
     label: 'JUSTIFICATIVA',
     field: 'justificativa',
+    align: 'left',
+    sortable: true
+  },
+  {
+    name: 'afastado_por',
+    label: 'AFASTADO POR',
+    field: descreverAfastadoPor,
     align: 'left',
     sortable: true
   }
@@ -1540,7 +1557,13 @@ function abrirDetalhes(funcao, codigo = '') {
   detalhesAbertos.value = true
 }
 
+// Mesmo cuidado de carregarResumo: abrir outra função/base antes da resposta
+// anterior chegar não pode deixar a lista antiga no diálogo.
+let sequenciaNaoAlocados = 0
+
 async function abrirNaoAlocados(funcao, codigo = '') {
+  const minhaSequencia = ++sequenciaNaoAlocados
+
   naoAlocadosSelecionados.value = { funcao, codigo }
   naoAlocadosAbertos.value = true
   naoAlocadosDetalhes.value = []
@@ -1572,14 +1595,22 @@ async function abrirNaoAlocados(funcao, codigo = '') {
       throw new Error(dados.erro || 'Erro ao carregar as pessoas não alocadas.')
     }
 
+    if (minhaSequencia !== sequenciaNaoAlocados) {
+      return
+    }
+
     // ordem padrão (antes de clicar em qualquer cabeçalho): afastados primeiro
     naoAlocadosDetalhes.value = dados
       .slice()
       .sort((a, b) => Number(b.afastado) - Number(a.afastado))
   } catch (e) {
-    erro.value = e.message || 'Erro ao carregar as pessoas não alocadas.'
+    if (minhaSequencia === sequenciaNaoAlocados) {
+      erro.value = e.message || 'Erro ao carregar as pessoas não alocadas.'
+    }
   } finally {
-    carregandoNaoAlocados.value = false
+    if (minhaSequencia === sequenciaNaoAlocados) {
+      carregandoNaoAlocados.value = false
+    }
   }
 }
 
@@ -1588,7 +1619,11 @@ function abrirNecessidades(funcao, codigo = '', tipo = 'deficit') {
   necessidadesAbertas.value = true
 }
 
+let sequenciaAfastados = 0
+
 async function abrirAfastados() {
+  const minhaSequencia = ++sequenciaAfastados
+
   afastadosAbertos.value = true
 
   carregandoAfastados.value = true
@@ -1601,11 +1636,17 @@ async function abrirAfastados() {
       throw new Error(dados.erro || 'Erro ao carregar os afastados.')
     }
 
-    afastadosDetalhes.value = dados
+    if (minhaSequencia === sequenciaAfastados) {
+      afastadosDetalhes.value = dados
+    }
   } catch (e) {
-    erro.value = e.message || 'Erro ao carregar os afastados.'
+    if (minhaSequencia === sequenciaAfastados) {
+      erro.value = e.message || 'Erro ao carregar os afastados.'
+    }
   } finally {
-    carregandoAfastados.value = false
+    if (minhaSequencia === sequenciaAfastados) {
+      carregandoAfastados.value = false
+    }
   }
 }
 
@@ -1766,9 +1807,7 @@ onMounted(async () => {
   await carregarResumo()
 
   try {
-    const filtroSalvo = JSON.parse(
-      localStorage.getItem(CHAVE_BASES_SELECIONADAS) || '[]'
-    )
+    const filtroSalvo = lerBasesSelecionadas()
 
     if (Array.isArray(filtroSalvo)) {
       if (filtroSalvo.length === 0) {
@@ -1802,7 +1841,7 @@ watch(
 
     // grava no formato que as outras telas leem, para a seleção continuar
     // valendo ao trocar de aba
-    localStorage.setItem(CHAVE_BASES_SELECIONADAS, JSON.stringify(selecao))
+    gravarBasesSelecionadas(selecao)
   },
   { deep: true }
 )

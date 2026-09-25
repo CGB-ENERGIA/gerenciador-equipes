@@ -51,6 +51,10 @@ class Colaborador(Base):
     # marcado na tela Banco de Dados > Colaboradores, exige justificativa.
     AFASTADO = Column(Boolean, nullable=False, default=False)
     JUSTIFICATIVA_AFASTAMENTO = Column(String)
+    # quem marcou o afastamento (nome, nao id: sobrevive a exclusao do
+    # usuario) e quando — migrations/014
+    AFASTADO_POR = Column(String)
+    AFASTADO_EM = Column(DateTime(timezone=True))
 
     rateios = relationship(
         "Rateio",
@@ -262,3 +266,17 @@ class VinculoUsuario(Base):
     VALOR = Column(String, nullable=False)
 
     usuario = relationship("Usuario", back_populates="vinculos")
+
+
+class TentativaLogin(Base):
+    """Uma tentativa de login que falhou. Serve so para limitar forca bruta
+    (ver app.py, limite_de_tentativas_atingido); nao e historico de acesso.
+    """
+
+    __tablename__ = "tentativas_login"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    USUARIO = Column(String, nullable=False)
+    IP = Column(String, nullable=True)
+    CRIADO_EM = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

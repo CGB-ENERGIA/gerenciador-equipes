@@ -431,6 +431,17 @@
                     class="q-ml-sm"
                     label="desativado"
                   />
+                  <q-badge
+                    v-if="pessoa.bloqueado"
+                    color="negative"
+                    class="q-ml-sm"
+                    label="bloqueado"
+                  >
+                    <q-tooltip>
+                      Muitas senhas erradas seguidas. Libera sozinho em até
+                      15 minutos, ou use o cadeado ao lado.
+                    </q-tooltip>
+                  </q-badge>
                 </q-item-label>
 
                 <q-item-label caption>
@@ -452,6 +463,19 @@
 
               <q-item-section side>
                 <div class="row q-gutter-xs">
+                  <q-btn
+                    v-if="pessoa.bloqueado"
+                    flat
+                    dense
+                    round
+                    icon="lock_open"
+                    color="warning"
+                    :loading="desbloqueandoId === pessoa.id"
+                    @click="desbloquearUsuario(pessoa)"
+                  >
+                    <q-tooltip>Liberar acesso</q-tooltip>
+                  </q-btn>
+
                   <q-btn
                     flat
                     dense
@@ -1103,6 +1127,7 @@ import {
   PODE_GERENCIAR_USUARIOS,
   useSessao
 } from '../composables/useSessao'
+import { useConfirmacao } from '../composables/useConfirmacao'
 import { criarOrdenacaoTabela, ordenarLista } from '../utils/ordenacaoTabela'
 
 definePage({ meta: { permissao: PODE_GERENCIAR_USUARIOS } })
@@ -1114,6 +1139,7 @@ const {
   buscarSessao,
   temPermissao
 } = useSessao()
+const { confirmar } = useConfirmacao()
 
 const arquivoColaboradores = ref(null)
 const baixandoModeloColaboradores = ref(false)
@@ -1309,11 +1335,18 @@ const loteUsuariosLinhasFlatOrdenadas = computed(() => {
 // salvar sem alterar o estado compartilhado da sessão
 const permissoesEditaveis = reactive({})
 
+// Níveis com checks marcados/desmarcados e ainda não salvos. Salvar um nível
+// devolve a lista inteira de 'niveis' e dispara o watch abaixo — sem isto, a
+// edição pendente dos outros níveis seria sobrescrita em silêncio.
+const niveisAlterados = reactive(new Set())
+
 watch(
   niveis,
   lista => {
     for (const nivel of lista) {
-      permissoesEditaveis[nivel.valor] = [...nivel.permissoes]
+      if (!niveisAlterados.has(nivel.valor)) {
+        permissoesEditaveis[nivel.valor] = [...nivel.permissoes]
+      }
     }
   },
   { immediate: true, deep: true }
@@ -1329,6 +1362,7 @@ function alternarPermissaoNivel(nivelValor, permissaoValor) {
     atuais.add(permissaoValor)
   }
   permissoesEditaveis[nivelValor] = [...atuais]
+  niveisAlterados.add(nivelValor)
 }
 
 async function salvarPermissoesNivel(nivelValor) {
@@ -1348,6 +1382,9 @@ async function salvarPermissoesNivel(nivelValor) {
       throw new Error(dados.erro || 'Não foi possível salvar as permissões.')
     }
 
+    // libera o nível salvo antes de trocar 'niveis', para o watch trazer o
+    // que o servidor gravou; os demais níveis alterados continuam intactos
+    niveisAlterados.delete(nivelValor)
     niveis.value = dados.niveis
     sucesso.value = `Permissões do nível ${rotuloDoNivel(nivelValor)} atualizadas.`
   } catch (e) {
@@ -1851,7 +1888,9 @@ async function analisarPlanilhaColaboradores() {
 
     const dados = await resposta.json()
 
-    if (!resposta.ok && !dados.criados && !dados.atualizados) {
+    // mesma checagem de analisarPlanilhaUsuarios: qualquer falha do servidor
+    // é erro, mesmo que a resposta traga contagens parciais
+    if (!resposta.ok || dados.erro) {
       throw new Error(dados.erro || 'Erro ao analisar a planilha.')
     }
 
@@ -2002,8 +2041,36 @@ async function aplicarPlanilhaUsuarios() {
   }
 }
 
+const desbloqueandoId = ref(null)
+
+// Zera as senhas erradas registradas para a conta (ver app.py,
+// desbloquear_usuario), sem esperar os 15 minutos do bloqueio.
+async function desbloquearUsuario(pessoa) {
+  limparAvisos()
+  desbloqueandoId.value = pessoa.id
+
+  try {
+    const resposta = await fetch(`/api/usuarios/${pessoa.id}/desbloquear`, {
+      method: 'POST'
+    })
+
+    const dados = await resposta.json()
+
+    if (!resposta.ok || dados.erro) {
+      throw new Error(dados.erro || 'Não foi possível liberar o acesso.')
+    }
+
+    sucesso.value = `Acesso de ${pessoa.nome} liberado.`
+    await carregarTudo()
+  } catch (e) {
+    erro.value = e.message || 'Não foi possível liberar o acesso.'
+  } finally {
+    desbloqueandoId.value = null
+  }
+}
+
 async function removerUsuario(pessoa) {
-  const confirmado = window.confirm(
+  const confirmado = await confirmar(
     `Excluir o usuário "${pessoa.nome}" (${pessoa.usuario})?\n\n` +
       'Ele perde o acesso imediatamente. Isso não pode ser desfeito.'
   )

@@ -198,7 +198,24 @@ def test_quantidade_nao_numerica_vira_erro_de_linha():
         sessao,
     )
 
-    assert "números inteiros" in plano["erros"][0]["erro"]
+    # a mensagem aponta a coluna e o valor, para achar a celula errada
+    erro = plano["erros"][0]["erro"]
+    assert "coluna Eletricista" in erro
+    assert "'duas'" in erro
+
+
+def test_quantidade_fracionada_vira_erro_de_linha():
+    # antes, int(float("2.5")) virava 2 em silencio
+    sessao = SessaoFalsa([])
+    plano = analisar_planilha_equipes(
+        planilha([{
+            "BASE": "BCB", "PREFIXO": "EQ-9", "TIPO EQUIPE": "CONSTRUÇÃO",
+            "AÇÃO": "criar", "Eletricista": 2.5,
+        }]),
+        sessao,
+    )
+
+    assert "coluna Eletricista" in plano["erros"][0]["erro"]
 
 
 def test_planilha_sem_coluna_obrigatoria():

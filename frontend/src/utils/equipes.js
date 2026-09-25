@@ -256,3 +256,16 @@ export const FUNCOES_SISTEMA = [
   'AUXILIAR DE ELETRICISTA',
   'PODADOR'
 ]
+
+// "Fulano em 25/09/2026": quem marcou o colaborador como afastado e quando
+// (ver migrations/014). Afastamentos anteriores a esse registro vêm vazios.
+export function descreverAfastadoPor(pessoa) {
+  if (!pessoa?.afastado_por) {
+    return pessoa?.afastado ? 'Não registrado' : ''
+  }
+  const data = pessoa.afastado_em ? new Date(pessoa.afastado_em) : null
+  if (!data || Number.isNaN(data.getTime())) {
+    return pessoa.afastado_por
+  }
+  return `${pessoa.afastado_por} em ${data.toLocaleDateString('pt-BR')}`
+}
