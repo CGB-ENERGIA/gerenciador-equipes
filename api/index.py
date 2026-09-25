@@ -1,10 +1,8 @@
 # Ponto de entrada da função serverless do Vercel.
 #
-# Diferente do Render (um processo Flask/waitress de longa duração), o
-# Vercel roda cada requisição numa função isolada. Este arquivo só importa o
-# `app` já existente em app.py (mesma lógica de rotas, autenticação e banco
-# do projeto original) e delega pra ele — nada de regra de negócio é
-# duplicada aqui.
+# A Vercel roda cada requisição numa função isolada. Este arquivo só importa
+# o `app` de app.py e delega pra ele — nada de regra de negócio é duplicada
+# aqui.
 #
 # vercel.json manda todo tráfego de /api/* pra esta função; o resto (HTML,
 # JS, CSS do frontend compilado) é servido direto pelo CDN do Vercel a

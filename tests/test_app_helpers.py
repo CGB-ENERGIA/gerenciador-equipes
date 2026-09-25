@@ -7,8 +7,10 @@ from app import base_da_secao, normalizar, padronizar_funcao
     ("secao", "base", "codigo"),
     [
         ("CT 127 - SETOR BACABAL", "BACABAL", "BCB"),
-        ("CT 169 - SETOR PRESIDENTE DUTRA", "PRESIDENTE DUTRA", "PDT"),
-        ("CT 127 - SETOR DE ITAPECURU MIRIM", "ITAPECURU MIRIM", "ITM"),
+        # nomes curtos: é o que o de-para (database/depara.py) produz e o que
+        # está gravado em equipes.BASE no banco
+        ("CT 169 - SETOR PRESIDENTE DUTRA", "PRES DUTRA", "PDT"),
+        ("CT 127 - SETOR DE ITAPECURU MIRIM", "ITAPECURU", "ITM"),
         ("CT 170 - SETOR DE BARRA DO CORDA", "BARRA DO CORDA", "BDC"),
     ],
 )

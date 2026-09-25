@@ -20,8 +20,8 @@ if not DATABASE_URL:
 
 # pool_size baixo de propósito: no Vercel cada requisição pode cair numa
 # instância de função nova (serverless), então cada uma abre o próprio pool
-# — não faz sentido manter 5 conexões ociosas por instância como no projeto
-# original (Render, processo único de longa duração). A DATABASE_URL já usa
+# — não faz sentido manter conexões ociosas por instância, como faria um
+# servidor de processo único e longa duração. A DATABASE_URL já usa
 # o endpoint "-pooler" da Neon (pgbouncer do lado deles), que é quem
 # realmente absorve picos de muitas instâncias abrindo conexão ao mesmo
 # tempo — isto aqui só evita desperdiçar esse pool com conexões ociosas.

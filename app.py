@@ -74,13 +74,10 @@ def arquivo_grande_demais(_erro):
         "planilha não tem abas ou linhas sobrando."
     }), 413
 
-# Diferente do projeto original (Render): aqui o Flask NÃO serve os arquivos
-# do frontend. No Vercel, `frontend/dist/spa` é publicado como site estático
-# pelo CDN deles (ver vercel.json na raiz) — este processo Python só responde
-# `/api/*`. Rotas de estático (`/assets`, `/fonts`, `/icons`, `/videos`,
-# `/favicon.ico`, `/`, `/resumo`) foram removidas daqui de propósito; o
-# redirecionamento de `/resumo` que existia como rota Flask virou uma regra
-# de redirect no vercel.json.
+# O Flask NÃO serve os arquivos do frontend. Na Vercel, `frontend/dist/spa` é
+# publicado como site estático pelo CDN deles (ver vercel.json na raiz) —
+# este processo Python só responde `/api/*`. O redirecionamento de `/resumo`
+# é uma regra de redirect no vercel.json.
 
 
 # ============================================================
@@ -4836,15 +4833,14 @@ def status():
 # ou apontar o frontend local (`npm run dev`) pra cá; a tela completa em si
 # (HTML/JS compilado) não é servida por este processo, ver vercel.json.
 if __name__ == "__main__":
-    from waitress import serve
-
     print()
     print("=" * 60)
-    print("GERENCIADOR DE EQUIPES (API — cópia adaptada para Vercel)")
+    print("GERENCIADOR DE EQUIPES (API local)")
     print("=" * 60)
-    print("Servidor iniciado.")
     print("API: http://127.0.0.1:5000/api/status")
     print("=" * 60)
     print()
 
-    serve(app, host="127.0.0.1", port=5000)
+    # servidor de desenvolvimento do Flask: só para uso local, em produção
+    # quem roda a API é a Vercel
+    app.run(host="127.0.0.1", port=5000)
