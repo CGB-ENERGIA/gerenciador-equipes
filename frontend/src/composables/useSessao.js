@@ -52,7 +52,10 @@ async function entrar(login, senha) {
   const dados = await resposta.json()
 
   if (!resposta.ok || dados.erro) {
-    throw new Error(dados.erro || 'Não foi possível entrar.')
+    const erro = new Error(dados.erro || 'Não foi possível entrar.')
+    // a tela de login usa o 429 para mostrar o aviso fixo de bloqueio
+    erro.status = resposta.status
+    throw erro
   }
 
   // relê a sessão para trazer também níveis e tipos de vínculo

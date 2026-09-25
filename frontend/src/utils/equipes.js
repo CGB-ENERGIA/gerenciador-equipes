@@ -257,7 +257,7 @@ export const FUNCOES_SISTEMA = [
   'PODADOR'
 ]
 
-// "Fulano em 25/09/2026": quem marcou o colaborador como afastado e quando
+// "FULANO em 25/09/2026" (login): quem marcou o colaborador como afastado e quando
 // (ver migrations/014). Afastamentos anteriores a esse registro vêm vazios.
 export function descreverAfastadoPor(pessoa) {
   if (!pessoa?.afastado_por) {

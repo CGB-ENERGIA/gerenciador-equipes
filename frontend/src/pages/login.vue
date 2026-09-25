@@ -104,6 +104,23 @@
               <!-- ------------------------------------------- -->
               <!-- LOGIN -->
               <!-- ------------------------------------------- -->
+              <div
+                v-if="mostrarBloqueio && !modoRecuperacao"
+                class="aviso-bloqueio q-mb-md"
+                role="alert"
+              >
+                <q-icon name="lock" size="32px" class="aviso-bloqueio__icone" />
+                <div>
+                  <div class="aviso-bloqueio__titulo">Acesso bloqueado</div>
+                  <div class="aviso-bloqueio__texto">
+                    Foram muitas tentativas com a senha errada para este
+                    usuário. <strong>Fale com o Administrador do sistema</strong>
+                    para liberar o seu acesso, ou aguarde 15 minutos e tente
+                    novamente.
+                  </div>
+                </div>
+              </div>
+
               <q-form v-if="!modoRecuperacao" @submit.prevent="autenticar">
                 <q-input
                   v-model="login"
@@ -246,6 +263,15 @@ function destinoSeguro(destino) {
   return caminho === '/login' ? '/' : destino
 }
 
+// Login que recebeu 429 (muitas senhas erradas, ver app.py). Enquanto o
+// campo Usuário continuar com esse login, o aviso de bloqueio fica na tela.
+const loginBloqueado = ref('')
+const mostrarBloqueio = computed(
+  () =>
+    Boolean(loginBloqueado.value) &&
+    login.value.trim().toUpperCase() === loginBloqueado.value
+)
+
 async function autenticar() {
   entrando.value = true
 
@@ -255,8 +281,15 @@ async function autenticar() {
 
     // volta para a tela que a pessoa tentou abrir antes do login
     await router.replace(destinoSeguro(route.query.destino))
+    loginBloqueado.value = ''
   } catch (e) {
-    avisar(e.message || 'Não foi possível entrar.', 'erro')
+    if (e.status === 429) {
+      // bloqueio não é aviso passageiro: fica fixo no cartão até a pessoa
+      // trocar de usuário ou conseguir entrar
+      loginBloqueado.value = login.value.trim().toUpperCase()
+    } else {
+      avisar(e.message || 'Não foi possível entrar.', 'erro')
+    }
     senha.value = ''
   } finally {
     entrando.value = false
@@ -279,7 +312,8 @@ function iconeDoToast(tipo) {
 function avisar(texto, tipo = 'info') {
   const id = proximoIdToast++
   toasts.value.push({ id, texto, tipo })
-  setTimeout(() => fecharToast(id), 4000)
+  // erro (senha errada) fica um pouco mais, para dar tempo de ler
+  setTimeout(() => fecharToast(id), tipo === 'erro' ? 6000 : 4000)
 }
 
 function fecharToast(id) {
@@ -847,27 +881,60 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-width: min(90vw, 340px);
+  max-width: min(92vw, 420px);
 }
 
 .toast-login {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 12px;
+  padding: 14px 16px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(10px);
   box-shadow: var(--sombra);
   border: 1px solid var(--linha);
   font-family: 'Inter', var(--fonte-texto);
-  font-size: 0.8rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--tinta);
 }
 
+.toast-login > .q-icon {
+  font-size: 1.5rem;
+}
+
 .toast-login__texto {
   flex: 1;
+}
+
+/* Bloqueio por excesso de senhas erradas: fixo no cartão (não some sozinho
+   como os toasts), maior e com a orientação de procurar o Administrador. */
+.aviso-bloqueio {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(179, 38, 30, 0.08);
+  border: 1px solid rgba(179, 38, 30, 0.35);
+  color: var(--negativo);
+  font-family: 'Inter', var(--fonte-texto);
+}
+
+.aviso-bloqueio__icone {
+  flex-shrink: 0;
+}
+
+.aviso-bloqueio__titulo {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.aviso-bloqueio__texto {
+  font-size: 0.95rem;
+  line-height: 1.4;
 }
 
 .toast-login--sucesso {

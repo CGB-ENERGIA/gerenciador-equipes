@@ -2,7 +2,7 @@
 -- /api/colaboradores/afastar). Aparece nas tabelas de afastados e de não
 -- alocados, ao lado da justificativa.
 --
--- AFASTADO_POR guarda o NOME do usuário como texto, e não o id: o registro
+-- AFASTADO_POR guarda o LOGIN do usuário como texto, e não o id: o registro
 -- continua legível mesmo que o usuário seja excluído depois.
 --
 -- IMPORTANTE: rodar ANTES de publicar o código que usa estas colunas. O

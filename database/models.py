@@ -51,8 +51,8 @@ class Colaborador(Base):
     # marcado na tela Banco de Dados > Colaboradores, exige justificativa.
     AFASTADO = Column(Boolean, nullable=False, default=False)
     JUSTIFICATIVA_AFASTAMENTO = Column(String)
-    # quem marcou o afastamento (nome, nao id: sobrevive a exclusao do
-    # usuario) e quando — migrations/014
+    # quem marcou o afastamento (login como texto, nao id: sobrevive a
+    # exclusao do usuario) e quando — migrations/014
     AFASTADO_POR = Column(String)
     AFASTADO_EM = Column(DateTime(timezone=True))
 

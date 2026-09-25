@@ -254,7 +254,8 @@ JANELA_TENTATIVAS_LOGIN = timedelta(minutes=15)
 MAX_FALHAS_POR_USUARIO = 5
 MAX_FALHAS_POR_IP = 30
 MENSAGEM_MUITAS_TENTATIVAS = (
-    "Muitas tentativas sem sucesso. Aguarde 15 minutos e tente de novo."
+    "Acesso bloqueado por muitas tentativas com a senha errada. Fale com o "
+    "Administrador do sistema para liberar, ou aguarde 15 minutos."
 )
 
 
@@ -3527,7 +3528,8 @@ def afastar_colaborador():
 
             colaborador.AFASTADO = True
             colaborador.JUSTIFICATIVA_AFASTAMENTO = justificativa
-            colaborador.AFASTADO_POR = (auth.usuario_logado() or {}).get("nome")
+            # login, e nao o nome completo: cabe melhor nas tabelas
+            colaborador.AFASTADO_POR = (auth.usuario_logado() or {}).get("usuario")
             colaborador.AFASTADO_EM = datetime.now(timezone.utc)
             dados_resposta_afastamento = dados_afastamento(colaborador)
 
