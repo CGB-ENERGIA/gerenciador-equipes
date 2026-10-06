@@ -239,7 +239,7 @@
                   :default-opened="buscaCasaComPessoa(equipe)"
                   expand-separator
                   :label="equipe.prefixo || 'Equipe'"
-                  :caption="equipe.base || ''"
+                  :caption="`${equipe.base || ''} — ${descricaoQuantidadeVagas(equipe)}`"
                   header-class="equipe-header"
                   expand-icon="fiber_manual_record"
                   expanded-icon="fiber_manual_record"
@@ -291,12 +291,12 @@
                         <div class="col-12 col-sm-2">Status</div>
                       </div>
 
-                      <div v-if="!equipe.vagas.length" class="text-grey-7">
+                      <div v-if="!vagasFiltradas(equipe).length" class="text-grey-7">
                         Nenhuma vaga cadastrada.
                       </div>
 
                       <div
-                        v-for="vaga in equipe.vagas"
+                        v-for="vaga in vagasFiltradas(equipe)"
                         :key="vaga.id"
                         class="row items-center text-center q-py-sm"
                         :class="{ 'linha-encontrada': vagaCasaComBusca(vaga) }"
@@ -934,6 +934,36 @@
             label="Setor"
             outlined
             dense
+            class="q-mb-md"
+          />
+
+          <q-select
+            v-model="tipoExtra"
+            :options="opcoesTipoExtra"
+            label="Tipo de equipe"
+            outlined
+            dense
+            class="q-mb-md"
+          />
+
+          <q-select
+            v-model="coordenadorExtra"
+            :options="opcoesResponsavelExtra('coordenador')"
+            label="Coordenador"
+            outlined
+            dense
+            clearable
+            class="q-mb-md"
+            hint="Define em qual filtro de coordenador o extra aparece"
+          />
+
+          <q-select
+            v-model="supervisorExtra"
+            :options="opcoesResponsavelExtra('supervisor')"
+            label="Supervisor"
+            outlined
+            dense
+            clearable
           />
         </q-card-section>
 
@@ -944,7 +974,7 @@
             color="primary"
             label="Adicionar"
             :loading="salvandoFolguistaExtra"
-            :disable="!colaboradorExtra || !funcaoExtra || !setorExtra"
+            :disable="!colaboradorExtra || !funcaoExtra || !setorExtra || !tipoExtra"
             @click="salvarFolguistaExtra()"
           />
         </q-card-actions>
@@ -1237,6 +1267,7 @@ import {
   proximaSelecaoMultipla,
   RESPONSAVEL_TODOS,
   SETOR_TODOS,
+  TIPO_FOLGUISTA,
   TIPO_TODOS
 } from '../utils/equipes'
 import { criarOrdenacaoTabela, ordenarLista } from '../utils/ordenacaoTabela'
@@ -1378,6 +1409,9 @@ const colaboradorExtra = ref(null)
 const funcaoExtra = ref('')
 const setorExtra = ref(null)
 const salvandoFolguistaExtra = ref(false)
+const tipoExtra = ref(null)
+const coordenadorExtra = ref(null)
+const supervisorExtra = ref(null)
 const setoresNegocio = ref([])
 
 // Alocação em massa por planilha
@@ -1617,6 +1651,40 @@ function vagaCasaComBusca(vaga) {
 
 function buscaCasaComPessoa(equipe) {
   return (equipe.vagas || []).some(vagaCasaComBusca)
+}
+
+function filtrosAtivos(selecao, opcaoTodos) {
+  return (selecao || []).filter(valor => valor && valor !== opcaoTodos)
+}
+
+// Vagas da equipe que batem com os filtros de tipo/setor/coordenador/supervisor.
+// Os filtros valem por vaga (inclusive Folguista Extra), nao so pela equipe:
+// uma equipe Folguista mistura disciplinas e setores.
+function vagasFiltradas(equipe) {
+  const tipos = filtrosAtivos(tipoSelecionado.value, TIPO_TODOS)
+  const setores = filtrosAtivos(setorSelecionado.value, SETOR_TODOS)
+  const coordenadores = filtrosAtivos(coordenadorSelecionado.value, RESPONSAVEL_TODOS)
+  const supervisores = filtrosAtivos(supervisorSelecionado.value, RESPONSAVEL_TODOS)
+
+  return (equipe.vagas || []).filter(vaga => {
+    if (
+      tipos.length &&
+      !tipos.some(t => (t === TIPO_FOLGUISTA ? ehEquipeFolguista(equipe) : t === vaga.tipo))
+    ) {
+      return false
+    }
+    if (setores.length && !setores.includes(vaga.setor)) return false
+    if (coordenadores.length && !coordenadores.includes(vaga.coordenador)) return false
+    if (supervisores.length && !supervisores.includes(vaga.supervisor)) return false
+    return true
+  })
+}
+
+function descricaoQuantidadeVagas(equipe) {
+  const lista = vagasFiltradas(equipe)
+  const extras = lista.filter(vaga => vaga.eh_extra).length
+  const padrao = lista.length - extras
+  return `${padrao} vaga(s)${extras ? ` + ${extras} extra` : ''}`
 }
 
 const equipesFiltradas = computed(() => {
@@ -2033,13 +2101,29 @@ function abrirFolguistaExtra(equipe) {
   colaboradorExtra.value = null
   funcaoExtra.value = ''
   setorExtra.value = null
+  tipoExtra.value = null
+  coordenadorExtra.value = null
+  supervisorExtra.value = null
   chapaExcluidaAlocacao.value = ''
   opcoesColaboradoresAlocacao.value = opcoesColaboradoresParaFiltro()
   dialogFolguistaExtra.value = true
 }
 
+function opcoesResponsavelExtra(campo) {
+  return opcoesResponsavelFiltro(equipes.value, campo, '')
+    .map(opcao => opcao.value)
+    .filter(valor => valor && valor !== RESPONSAVEL_TODOS)
+}
+
+// disciplinas existentes nas equipes carregadas (a equipe Folguista mistura tipos)
+const opcoesTipoExtra = computed(() =>
+  opcoesTipoFiltro(equipes.value)
+    .map(opcao => opcao.value)
+    .filter(valor => valor !== TIPO_TODOS && valor !== TIPO_FOLGUISTA)
+)
+
 async function salvarFolguistaExtra(confirmarTransferencia = false) {
-  if (!equipeFolguistaExtra.value || !colaboradorExtra.value || !funcaoExtra.value || !setorExtra.value) {
+  if (!equipeFolguistaExtra.value || !colaboradorExtra.value || !funcaoExtra.value || !setorExtra.value || !tipoExtra.value) {
     return
   }
 
@@ -2055,6 +2139,9 @@ async function salvarFolguistaExtra(confirmarTransferencia = false) {
           funcao_er: funcaoExtra.value,
           chapa: colaboradorExtra.value.chapa,
           setor: setorExtra.value,
+          tipo: tipoExtra.value,
+          coordenador: coordenadorExtra.value || '',
+          supervisor: supervisorExtra.value || '',
           confirmar_transferencia: confirmarTransferencia
         })
       }

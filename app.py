@@ -2968,6 +2968,10 @@ def adicionar_folguista_extra(equipe_id):
     funcao_er = str(dados.get("funcao_er", "")).strip()
     chapa = str(dados.get("chapa", "")).strip()
     setor = str(dados.get("setor", "")).strip().upper()
+    # disciplina (TIPO EQUIPE) da vaga extra: e ela que a liga aos filtros de tipo
+    tipo = str(dados.get("tipo", "")).strip().upper() or TIPO_EQUIPE_PADRAO
+    coordenador_informado = str(dados.get("coordenador", "")).strip() or None
+    supervisor_informado = str(dados.get("supervisor", "")).strip() or None
     confirmar_transferencia = bool(dados.get("confirmar_transferencia"))
 
     if not funcao_er:
@@ -3035,23 +3039,28 @@ def adicionar_folguista_extra(equipe_id):
                 session.delete(alocacao_existente)
                 session.flush()
 
-            # herda coordenador/supervisor das vagas da equipe (preferindo o
-            # mesmo setor): sem isso a vaga extra ficaria sem vinculo e os
-            # filtros de coordenador/supervisor a esconderiam do resumo
+            # coordenador/supervisor escolhidos na tela; sem escolha, herda das
+            # vagas da equipe (preferindo o mesmo setor). Sem vinculo, os
+            # filtros de coordenador/supervisor esconderiam a vaga do resumo
             vagas_irmas = [
                 c for c in (equipe.composicoes or [])
                 if (c.COORDENADOR or c.SUPERVISOR) and not eh_extra(c)
             ]
             vagas_irmas.sort(key=lambda c: normalizar(c.SETOR or "") != normalizar(setor))
             modelo = vagas_irmas[0] if vagas_irmas else None
+            if coordenador_informado or supervisor_informado:
+                coordenador_final, supervisor_final = coordenador_informado, supervisor_informado
+            else:
+                coordenador_final = modelo.COORDENADOR if modelo else None
+                supervisor_final = modelo.SUPERVISOR if modelo else None
 
             composicao = ComposicaoEquipe(
                 equipe_id=equipe.id,
                 FUNÇÃO_ER=funcao_er,
-                ESTRUTURA=TIPO_EQUIPE_PADRAO,
+                ESTRUTURA=tipo,
                 SETOR=setor,
-                SUPERVISOR=modelo.SUPERVISOR if modelo else None,
-                COORDENADOR=modelo.COORDENADOR if modelo else None,
+                SUPERVISOR=supervisor_final,
+                COORDENADOR=coordenador_final,
                 ORIGEM=ORIGEM_EXTRA,
             )
             session.add(composicao)
