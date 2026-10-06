@@ -1014,8 +1014,8 @@ const totalExibido = computed(() => {
     grupos: [...grupos.values()],
     vagas,
     alocados,
-    // Folguista Extra conta como alocado, mas nao como vaga prevista
-    diferenca: alocados - vagas - extra
+    // Folguista Extra conta como alocado, mas nao como vaga prevista: sobra (positivo)
+    diferenca: alocados - vagas
   }
 })
 
@@ -1451,7 +1451,7 @@ const indicadoresFuncoes = computed(() => {
 
     return {
       funcao,
-      diferenca: necessidade.alocados - necessidade.vagas - necessidade.extra
+      diferenca: necessidade.alocados - necessidade.vagas
     }
   })
 })
@@ -1499,7 +1499,7 @@ const necessidadesExibidas = computed(() => {
         )
         .filter(item => item.funcao === necessidadeSelecionada.value.funcao)
         .map((item, indice) => {
-          const diferenca = item.alocados - item.vagas - (item.extra || 0)
+          const diferenca = item.alocados - item.vagas
 
           return {
             id: `${base.codigo}-${item.equipe}-${indice}`,

@@ -723,7 +723,7 @@ def obter_resumo():
                         "vagas": dados["vagas"],
                         "alocados": dados["alocados"],
                         "extra": dados.get("extra", 0),
-                        "diferenca": dados["alocados"] - dados["vagas"] - dados.get("extra", 0),
+                        "diferenca": dados["alocados"] - dados["vagas"],
                     }
                     for funcao, dados in sorted(
                         dados_grupo["funcoes"].items(),
@@ -744,7 +744,7 @@ def obter_resumo():
                     "vagas": vagas,
                     "alocados": alocados,
                     "extra": extra,
-                    "diferenca": alocados - vagas - extra,
+                    "diferenca": alocados - vagas,
                 })
 
             # com filtro de tipo, a base so aparece se tiver aquele tipo:
@@ -787,7 +787,7 @@ def obter_resumo():
                 acumulado["extra"] += grupo["extra"]
 
         grupos_totais = [
-            {**dados, "diferenca": dados["alocados"] - dados["vagas"] - dados["extra"]}
+            {**dados, "diferenca": dados["alocados"] - dados["vagas"]}
             for dados in sorted(
                 totais_por_grupo.values(),
                 key=lambda d: (d["tipo"], d["folguista"]),
@@ -803,7 +803,7 @@ def obter_resumo():
             "vagas": total_vagas,
             "alocados": total_alocados,
             "extra": total_extra,
-            "diferenca": total_alocados - total_vagas - total_extra,
+            "diferenca": total_alocados - total_vagas,
         }
 
         lista_disponiveis = [
