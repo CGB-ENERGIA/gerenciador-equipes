@@ -991,6 +991,7 @@ const totalExibido = computed(() => {
   const grupos = new Map()
   let vagas = 0
   let alocados = 0
+  let extra = 0
 
   for (const base of basesExibidas.value) {
     for (const grupo of base.grupos || []) {
@@ -1005,6 +1006,7 @@ const totalExibido = computed(() => {
 
       vagas += grupo.vagas || 0
       alocados += grupo.alocados || 0
+      extra += grupo.extra || 0
     }
   }
 
@@ -1012,7 +1014,8 @@ const totalExibido = computed(() => {
     grupos: [...grupos.values()],
     vagas,
     alocados,
-    diferenca: alocados - vagas
+    // Folguista Extra conta como alocado, mas nao como vaga prevista
+    diferenca: alocados - vagas - extra
   }
 })
 
@@ -1424,12 +1427,14 @@ const necessidadePorFuncao = computed(() => {
       if (!acumulado[linha.funcao]) {
         acumulado[linha.funcao] = {
           vagas: 0,
-          alocados: 0
+          alocados: 0,
+          extra: 0
         }
       }
 
       acumulado[linha.funcao].vagas += linha.vagas || 0
       acumulado[linha.funcao].alocados += linha.alocados || 0
+      acumulado[linha.funcao].extra += linha.extra || 0
     }
 
     return acumulado
@@ -1440,12 +1445,13 @@ const indicadoresFuncoes = computed(() => {
   return FUNCOES_SISTEMA.map(funcao => {
     const necessidade = necessidadePorFuncao.value[funcao] || {
       vagas: 0,
-      alocados: 0
+      alocados: 0,
+      extra: 0
     }
 
     return {
       funcao,
-      diferenca: necessidade.alocados - necessidade.vagas
+      diferenca: necessidade.alocados - necessidade.vagas - necessidade.extra
     }
   })
 })
@@ -1493,7 +1499,7 @@ const necessidadesExibidas = computed(() => {
         )
         .filter(item => item.funcao === necessidadeSelecionada.value.funcao)
         .map((item, indice) => {
-          const diferenca = item.alocados - item.vagas
+          const diferenca = item.alocados - item.vagas - (item.extra || 0)
 
           return {
             id: `${base.codigo}-${item.equipe}-${indice}`,
