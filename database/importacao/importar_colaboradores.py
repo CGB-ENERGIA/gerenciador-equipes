@@ -132,6 +132,7 @@ def processar_planilha_colaboradores(arquivo, session, aplicar):
         "criados": 0,
         "atualizados": 0,
         "rateios_novos": 0,
+        "rateios_removidos": 0,
         "erros": [],
         # "de-para" pra tela de Usuários: 1 entrada por CHAPA (nao por linha
         # de rateio), pra clicar no chip "novos"/"atualizados" e ver o que
@@ -139,6 +140,7 @@ def processar_planilha_colaboradores(arquivo, session, aplicar):
         "detalhes_criados": [],
         "detalhes_atualizados": [],
         "detalhes_rateios": [],
+        "detalhes_rateios_removidos": [],
     }
 
     def _celula(linha, coluna):
@@ -175,20 +177,37 @@ def processar_planilha_colaboradores(arquivo, session, aplicar):
         for c in session.query(Colaborador).filter(Colaborador.CHAPA.in_(chapas)).all()
     }
 
-    rateios_existentes = {
-        (r.CHAPA, r.RATEIO_FUNCIONARIO, r.GRPCCUSTO)
-        for r in session.query(Rateio).filter(Rateio.CHAPA.in_(chapas)).all()
-    }
+    # Rateio informado na planilha SUBSTITUI o que o colaborador tinha: quem era
+    # rateado em 2.169.04 e 2.127.01 e agora vem só com 2.127.01 fica só com
+    # esse. Chapa sem nenhum rateio na planilha (célula em branco) não mexe
+    # nos rateios que já existem — só o que é informado atualiza.
+    rateios_da_planilha = {}
+    for dados in linhas_validas:
+        if dados["rateio_funcionario"]:
+            rateios_da_planilha.setdefault(dados["chapa"], set()).add(
+                (dados["rateio_funcionario"], dados["grpccusto"])
+            )
 
-    # CHAPA -> códigos de rateio (existentes + os que essa planilha for
-    # adicionar), pra calcular TIPO_CCUSTO com TODOS os rateios do
-    # colaborador no final — não só o primeiro. Semeado com os rateios que
-    # já existiam antes desta importação (podem ter vindo de outra
-    # planilha, outro dia).
+    rateios_existentes = set()
     codigos_rateio_por_chapa = {}
-    for chapa_r, codigo_r, _grpccusto_r in rateios_existentes:
-        if codigo_r:
-            codigos_rateio_por_chapa.setdefault(chapa_r, []).append(codigo_r)
+    for r in session.query(Rateio).filter(Rateio.CHAPA.in_(chapas)).all():
+        informados = rateios_da_planilha.get(r.CHAPA)
+        if informados is not None and (r.RATEIO_FUNCIONARIO, r.GRPCCUSTO) not in informados:
+            session.delete(r)
+            resumo["rateios_removidos"] += 1
+            resumo["detalhes_rateios_removidos"].append({
+                "chapa": r.CHAPA,
+                "nome": getattr(colaboradores_existentes.get(r.CHAPA), "NOME", "") or "",
+                "rateio": r.RATEIO_FUNCIONARIO or "—",
+                "grpccusto": r.GRPCCUSTO or "—",
+            })
+            continue
+        rateios_existentes.add((r.CHAPA, r.RATEIO_FUNCIONARIO, r.GRPCCUSTO))
+        # CHAPA -> códigos de rateio (existentes que ficam + os que essa
+        # planilha for adicionar), pra calcular TIPO_CCUSTO com TODOS os
+        # rateios do colaborador no final — não só o primeiro.
+        if r.RATEIO_FUNCIONARIO:
+            codigos_rateio_por_chapa.setdefault(r.CHAPA, []).append(r.RATEIO_FUNCIONARIO)
 
     chapas_ja_contadas = set()
     rateios_ja_adicionados = set()

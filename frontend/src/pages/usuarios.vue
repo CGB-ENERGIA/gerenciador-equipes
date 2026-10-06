@@ -1926,7 +1926,8 @@ async function aplicarPlanilhaColaboradores() {
 
     sucesso.value =
       `Cadastro atualizado: ${dados.criados} novo(s), ` +
-      `${dados.atualizados} atualizado(s), ${dados.rateios_novos} rateio(s) novo(s).`
+      `${dados.atualizados} atualizado(s), ${dados.rateios_novos} rateio(s) novo(s), ` +
+      `${dados.rateios_removidos || 0} rateio(s) removido(s).`
     arquivoColaboradores.value = null
     resumoColaboradores.value = null
   } catch (e) {
