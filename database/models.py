@@ -30,8 +30,12 @@ class Colaborador(Base):
 
     # "DIRETO" ou "INDIRETO" -- so colaboradores DIRETO entram no conjunto
     # de disponiveis para alocacao (ver app.py: obter_colaboradores e
-    # obter_pessoas_nao_alocadas).
+    # obter_pessoas_nao_alocadas). Pode vir da planilha de cadastro ou ser
+    # trocado na tela Banco de Dados > Colaboradores (rota
+    # /api/colaboradores/tipo-funcao), que registra quem mudou e quando.
     TIPO_FUNÇÃO = Column(String)
+    TIPO_FUNÇÃO_ALTERADO_POR = Column(String)
+    TIPO_FUNÇÃO_ALTERADO_EM = Column(DateTime(timezone=True))
 
     # Calculados a partir do de-para importado uma unica vez de uma
     # planilha do RH (ver database/depara.py) -- persistidos (nao so

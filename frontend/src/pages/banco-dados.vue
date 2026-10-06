@@ -486,6 +486,24 @@
                   </div>
                 </div>
 
+                <div class="row q-col-gutter-sm q-mb-md items-center">
+                  <div class="col-auto text-caption text-grey-7">
+                    Tipo de função:
+                  </div>
+                  <div class="col-auto">
+                    <q-btn-toggle
+                      v-model="tipoColaboradorFiltro"
+                      dense
+                      no-caps
+                      toggle-color="primary"
+                      :options="[
+                        { label: 'Diretos', value: 'DIRETO' },
+                        { label: 'Indiretos', value: 'INDIRETO' }
+                      ]"
+                    />
+                  </div>
+                </div>
+
                 <q-list bordered separator class="rounded-borders">
                   <q-item
                     v-for="colaborador in colaboradoresFiltrados"
@@ -623,13 +641,51 @@
             </template>
           </q-select>
 
-          <q-checkbox
-            v-model="afastadoAlocacao"
-            label="Marcar como afastado"
-            class="q-mb-md"
-          />
+          <div v-if="colaboradorSelecionado" class="row items-center q-mb-md">
+            <div class="col-auto text-caption text-grey-7 q-mr-sm">
+              Tipo de função:
+            </div>
+            <div class="col-auto">
+              <q-btn-toggle
+                v-model="tipoFuncaoSelecionada"
+                dense
+                no-caps
+                toggle-color="primary"
+                :options="[
+                  { label: 'Direto', value: 'DIRETO' },
+                  { label: 'Indireto', value: 'INDIRETO' }
+                ]"
+              />
+            </div>
+            <div class="col-auto q-ml-sm">
+              <q-btn
+                v-if="tipoFuncaoSelecionada !== tipoFuncaoOriginal"
+                flat
+                dense
+                no-caps
+                color="primary"
+                label="Salvar tipo"
+                :loading="salvandoTipoFuncao"
+                @click="salvarTipoFuncao"
+              />
+            </div>
+          </div>
 
-          <template v-if="!afastadoAlocacao">
+          <div
+            v-if="colaboradorSelecionado && descreverTipoFuncaoAlteradoPor(colaboradorSelecionado)"
+            class="text-caption text-grey-7 q-mb-md"
+          >
+            Alterado por: {{ descreverTipoFuncaoAlteradoPor(colaboradorSelecionado) }}
+          </div>
+
+          <template v-if="tipoFuncaoOriginal === 'DIRETO'">
+            <q-checkbox
+              v-model="afastadoAlocacao"
+              label="Marcar como afastado"
+              class="q-mb-md"
+            />
+
+            <template v-if="!afastadoAlocacao">
             <div v-if="colaboradorEraAfastado && !vagaAlocacao" class="text-caption text-grey-7 q-mb-sm">
               Sem escolher uma vaga, "Confirmar" só remove o afastamento e o colaborador volta a ficar livre.
             </div>
@@ -672,25 +728,26 @@
               clearable
               class="q-mt-md"
             />
-          </template>
+            </template>
 
-          <q-input
-            v-else
-            v-model="justificativaAfastamento"
-            label="Justificativa"
-            type="textarea"
-            outlined
-            dense
-            autogrow
-            hint="Obrigatória para confirmar o afastamento"
-          />
+            <q-input
+              v-else
+              v-model="justificativaAfastamento"
+              label="Justificativa"
+              type="textarea"
+              outlined
+              dense
+              autogrow
+              hint="Obrigatória para confirmar o afastamento"
+            />
+          </template>
         </q-card-section>
 
         <q-card-actions align="right">
           <q-btn flat label="Cancelar" v-close-popup />
 
           <q-btn
-            v-if="afastadoAlocacao"
+            v-if="tipoFuncaoOriginal === 'DIRETO' && afastadoAlocacao"
             color="warning"
             text-color="white"
             label="Confirmar afastamento"
@@ -1165,6 +1222,7 @@ import {
 import { useConfirmacao } from '../composables/useConfirmacao'
 import {
   descreverAfastadoPor,
+  descreverTipoFuncaoAlteradoPor,
   ehEquipeFolguista,
   equipeCombinaComResponsavel,
   equipeCombinaComSetor,
@@ -1231,6 +1289,11 @@ const limpandoAlocacoes = ref(false)
 
 const filtroColaborador = ref('')
 const statusColaborador = ref('TODOS')
+// Switch Direto/Indireto da tabela de Colaboradores: só "DIRETO" entra no
+// conjunto disponível pra alocação (ver obter_colaboradores no backend), e
+// sem esse filtro quem virasse INDIRETO desapareceria da tela sem dar pra
+// reclassificar de volta.
+const tipoColaboradorFiltro = ref('DIRETO')
 
 // Opções do combo de busca nos diálogos de Alocar/Trocar/Folguista Extra.
 // Inclui colaboradores JÁ ALOCADOS de propósito (com o "Alocado em ..."
@@ -1297,6 +1360,10 @@ const vagaAlocacao = ref(null)
 const afastadoAlocacao = ref(false)
 const justificativaAfastamento = ref('')
 const colaboradorEraAfastado = ref(false)
+
+const tipoFuncaoSelecionada = ref('DIRETO')
+const tipoFuncaoOriginal = ref('DIRETO')
+const salvandoTipoFuncao = ref(false)
 
 // Editar alocação (trocar colaborador de uma vaga ocupada)
 const dialogEdicaoAlocacao = ref(false)
@@ -1638,10 +1705,18 @@ const colaboradoresBase = computed(() => {
   )
 })
 
+// Colaboradores da base/busca selecionada que batem com o switch Direto/
+// Indireto -- fonte dos contadores e da lista abaixo.
+const colaboradoresDoTipo = computed(() => {
+  return colaboradoresBase.value.filter(
+    colaborador => (colaborador.tipo_funcao || 'DIRETO') === tipoColaboradorFiltro.value
+  )
+})
+
 const colaboradoresFiltrados = computed(() => {
   const filtro = filtroColaborador.value.trim().toLowerCase()
 
-  return colaboradoresBase.value.filter(colaborador => {
+  return colaboradoresDoTipo.value.filter(colaborador => {
     const correspondeStatus =
       statusColaborador.value === 'TODOS' ||
       (statusColaborador.value === 'ALOCADOS' && colaborador.alocado) ||
@@ -1669,18 +1744,18 @@ const colaboradoresFiltrados = computed(() => {
 // ============================================================
 
 const colaboradoresAlocados = computed(() => {
-  return colaboradoresBase.value.filter(colaborador => colaborador.alocado)
+  return colaboradoresDoTipo.value.filter(colaborador => colaborador.alocado)
     .length
 })
 
 const colaboradoresLivres = computed(() => {
-  return colaboradoresBase.value.filter(
+  return colaboradoresDoTipo.value.filter(
     colaborador => !colaborador.alocado && !colaborador.afastado
   ).length
 })
 
 const colaboradoresAfastados = computed(() => {
-  return colaboradoresBase.value.filter(colaborador => colaborador.afastado)
+  return colaboradoresDoTipo.value.filter(colaborador => colaborador.afastado)
     .length
 })
 
@@ -1813,6 +1888,11 @@ function opcoesColaboradoresParaFiltro(filtro = '') {
 
   return colaboradores.value
     .filter(colaborador => {
+      // só "DIRETO" pode ser alocado numa vaga (ver alocar_colaborador no
+      // backend) -- "INDIRETO" só aparece pra reclassificação, não aqui
+      if ((colaborador.tipo_funcao || 'DIRETO') !== 'DIRETO') {
+        return false
+      }
       if (excluir && String(colaborador.chapa) === excluir) {
         return false
       }
@@ -1837,6 +1917,8 @@ function selecionarColaborador(colaborador) {
   afastadoAlocacao.value = Boolean(colaborador.afastado)
   justificativaAfastamento.value = colaborador.justificativa_afastamento || ''
   colaboradorEraAfastado.value = Boolean(colaborador.afastado)
+  tipoFuncaoSelecionada.value = colaborador.tipo_funcao === 'INDIRETO' ? 'INDIRETO' : 'DIRETO'
+  tipoFuncaoOriginal.value = tipoFuncaoSelecionada.value
 
   dialogAlocacao.value = true
 }
@@ -1851,6 +1933,8 @@ function abrirAlocacaoParaVaga(equipe, vaga) {
   afastadoAlocacao.value = false
   justificativaAfastamento.value = ''
   colaboradorEraAfastado.value = false
+  tipoFuncaoSelecionada.value = 'DIRETO'
+  tipoFuncaoOriginal.value = 'DIRETO'
   dialogAlocacao.value = true
 }
 
@@ -1864,6 +1948,8 @@ function atualizarAfastamentoSelecionado(colaborador) {
   afastadoAlocacao.value = Boolean(colaborador?.afastado)
   justificativaAfastamento.value = colaborador?.justificativa_afastamento || ''
   colaboradorEraAfastado.value = Boolean(colaborador?.afastado)
+  tipoFuncaoSelecionada.value = colaborador?.tipo_funcao === 'INDIRETO' ? 'INDIRETO' : 'DIRETO'
+  tipoFuncaoOriginal.value = tipoFuncaoSelecionada.value
 }
 
 function limparEquipeAlocacao() {
@@ -2256,6 +2342,8 @@ async function alocarColaborador(confirmarTransferencia = false) {
     afastadoAlocacao.value = false
     justificativaAfastamento.value = ''
     colaboradorEraAfastado.value = false
+    tipoFuncaoSelecionada.value = 'DIRETO'
+    tipoFuncaoOriginal.value = 'DIRETO'
 
     // reflete na hora e só depois relê o banco: a tela não some, a rolagem
     // fica onde está e a equipe aberta continua aberta. A rebusca ainda
@@ -2266,6 +2354,52 @@ async function alocarColaborador(confirmarTransferencia = false) {
     erro.value = e.message || 'Erro ao alocar colaborador.'
   } finally {
     carregandoAlocacao.value = false
+  }
+}
+
+async function salvarTipoFuncao() {
+  if (!colaboradorSelecionado.value || tipoFuncaoSelecionada.value === tipoFuncaoOriginal.value) {
+    return
+  }
+
+  salvandoTipoFuncao.value = true
+
+  try {
+    const resposta = await fetch('/api/colaboradores/tipo-funcao', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        chapa: colaboradorSelecionado.value.chapa,
+        tipo_funcao: tipoFuncaoSelecionada.value
+      })
+    })
+
+    const dados = await resposta.json()
+
+    if (!resposta.ok || dados.erro) {
+      throw new Error(dados.erro || 'Erro ao atualizar o tipo de função.')
+    }
+
+    tipoFuncaoOriginal.value = tipoFuncaoSelecionada.value
+    colaboradorSelecionado.value = {
+      ...colaboradorSelecionado.value,
+      tipo_funcao: dados.colaborador.tipo_funcao,
+      alocado: dados.colaborador.alocado
+    }
+
+    // virou indireto e estava alocado: a vaga foi liberada no backend, então
+    // o diálogo de alocar/afastar deixa de fazer sentido pra essa pessoa
+    if (dados.colaborador.tipo_funcao === 'INDIRETO') {
+      dialogAlocacao.value = false
+    }
+
+    await carregarDados()
+  } catch (e) {
+    erro.value = e.message || 'Erro ao atualizar o tipo de função.'
+  } finally {
+    salvandoTipoFuncao.value = false
   }
 }
 
@@ -2302,6 +2436,8 @@ async function afastarColaborador() {
     afastadoAlocacao.value = false
     justificativaAfastamento.value = ''
     colaboradorEraAfastado.value = false
+    tipoFuncaoSelecionada.value = 'DIRETO'
+    tipoFuncaoOriginal.value = 'DIRETO'
 
     await carregarDados()
   } catch (e) {
@@ -2343,6 +2479,8 @@ async function reativarColaborador() {
     afastadoAlocacao.value = false
     justificativaAfastamento.value = ''
     colaboradorEraAfastado.value = false
+    tipoFuncaoSelecionada.value = 'DIRETO'
+    tipoFuncaoOriginal.value = 'DIRETO'
 
     await carregarDados()
   } catch (e) {

@@ -269,3 +269,16 @@ export function descreverAfastadoPor(pessoa) {
   }
   return `${pessoa.afastado_por} em ${data.toLocaleDateString('pt-BR')}`
 }
+
+// "FULANO em 25/09/2026" (login): quem trocou DIRETO/INDIRETO na tela e
+// quando (ver migrations/015). Quem só veio da planilha fica vazio.
+export function descreverTipoFuncaoAlteradoPor(pessoa) {
+  if (!pessoa?.tipo_funcao_alterado_por) {
+    return ''
+  }
+  const data = pessoa.tipo_funcao_alterado_em ? new Date(pessoa.tipo_funcao_alterado_em) : null
+  if (!data || Number.isNaN(data.getTime())) {
+    return pessoa.tipo_funcao_alterado_por
+  }
+  return `${pessoa.tipo_funcao_alterado_por} em ${data.toLocaleDateString('pt-BR')}`
+}

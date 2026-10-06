@@ -1656,6 +1656,17 @@ def dados_afastamento(colaborador):
     }
 
 
+def dados_tipo_funcao(colaborador):
+    """Quem trocou DIRETO/INDIRETO na tela e quando, no formato das tabelas."""
+    return {
+        "tipo_funcao_alterado_por": colaborador.TIPO_FUNÇÃO_ALTERADO_POR or "",
+        "tipo_funcao_alterado_em": (
+            colaborador.TIPO_FUNÇÃO_ALTERADO_EM.isoformat()
+            if colaborador.TIPO_FUNÇÃO_ALTERADO_EM else ""
+        ),
+    }
+
+
 class EntradaInvalida(ValueError):
     """Valor digitado/enviado que nao da para usar. A mensagem vai para a
     tela como esta (400), apontando o campo — em vez de cair no except
@@ -3055,13 +3066,15 @@ def obter_opcoes_alocacao():
 @app.route("/api/colaboradores", methods=["GET"])
 @exige_permissao(auth.VER_EQUIPES)
 def obter_colaboradores():
+    """Traz DIRETO e INDIRETO: a tela tem um filtro pra alternar entre os
+    dois (ver rota /api/colaboradores/tipo-funcao), então precisa dos dois
+    pra poder reclassificar nos dois sentidos. Quem decide quem entra no
+    conjunto disponível pra alocação continua sendo só "DIRETO" (ver
+    obter_pessoas_nao_alocadas e alocar_colaborador)."""
     session = SessionLocal()
     try:
-        # so "DIRETO" entra no conjunto disponivel pra alocacao -- "INDIRETO"
-        # nao aparece aqui (ver migrations/012_add_tipo_funcao.sql)
         colaboradores = (
             session.query(Colaborador)
-            .filter(Colaborador.TIPO_FUNÇÃO == "DIRETO")
             .order_by(Colaborador.NOME)
             .all()
         )
@@ -3079,12 +3092,14 @@ def obter_colaboradores():
                 "secao": colaborador.SEÇÃO or "",
                 "secao_tratada": colaborador.SEÇÃO_TRATADA or "",
                 "tipo_ccusto": colaborador.TIPO_CCUSTO or "",
+                "tipo_funcao": colaborador.TIPO_FUNÇÃO or "",
                 "base": dados_base["nome"],
                 "codigo_base": dados_base["codigo"],
                 "alocado": chapa in chapas_alocadas,
                 "afastado": bool(colaborador.AFASTADO),
                 "justificativa_afastamento": colaborador.JUSTIFICATIVA_AFASTAMENTO or "",
                 **dados_afastamento(colaborador),
+                **dados_tipo_funcao(colaborador),
             })
 
         return jsonify(resultado)
@@ -3310,6 +3325,11 @@ def alocar_colaborador():
             if not colaborador:
                 return jsonify({"erro": "Colaborador não encontrado."}), 404
 
+            if (colaborador.TIPO_FUNÇÃO or "").strip().upper() != "DIRETO":
+                return jsonify({
+                    "erro": "Este colaborador está marcado como indireto e não pode ser alocado."
+                }), 400
+
             composicao = (
                 session.query(ComposicaoEquipe)
                 .filter(ComposicaoEquipe.id == composicao_id)
@@ -3513,6 +3533,80 @@ def reativar_colaborador():
         session.rollback()
         print(f"[ERRO] reativar_colaborador: {erro}")
         return jsonify({"erro": "Não foi possível remover o afastamento."}), 500
+    finally:
+        session.close()
+
+
+# ============================================================
+# TROCAR TIPO_FUNÇÃO (DIRETO / INDIRETO)
+# ============================================================
+#
+# Mesma lógica do afastamento: um status do colaborador, independente de
+# base/equipe/vaga, editável na tela Banco de Dados > Colaboradores. Quem
+# vira INDIRETO sai do conjunto disponível pra alocação (ver
+# obter_colaboradores, obter_pessoas_nao_alocadas e alocar_colaborador) --
+# por isso, se estiver ocupando uma vaga no momento, a alocação é desfeita
+# aqui, do mesmo jeito que afastar_colaborador faz.
+
+@app.route("/api/colaboradores/tipo-funcao", methods=["POST"])
+@exige_permissao(auth.VER_EQUIPES)
+def alterar_tipo_funcao_colaborador():
+    dados = corpo_json()
+    if not dados:
+        return jsonify({"erro": "Dados não enviados."}), 400
+
+    chapa = str(dados.get("chapa", "")).strip()
+    tipo_funcao = str(dados.get("tipo_funcao", "")).strip().upper()
+
+    if not chapa:
+        return jsonify({"erro": "CHAPA não informada."}), 400
+    if tipo_funcao not in ("DIRETO", "INDIRETO"):
+        return jsonify({"erro": "TIPO_FUNÇÃO precisa ser DIRETO ou INDIRETO."}), 400
+
+    session = SessionLocal()
+    try:
+        with session.begin():
+            colaborador = (
+                session.query(Colaborador)
+                .filter(Colaborador.CHAPA == chapa)
+                .first()
+            )
+            if not colaborador:
+                return jsonify({"erro": "Colaborador não encontrado."}), 404
+
+            if (colaborador.TIPO_FUNÇÃO or "").strip().upper() != tipo_funcao:
+                if tipo_funcao == "INDIRETO":
+                    alocacao_existente = (
+                        session.query(MembroEquipe)
+                        .filter(MembroEquipe.CHAPA == chapa)
+                        .first()
+                    )
+                    if alocacao_existente:
+                        session.delete(alocacao_existente)
+
+                colaborador.TIPO_FUNÇÃO = tipo_funcao
+                # login, e nao o nome completo: cabe melhor nas tabelas
+                colaborador.TIPO_FUNÇÃO_ALTERADO_POR = (auth.usuario_logado() or {}).get("usuario")
+                colaborador.TIPO_FUNÇÃO_ALTERADO_EM = datetime.now(timezone.utc)
+
+            chapas_alocadas = chapas_alocadas_do_banco(session)
+            dados_resposta_tipo = dados_tipo_funcao(colaborador)
+
+        return jsonify({
+            "sucesso": True,
+            "mensagem": "Tipo de função atualizado.",
+            "colaborador": {
+                "chapa": chapa,
+                "nome": colaborador.NOME or "",
+                "tipo_funcao": colaborador.TIPO_FUNÇÃO or "",
+                "alocado": chapa in chapas_alocadas,
+                **dados_resposta_tipo,
+            },
+        })
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] alterar_tipo_funcao_colaborador: {erro}")
+        return jsonify({"erro": "Não foi possível atualizar o tipo de função."}), 500
     finally:
         session.close()
 
