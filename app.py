@@ -696,6 +696,7 @@ def obter_resumo():
                         "secao_sistema": str(colaborador.SEÇÃO_TRATADA).strip()
                         if colaborador.SEÇÃO_TRATADA
                         else base_da_secao(colaborador.SEÇÃO)["nome"],
+                        "secao": str(colaborador.SEÇÃO).strip() if colaborador.SEÇÃO else "",
                         "vaga": str(composicao.FUNÇÃO_ER).strip() if composicao.FUNÇÃO_ER else "",
                         # quem esta alocado numa vaga nunca esta afastado (marcar
                         # afastado libera a vaga -- ver /api/colaboradores/afastar),
@@ -917,6 +918,7 @@ def obter_pessoas_nao_alocadas():
                 "nome": str(colab.NOME).strip() if colab.NOME else "",
                 "funcao": str(colab.FUNÇÃO).strip() if colab.FUNÇÃO else "",
                 "secao": secao,
+                "secao_tratada": str(colab.SEÇÃO_TRATADA).strip() if colab.SEÇÃO_TRATADA else "",
                 "base": dados_base["nome"],
                 "codigo": dados_base["codigo"],
                 "afastado": bool(colab.AFASTADO),
@@ -930,6 +932,75 @@ def obter_pessoas_nao_alocadas():
         return jsonify({"erro": "Não foi possível carregar os não alocados."}), 500
     finally:
         session.close()
+
+
+@app.route("/api/exportar-pessoas", methods=["POST"])
+@exige_permissao(auth.VER_RESUMO)
+def exportar_pessoas_resumo():
+    """Um xlsx com duas abas -- "Alocadas" e "Não alocadas" -- das linhas que a
+    tela do Resumo está mostrando (já com os filtros aplicados). As linhas vêm
+    da própria tela: assim o arquivo bate com o que a pessoa está vendo."""
+    dados = corpo_json() or {}
+
+    abas = [
+        ("Alocadas", dados.get("alocadas"), [
+            ("EQUIPE", "equipe"),
+            ("CHAPA", "chapa"),
+            ("COLABORADOR", "nome"),
+            ("FUNÇÃO NO SISTEMA", "funcao_sistema"),
+            ("VAGA", "vaga"),
+            ("SEÇÃO", "secao"),
+            ("SEÇÃO TRATADA", "secao_sistema"),
+            ("BASE", "base"),
+            ("AFASTADO", "afastado"),
+        ]),
+        ("Não alocadas", dados.get("nao_alocadas"), [
+            ("CHAPA", "chapa"),
+            ("COLABORADOR", "nome"),
+            ("FUNÇÃO NO SISTEMA", "funcao"),
+            ("SEÇÃO", "secao"),
+            ("SEÇÃO TRATADA", "secao_tratada"),
+            ("BASE", "base"),
+            ("AFASTADO", "afastado"),
+        ]),
+    ]
+
+    try:
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            for nome_aba, linhas, colunas in abas:
+                if not isinstance(linhas, list):
+                    linhas = []
+                registros = []
+                for linha in linhas:
+                    if not isinstance(linha, dict):
+                        continue
+                    registro = {}
+                    for titulo, campo in colunas:
+                        valor = linha.get(campo, "")
+                        if campo == "afastado":
+                            valor = "SIM" if valor else ""
+                        registro[titulo] = "" if valor is None else str(valor)
+                    registros.append(registro)
+
+                df = pd.DataFrame(registros, columns=[c[0] for c in colunas])
+                df.to_excel(writer, index=False, sheet_name=nome_aba)
+                _ajustar_larguras_planilha(writer.sheets[nome_aba], maximo=48)
+                writer.sheets[nome_aba].freeze_panes = "A2"
+
+        buffer.seek(0)
+        return send_file(
+            buffer,
+            mimetype=(
+                "application/vnd.openxmlformats-officedocument"
+                ".spreadsheetml.sheet"
+            ),
+            as_attachment=True,
+            download_name="pessoas-alocadas-e-nao-alocadas.xlsx",
+        )
+    except Exception as erro:
+        print(f"[ERRO] exportar_pessoas_resumo: {erro}")
+        return jsonify({"erro": "Não foi possível gerar a planilha."}), 500
 
 
 @app.route("/api/pessoas-afastadas", methods=["GET"])

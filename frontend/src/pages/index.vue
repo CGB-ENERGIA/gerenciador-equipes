@@ -306,6 +306,19 @@
 
             <transition name="fade" mode="out-in">
               <div v-if="visaoIndicadores === 'cards'" key="cards">
+                <div class="row justify-end q-mb-md">
+                  <q-btn
+                    color="positive"
+                    round
+                    dense
+                    :icon="ICONE_EXCEL"
+                    :loading="exportandoPessoas"
+                    @click="exportarPessoasExcel"
+                  >
+                    <q-tooltip>Exportar alocadas e não alocadas (Excel)</q-tooltip>
+                  </q-btn>
+                </div>
+
                 <q-card bordered>
                   <q-card-section>
                     <div class="text-h6 q-mb-md">Pessoas alocadas</div>
@@ -1722,6 +1735,72 @@ function exportarNaoAlocados() {
   link.download = `pessoas-nao-alocadas-${naoAlocadosSelecionados.value.funcao.toLowerCase()}.csv`
   link.click()
   URL.revokeObjectURL(url)
+}
+
+// Ícone do Excel (planilha com "X"), em branco pra seguir a cor do botão
+const ICONE_EXCEL =
+  'img:data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white">' +
+      '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5z' +
+      'M8.2 18l2.3-3.6L8.3 11h1.6l1.4 2.3 1.4-2.3h1.6l-2.2 3.4 2.3 3.6h-1.6l-1.5-2.5L9.8 18H8.2z"/>' +
+      '</svg>'
+  )
+
+const exportandoPessoas = ref(false)
+
+// Um arquivo só, duas abas (Alocadas / Não alocadas), respeitando os filtros
+// atuais da tela (bases visíveis).
+async function exportarPessoasExcel() {
+  exportandoPessoas.value = true
+
+  try {
+    const alocadas = pessoasDisponiveisFiltradas.value.flatMap(base =>
+      Object.values(base.detalhes || {}).flat()
+    )
+
+    const parametros = new URLSearchParams()
+
+    for (const base of basesExibidas.value) {
+      parametros.append('base', base.codigo)
+    }
+
+    let naoAlocadas = []
+
+    if (basesExibidas.value.length) {
+      const respostaNao = await fetch(`/api/pessoas-nao-alocadas?${parametros}`)
+      const dadosNao = await respostaNao.json()
+
+      if (!respostaNao.ok || dadosNao.erro) {
+        throw new Error(dadosNao.erro || 'Erro ao carregar as pessoas não alocadas.')
+      }
+
+      naoAlocadas = dadosNao
+    }
+
+    const resposta = await fetch('/api/exportar-pessoas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alocadas, nao_alocadas: naoAlocadas })
+    })
+
+    if (!resposta.ok) {
+      const dados = await resposta.json().catch(() => ({}))
+      throw new Error(dados.erro || 'Erro ao gerar a planilha.')
+    }
+
+    const url = URL.createObjectURL(await resposta.blob())
+    const link = document.createElement('a')
+
+    link.href = url
+    link.download = 'pessoas-alocadas-e-nao-alocadas.xlsx'
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    erro.value = e.message || 'Erro ao gerar a planilha.'
+  } finally {
+    exportandoPessoas.value = false
+  }
 }
 
 // ============================================================
