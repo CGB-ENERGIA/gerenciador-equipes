@@ -306,22 +306,22 @@
 
             <transition name="fade" mode="out-in">
               <div v-if="visaoIndicadores === 'cards'" key="cards">
-                <div class="row justify-end q-mb-md">
-                  <q-btn
-                    color="positive"
-                    round
-                    dense
-                    :icon="ICONE_EXCEL"
-                    :loading="exportandoPessoas"
-                    @click="exportarPessoasExcel"
-                  >
-                    <q-tooltip>Exportar alocadas e não alocadas (Excel)</q-tooltip>
-                  </q-btn>
-                </div>
-
                 <q-card bordered>
                   <q-card-section>
-                    <div class="text-h6 q-mb-md">Pessoas alocadas</div>
+                    <div class="row items-center justify-between q-mb-md">
+                      <div class="text-h6">Pessoas alocadas</div>
+
+                      <q-btn
+                        flat
+                        round
+                        dense
+                        icon="img:/icons/excel.png"
+                        :loading="exportandoPessoas"
+                        @click="exportarPessoasExcel"
+                      >
+                        <q-tooltip>Exportar alocadas e não alocadas (Excel)</q-tooltip>
+                      </q-btn>
+                    </div>
 
                     <q-table
                       flat
@@ -1736,16 +1736,6 @@ function exportarNaoAlocados() {
   link.click()
   URL.revokeObjectURL(url)
 }
-
-// Ícone do Excel (planilha com "X"), em branco pra seguir a cor do botão
-const ICONE_EXCEL =
-  'img:data:image/svg+xml;utf8,' +
-  encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white">' +
-      '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5z' +
-      'M8.2 18l2.3-3.6L8.3 11h1.6l1.4 2.3 1.4-2.3h1.6l-2.2 3.4 2.3 3.6h-1.6l-1.5-2.5L9.8 18H8.2z"/>' +
-      '</svg>'
-  )
 
 const exportandoPessoas = ref(false)
 
