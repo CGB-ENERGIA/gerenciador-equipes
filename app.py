@@ -3035,11 +3035,23 @@ def adicionar_folguista_extra(equipe_id):
                 session.delete(alocacao_existente)
                 session.flush()
 
+            # herda coordenador/supervisor das vagas da equipe (preferindo o
+            # mesmo setor): sem isso a vaga extra ficaria sem vinculo e os
+            # filtros de coordenador/supervisor a esconderiam do resumo
+            vagas_irmas = [
+                c for c in (equipe.composicoes or [])
+                if (c.COORDENADOR or c.SUPERVISOR) and not eh_extra(c)
+            ]
+            vagas_irmas.sort(key=lambda c: normalizar(c.SETOR or "") != normalizar(setor))
+            modelo = vagas_irmas[0] if vagas_irmas else None
+
             composicao = ComposicaoEquipe(
                 equipe_id=equipe.id,
                 FUNÇÃO_ER=funcao_er,
                 ESTRUTURA=TIPO_EQUIPE_PADRAO,
                 SETOR=setor,
+                SUPERVISOR=modelo.SUPERVISOR if modelo else None,
+                COORDENADOR=modelo.COORDENADOR if modelo else None,
                 ORIGEM=ORIGEM_EXTRA,
             )
             session.add(composicao)
