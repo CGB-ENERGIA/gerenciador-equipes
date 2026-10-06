@@ -3545,8 +3545,8 @@ def reativar_colaborador():
 # base/equipe/vaga, editável na tela Banco de Dados > Colaboradores. Quem
 # vira INDIRETO sai do conjunto disponível pra alocação (ver
 # obter_colaboradores, obter_pessoas_nao_alocadas e alocar_colaborador) --
-# por isso, se estiver ocupando uma vaga no momento, a alocação é desfeita
-# aqui, do mesmo jeito que afastar_colaborador faz.
+# por isso, se estiver ocupando uma vaga no momento, a troca é recusada
+# (a alocação não é desfeita em silêncio).
 
 @app.route("/api/colaboradores/tipo-funcao", methods=["POST"])
 @exige_permissao(auth.VER_EQUIPES)
@@ -3576,13 +3576,18 @@ def alterar_tipo_funcao_colaborador():
 
             if (colaborador.TIPO_FUNÇÃO or "").strip().upper() != tipo_funcao:
                 if tipo_funcao == "INDIRETO":
+                    # alocacao existente e respeitada: nunca e desfeita em
+                    # silencio; a pessoa precisa ser desalocada antes
                     alocacao_existente = (
                         session.query(MembroEquipe)
                         .filter(MembroEquipe.CHAPA == chapa)
                         .first()
                     )
                     if alocacao_existente:
-                        session.delete(alocacao_existente)
+                        return jsonify({
+                            "erro": "Este colaborador está alocado em uma equipe. "
+                                    "Remova a alocação antes de marcá-lo como indireto."
+                        }), 409
 
                 colaborador.TIPO_FUNÇÃO = tipo_funcao
                 # login, e nao o nome completo: cabe melhor nas tabelas
