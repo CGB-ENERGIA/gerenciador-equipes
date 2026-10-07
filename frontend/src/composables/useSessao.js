@@ -9,6 +9,17 @@ const tiposVinculo = ref({})
 const setoresNegocio = ref([])
 const carregada = ref(false)
 
+// Tipo, setor, coordenador e supervisor escolhidos nos filtros do Resumo e do
+// Banco de Dados. Ficam aqui, fora das telas, porque cada tela é recriada a
+// cada troca de aba: sem isto o filtro se perderia ao ir de uma para a outra.
+// Guardam só valores reais (nunca o "Todos" de cada tela) e só em memória:
+// recarregar a página ou sair da conta volta tudo ao padrão.
+function filtrosVazios() {
+  return { tipos: [], setores: [], coordenadores: [], supervisores: [] }
+}
+
+const filtrosCompartilhados = ref(filtrosVazios())
+
 let carregamentoEmAndamento = null
 
 async function buscarSessao() {
@@ -115,6 +126,7 @@ async function sair() {
     await fetch('/api/logout', { method: 'POST' })
   } finally {
     limparBasesSelecionadas()
+    filtrosCompartilhados.value = filtrosVazios()
     usuario.value = null
     carregada.value = true
   }
@@ -122,6 +134,7 @@ async function sair() {
 
 /** Chamado quando a API responde 401: a sessão caiu por trás da tela. */
 function marcarSessaoExpirada() {
+  filtrosCompartilhados.value = filtrosVazios()
   usuario.value = null
   carregada.value = true
 }
@@ -141,6 +154,7 @@ export function useSessao() {
     sair,
     lerBasesSelecionadas,
     gravarBasesSelecionadas,
+    filtrosCompartilhados,
     marcarSessaoExpirada
   }
 }

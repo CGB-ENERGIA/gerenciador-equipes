@@ -1271,8 +1271,12 @@ import { criarOrdenacaoTabela, ordenarLista } from '../utils/ordenacaoTabela'
 
 definePage({ meta: { permissao: PODE_VER_EQUIPES } })
 
-const { temPermissao, lerBasesSelecionadas, gravarBasesSelecionadas } =
-  useSessao()
+const {
+  temPermissao,
+  lerBasesSelecionadas,
+  gravarBasesSelecionadas,
+  filtrosCompartilhados
+} = useSessao()
 const { confirmar } = useConfirmacao()
 
 // Sem a permissão remover_alocacao, a única vaga que dá pra remover é o
@@ -1307,10 +1311,32 @@ const primeiraCarga = ref(true)
 const erro = ref('')
 
 const baseSelecionada = ref([])
-const tipoSelecionado = ref([TIPO_TODOS])
-const setorSelecionado = ref([SETOR_TODOS])
-const coordenadorSelecionado = ref([RESPONSAVEL_TODOS])
-const supervisorSelecionado = ref([RESPONSAVEL_TODOS])
+// começam do que foi escolhido na outra tela (Resumo); sem nada, "Todos"
+function selecaoInicial(valores, todos) {
+  return valores.length ? [...valores] : [todos]
+}
+
+const tipoSelecionado = ref(selecaoInicial(filtrosCompartilhados.value.tipos, TIPO_TODOS))
+const setorSelecionado = ref(selecaoInicial(filtrosCompartilhados.value.setores, SETOR_TODOS))
+const coordenadorSelecionado = ref(
+  selecaoInicial(filtrosCompartilhados.value.coordenadores, RESPONSAVEL_TODOS)
+)
+const supervisorSelecionado = ref(
+  selecaoInicial(filtrosCompartilhados.value.supervisores, RESPONSAVEL_TODOS)
+)
+
+watch(
+  [tipoSelecionado, setorSelecionado, coordenadorSelecionado, supervisorSelecionado],
+  ([tipos, setores, coordenadores, supervisores]) => {
+    filtrosCompartilhados.value = {
+      tipos: tipos.filter(valor => valor && valor !== TIPO_TODOS),
+      setores: setores.filter(valor => valor && valor !== SETOR_TODOS),
+      coordenadores: coordenadores.filter(valor => valor && valor !== RESPONSAVEL_TODOS),
+      supervisores: supervisores.filter(valor => valor && valor !== RESPONSAVEL_TODOS)
+    }
+  },
+  { deep: true }
+)
 const filtroEquipe = ref('')
 const situacaoAlocacao = ref('TODAS')
 const limpandoAlocacoes = ref(false)

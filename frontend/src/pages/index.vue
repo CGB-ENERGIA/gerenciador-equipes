@@ -876,7 +876,8 @@ import {
 // mantem /resumo valendo como atalho para a tela principal
 definePage({ alias: '/resumo', meta: { permissao: PODE_VER_RESUMO } })
 
-const { lerBasesSelecionadas, gravarBasesSelecionadas } = useSessao()
+const { lerBasesSelecionadas, gravarBasesSelecionadas, filtrosCompartilhados } =
+  useSessao()
 
 // ============================================================
 // ESTADO
@@ -887,14 +888,28 @@ const bases = ref([])
 const basesFiltro = ref([])
 
 const baseSelecionada = ref([])
-const tipoSelecionado = ref([])
+// começam do que foi escolhido na outra tela (Banco de Dados), se houver
+const tipoSelecionado = ref([...filtrosCompartilhados.value.tipos])
 const tiposFiltro = ref([])
-const setorSelecionado = ref([])
+const setorSelecionado = ref([...filtrosCompartilhados.value.setores])
 const setoresFiltro = ref([])
-const coordenadorSelecionado = ref([])
+const coordenadorSelecionado = ref([...filtrosCompartilhados.value.coordenadores])
 const coordenadoresFiltro = ref([])
-const supervisorSelecionado = ref([])
+const supervisorSelecionado = ref([...filtrosCompartilhados.value.supervisores])
 const supervisoresFiltro = ref([])
+
+watch(
+  [tipoSelecionado, setorSelecionado, coordenadorSelecionado, supervisorSelecionado],
+  ([tipos, setores, coordenadores, supervisores]) => {
+    filtrosCompartilhados.value = {
+      tipos: tipos.filter(Boolean),
+      setores: setores.filter(Boolean),
+      coordenadores: coordenadores.filter(Boolean),
+      supervisores: supervisores.filter(Boolean)
+    }
+  },
+  { deep: true }
+)
 
 const visaoIndicadores = ref('tabela')
 
