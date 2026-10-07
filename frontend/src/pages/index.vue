@@ -265,8 +265,10 @@
                         <td class="text-center">{{ linha.alocados }}</td>
                         <td class="text-center">
                           <span
-                            class="marcador-diferenca"
+                            class="marcador-diferenca marcador-clicavel"
                             :class="classeDiferenca(linha.diferenca)"
+                            title="Ver detalhes da diferença"
+                            @click="abrirDiferenca(grupo, linha, base.base)"
                           >
                             {{ linha.diferenca }}
                           </span>
@@ -524,8 +526,10 @@
                             </td>
                             <td class="text-center">
                               <span
-                                class="marcador-diferenca"
+                                class="marcador-diferenca marcador-clicavel"
                                 :class="classeDiferenca(linha.diferenca)"
+                                title="Ver detalhes da diferença"
+                                @click="abrirDiferenca(grupo, linha)"
                               >
                                 {{ linha.diferenca }}
                               </span>
@@ -778,6 +782,59 @@
               </q-card>
             </q-dialog>
 
+            <q-dialog v-model="diferencaAberta">
+              <q-card class="detalhes-disponiveis">
+                <q-card-section class="row items-center q-pb-sm">
+                  <div>
+                    <div class="text-h6">Diferença · {{ diferencaSelecionada.funcao }}</div>
+                    <div class="text-caption">{{ diferencaSelecionada.contexto }}</div>
+                  </div>
+
+                  <q-space />
+
+                  <q-btn v-close-popup flat round dense icon="close" />
+                </q-card-section>
+
+                <q-separator />
+
+                <q-card-section class="q-pa-none">
+                  <q-markup-table flat square dense>
+                    <tbody>
+                      <tr>
+                        <td class="text-left">Vagas (padrão)</td>
+                        <td class="text-right">{{ diferencaSelecionada.vagas }}</td>
+                      </tr>
+                      <tr>
+                        <td class="text-left">Alocados em vagas padrão</td>
+                        <td class="text-right">
+                          {{ diferencaSelecionada.alocados - diferencaSelecionada.extra }}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td class="text-left">Alocados extras (Folguista Extra)</td>
+                        <td class="text-right">{{ diferencaSelecionada.extra }}</td>
+                      </tr>
+                      <tr class="text-weight-bold">
+                        <td class="text-left">Total alocados</td>
+                        <td class="text-right">{{ diferencaSelecionada.alocados }}</td>
+                      </tr>
+                      <tr class="text-weight-bold">
+                        <td class="text-left">Diferença (alocados − vagas)</td>
+                        <td class="text-right">
+                          <span
+                            class="marcador-diferenca"
+                            :class="classeDiferenca(diferencaSelecionada.diferenca)"
+                          >
+                            {{ diferencaSelecionada.diferenca }}
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </q-markup-table>
+                </q-card-section>
+              </q-card>
+            </q-dialog>
+
             <q-dialog v-model="necessidadesAbertas">
               <q-card class="detalhes-disponiveis tabela-necessidades">
                 <q-card-section class="row items-center q-pb-sm">
@@ -883,6 +940,31 @@ const detalheSelecionado = ref({
   funcao: '',
   codigo: ''
 })
+
+const diferencaAberta = ref(false)
+
+const diferencaSelecionada = ref({
+  funcao: '',
+  contexto: '',
+  vagas: 0,
+  alocados: 0,
+  extra: 0,
+  diferenca: 0
+})
+
+// Detalha a diferenca de uma linha da Composicao: vagas padrao x alocados,
+// separando quem ocupa vaga Folguista Extra (conta como alocado, nao como vaga)
+function abrirDiferenca(grupo, linha, base = '') {
+  diferencaSelecionada.value = {
+    funcao: linha.funcao,
+    contexto: [base, grupo.rotulo].filter(Boolean).join(' · '),
+    vagas: linha.vagas || 0,
+    alocados: linha.alocados || 0,
+    extra: linha.extra || 0,
+    diferenca: linha.diferenca || 0
+  }
+  diferencaAberta.value = true
+}
 
 const necessidadesAbertas = ref(false)
 
@@ -1048,11 +1130,13 @@ const composicaoConsolidada = computed(() => {
           funcao: linha.funcao,
           vagas: 0,
           alocados: 0,
+          extra: 0,
           diferenca: 0
         }
 
         funcaoAtual.vagas += linha.vagas || 0
         funcaoAtual.alocados += linha.alocados || 0
+        funcaoAtual.extra += linha.extra || 0
         funcaoAtual.diferenca += linha.diferenca || 0
 
         atual.funcoes.set(linha.funcao, funcaoAtual)
@@ -2212,6 +2296,15 @@ watch(
   padding: 1px 9px;
   border-radius: 10px;
   font-weight: 600;
+}
+
+.marcador-diferenca.marcador-clicavel {
+  cursor: pointer;
+}
+
+.marcador-diferenca.marcador-clicavel:hover {
+  filter: brightness(0.95);
+  text-decoration: underline;
 }
 
 .marcador-diferenca.negativa {
