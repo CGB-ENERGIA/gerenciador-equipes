@@ -981,7 +981,9 @@ const diferencaLinhas = computed(() => {
     .flatMap(base => Object.values(base.detalhes || {}).flat())
     .filter(pessoa => pessoa.grupo === rotulo)
     .map(pessoa => ({
-      equipe: pessoa.grupo,
+      // disciplina (tipo de equipe) da vaga: no Folguista e o tipo ao qual
+      // ele esta vinculado, nao o rotulo "FOLGUISTA"
+      equipe: pessoa.tipo,
       vaga: pessoa.extra ? 'EXTRA' : pessoa.funcao,
       nome: pessoa.nome,
       funcao_cadastrada: pessoa.funcao_sistema,
