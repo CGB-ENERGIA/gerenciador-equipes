@@ -427,20 +427,6 @@
 
               <q-card-section>
                 <div class="row q-col-gutter-sm q-mb-md">
-                  <div class="col">
-                    <q-input
-                      v-model="filtroColaborador"
-                      outlined
-                      dense
-                      clearable
-                      placeholder="Pesquisar por nome ou chapa..."
-                    >
-                      <template #prepend>
-                        <q-icon name="search" />
-                      </template>
-                    </q-input>
-                  </div>
-
                   <div class="col-auto">
                     <q-btn
                       :color="
@@ -487,9 +473,6 @@
                 </div>
 
                 <div class="row q-col-gutter-sm q-mb-md items-center">
-                  <div class="col-auto text-caption text-grey-7">
-                    Tipo de função:
-                  </div>
                   <div class="col-auto">
                     <q-btn-toggle
                       v-model="tipoColaboradorFiltro"
@@ -501,6 +484,20 @@
                         { label: 'Indiretos', value: 'INDIRETO' }
                       ]"
                     />
+                  </div>
+
+                  <div class="col">
+                    <q-input
+                      v-model="filtroColaborador"
+                      outlined
+                      dense
+                      clearable
+                      placeholder="Pesquisar por nome ou chapa..."
+                    >
+                      <template #prepend>
+                        <q-icon name="search" />
+                      </template>
+                    </q-input>
                   </div>
                 </div>
 
