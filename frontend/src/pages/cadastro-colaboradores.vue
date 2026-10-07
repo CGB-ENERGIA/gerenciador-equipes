@@ -50,12 +50,19 @@
                   outlined
                   dense
                   clearable
-                  placeholder="Nome, chapa, função, seção..."
+                  placeholder="Nome, chapa, função, seção... (várias chapas separadas por espaço ou vírgula)"
                 >
                   <template #prepend>
                     <q-icon name="search" />
                   </template>
                 </q-input>
+
+                <div
+                  v-if="chapasNaoEncontradas.length"
+                  class="text-caption text-negative q-mt-xs"
+                >
+                  Chapa(s) não encontrada(s): {{ chapasNaoEncontradas.join(', ') }}
+                </div>
               </div>
 
               <div class="col-auto">
@@ -85,12 +92,54 @@
 
           <q-separator />
 
+          <!--
+            Aparece quando há alguém marcado. A caixa do cabeçalho da tabela
+            marca só a página aberta; "Selecionar todos" marca tudo o que o
+            filtro está mostrando.
+          -->
+          <q-banner v-if="selecionados.length" dense class="bg-blue-1 barra-selecao">
+            <span class="text-weight-medium">{{ selecionados.length }} selecionado(s)</span>
+
+            <template #action>
+              <q-btn
+                v-if="selecionados.length < colaboradoresFiltrados.length"
+                flat
+                dense
+                no-caps
+                color="primary"
+                :label="`Selecionar todos (${colaboradoresFiltrados.length})`"
+                @click="selecionarTodosFiltrados"
+              />
+              <q-btn
+                flat
+                dense
+                no-caps
+                color="primary"
+                icon="edit_note"
+                label="Editar em massa"
+                @click="abrirEdicaoMassa"
+              />
+              <q-btn
+                flat
+                dense
+                no-caps
+                color="negative"
+                icon="delete"
+                label="Excluir selecionados"
+                @click="removerSelecionados"
+              />
+              <q-btn flat dense no-caps label="Limpar seleção" @click="selecionados = []" />
+            </template>
+          </q-banner>
+
           <q-table
             flat
             dense
             :rows="colaboradoresFiltrados"
             :columns="colunas"
             row-key="chapa"
+            selection="multiple"
+            v-model:selected="selecionados"
             :loading="carregando"
             v-model:pagination="paginacao"
             :rows-per-page-options="[25, 50, 100]"
@@ -189,7 +238,7 @@
 
               <div>
                 <div class="row items-center q-mb-xs">
-                  <div class="text-caption text-grey-7">Rateios</div>
+                  <div class="text-caption text-grey-7">Rateios *</div>
                   <q-space />
                   <q-btn
                     flat
@@ -203,8 +252,8 @@
                   />
                 </div>
 
-                <div v-if="!formulario.rateios.length" class="text-caption text-grey-6">
-                  Nenhum rateio informado.
+                <div v-if="!formulario.rateios.length" class="text-caption text-negative">
+                  Informe ao menos um rateio.
                 </div>
 
                 <div
@@ -254,13 +303,132 @@
             </q-card-actions>
           </q-card>
         </q-dialog>
+
+        <!-- ================================================== -->
+        <!-- EDIÇÃO EM MASSA -->
+        <!-- ================================================== -->
+
+        <q-dialog v-model="dialogMassa">
+          <q-card class="cartao-formulario">
+            <q-card-section class="row items-center q-py-sm">
+              <div class="text-h6">Editar {{ selecionados.length }} colaborador(es)</div>
+              <q-space />
+              <q-btn v-close-popup flat round dense icon="close" />
+            </q-card-section>
+
+            <q-separator />
+
+            <q-card-section class="corpo-formulario q-gutter-md">
+              <q-banner dense class="bg-blue-1" rounded>
+                Só o que você preencher é alterado nos selecionados. Campo em
+                branco = mantém o que cada um já tem.
+              </q-banner>
+
+              <q-banner v-if="erroMassa" class="bg-red-1 text-negative" rounded dense>
+                {{ erroMassa }}
+              </q-banner>
+
+              <div>
+                <div class="text-caption text-grey-7 q-mb-xs">Tipo de função</div>
+                <q-btn-toggle
+                  v-model="massa.tipo_funcao"
+                  dense
+                  no-caps
+                  toggle-color="primary"
+                  :options="[
+                    { label: 'Não alterar', value: '' },
+                    { label: 'Direto', value: 'DIRETO' },
+                    { label: 'Indireto', value: 'INDIRETO' }
+                  ]"
+                />
+              </div>
+
+              <q-input v-model="massa.funcao" outlined dense label="Função" />
+
+              <q-input v-model="massa.secao" outlined dense label="Seção" />
+
+              <q-input v-model="massa.situacao" outlined dense label="Situação" />
+
+              <q-input
+                v-model="massa.admissao"
+                outlined
+                dense
+                type="date"
+                stack-label
+                label="Admissão"
+              />
+
+              <div>
+                <q-checkbox
+                  v-model="massa.substituirRateios"
+                  dense
+                  label="Substituir os rateios dos selecionados"
+                />
+
+                <template v-if="massa.substituirRateios">
+                  <div
+                    v-for="(item, indice) in massa.rateios"
+                    :key="indice"
+                    class="row q-col-gutter-sm items-center q-mt-xs"
+                  >
+                    <div class="col">
+                      <q-input v-model="item.rateio" outlined dense label="Rateio" />
+                    </div>
+
+                    <div class="col">
+                      <q-input v-model="item.grpccusto" outlined dense label="Grupo de custo" />
+                    </div>
+
+                    <div class="col-auto">
+                      <q-btn
+                        flat
+                        dense
+                        round
+                        color="negative"
+                        icon="close"
+                        :disable="massa.rateios.length === 1"
+                        @click="massa.rateios.splice(indice, 1)"
+                      />
+                    </div>
+                  </div>
+
+                  <q-btn
+                    flat
+                    dense
+                    no-caps
+                    size="sm"
+                    color="primary"
+                    icon="add"
+                    label="Adicionar rateio"
+                    class="q-mt-xs"
+                    @click="massa.rateios.push({ rateio: '', grpccusto: '' })"
+                  />
+                </template>
+              </div>
+            </q-card-section>
+
+            <q-separator />
+
+            <q-card-actions align="right" class="q-py-sm">
+              <q-btn v-close-popup flat dense label="Cancelar" />
+
+              <q-btn
+                dense
+                color="primary"
+                label="Aplicar aos selecionados"
+                :loading="salvandoMassa"
+                @click="aplicarEdicaoMassa"
+              />
+            </q-card-actions>
+          </q-card>
+        </q-dialog>
       </q-page>
     </q-page-container>
   </q-layout>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 
 import CabecalhoApp from '../components/CabecalhoApp.vue'
 import ImportacaoColaboradores from '../components/ImportacaoColaboradores.vue'
@@ -280,6 +448,7 @@ const sucesso = ref('')
 const filtro = ref('')
 const filtroTipoFuncao = ref('')
 const paginacao = ref({ page: 1, rowsPerPage: 25 })
+const selecionados = ref([])
 
 function limparAvisos() {
   erro.value = ''
@@ -359,19 +528,55 @@ function semAcento(texto) {
     .toLowerCase()
 }
 
+// Várias chapas de uma vez: se tudo o que foi digitado são números separados
+// por espaço, vírgula, ponto e vírgula ou quebra de linha (ex.: colar uma
+// coluna do Excel), cada número é uma chapa e a lista mostra só essas.
+// Qualquer outro texto continua sendo uma busca livre — e, com vírgula ou
+// ponto e vírgula, cada trecho vira um termo (basta bater em um deles).
+const chapasDigitadas = computed(() => {
+  const pedacos = filtro.value
+    ? filtro.value.split(/[\s,;]+/).filter(Boolean)
+    : []
+
+  return pedacos.length > 1 && pedacos.every(pedaco => /^\d+$/.test(pedaco))
+    ? [...new Set(pedacos)]
+    : []
+})
+
+const chapasNaoEncontradas = computed(() => {
+  const existentes = new Set(colaboradores.value.map(item => item.chapa))
+  return chapasDigitadas.value.filter(chapa => !existentes.has(chapa))
+})
+
+const termosDeBusca = computed(() => {
+  if (chapasDigitadas.value.length) {
+    return []
+  }
+
+  return (filtro.value || '')
+    .split(/[,;]+/)
+    .map(termo => semAcento(termo).trim())
+    .filter(Boolean)
+})
+
 const colaboradoresFiltrados = computed(() => {
-  const termo = semAcento(filtro.value).trim()
+  const chapas = new Set(chapasDigitadas.value)
+  const termos = termosDeBusca.value
 
   return colaboradores.value.filter(colaborador => {
     if (filtroTipoFuncao.value && colaborador.tipo_funcao !== filtroTipoFuncao.value) {
       return false
     }
 
-    if (!termo) {
+    if (chapas.size) {
+      return chapas.has(colaborador.chapa)
+    }
+
+    if (!termos.length) {
       return true
     }
 
-    return semAcento(
+    const texto = semAcento(
       [
         colaborador.chapa,
         colaborador.nome,
@@ -381,7 +586,9 @@ const colaboradoresFiltrados = computed(() => {
         colaborador.situacao,
         colaborador.rateios.map(item => item.rateio).join(' ')
       ].join(' ')
-    ).includes(termo)
+    )
+
+    return termos.some(termo => texto.includes(termo))
   })
 })
 
@@ -398,6 +605,10 @@ async function carregarColaboradores() {
     }
 
     colaboradores.value = dados
+
+    // a lista foi refeita: mantém marcados só quem ainda existe
+    const chapasMarcadas = new Set(selecionados.value.map(item => item.chapa))
+    selecionados.value = dados.filter(item => chapasMarcadas.has(item.chapa))
   } catch (e) {
     erro.value = e.message || 'Erro ao carregar os colaboradores.'
   } finally {
@@ -434,7 +645,9 @@ function preencher(colaborador) {
   formulario.secao = colaborador?.secao || ''
   formulario.situacao = colaborador?.situacao || ''
   formulario.admissao = colaborador?.admissao || ''
-  formulario.rateios = (colaborador?.rateios || []).map(item => ({ ...item }))
+  formulario.rateios = colaborador?.rateios?.length
+    ? colaborador.rateios.map(item => ({ ...item }))
+    : [{ rateio: '', grpccusto: '' }]
 }
 
 function abrirNovo() {
@@ -457,6 +670,12 @@ function abrirEdicao(colaborador) {
 
 async function salvar() {
   erroFormulario.value = ''
+
+  if (!formulario.rateios.some(item => item.rateio.trim())) {
+    erroFormulario.value = 'RATEIO não informado. Informe ao menos um rateio.'
+    return
+  }
+
   salvando.value = true
 
   try {
@@ -533,10 +752,173 @@ async function remover(colaborador) {
   }
 }
 
+// ------------------------------------------------------------
+// Seleção e ações em massa
+// ------------------------------------------------------------
+
+// quem some do filtro sai da seleção: excluir/editar nunca pode atingir uma
+// linha que a pessoa não está vendo
+watch(colaboradoresFiltrados, lista => {
+  if (!selecionados.value.length) {
+    return
+  }
+
+  const visiveis = new Set(lista.map(item => item.chapa))
+  const mantidos = selecionados.value.filter(item => visiveis.has(item.chapa))
+
+  if (mantidos.length !== selecionados.value.length) {
+    selecionados.value = mantidos
+  }
+})
+
+function selecionarTodosFiltrados() {
+  selecionados.value = [...colaboradoresFiltrados.value]
+}
+
+const dialogMassa = ref(false)
+const salvandoMassa = ref(false)
+const erroMassa = ref('')
+
+const massa = reactive({
+  tipo_funcao: '',
+  funcao: '',
+  secao: '',
+  situacao: '',
+  admissao: '',
+  substituirRateios: false,
+  rateios: [{ rateio: '', grpccusto: '' }]
+})
+
+function abrirEdicaoMassa() {
+  limparAvisos()
+  erroMassa.value = ''
+  massa.tipo_funcao = ''
+  massa.funcao = ''
+  massa.secao = ''
+  massa.situacao = ''
+  massa.admissao = ''
+  massa.substituirRateios = false
+  massa.rateios = [{ rateio: '', grpccusto: '' }]
+  dialogMassa.value = true
+}
+
+async function aplicarEdicaoMassa() {
+  erroMassa.value = ''
+
+  const corpo = {
+    chapas: selecionados.value.map(item => item.chapa),
+    tipo_funcao: massa.tipo_funcao,
+    funcao: massa.funcao.trim(),
+    secao: massa.secao.trim(),
+    situacao: massa.situacao.trim(),
+    admissao: massa.admissao
+  }
+
+  if (massa.substituirRateios) {
+    if (!massa.rateios.some(item => item.rateio.trim())) {
+      erroMassa.value = 'RATEIO não informado. Informe ao menos um rateio.'
+      return
+    }
+
+    corpo.rateios = massa.rateios
+  }
+
+  const nadaPreenchido =
+    !corpo.tipo_funcao &&
+    !corpo.funcao &&
+    !corpo.secao &&
+    !corpo.situacao &&
+    !corpo.admissao &&
+    !massa.substituirRateios
+
+  if (nadaPreenchido) {
+    erroMassa.value = 'Preencha ao menos um campo para alterar.'
+    return
+  }
+
+  const confirmado = await confirmar(
+    `Aplicar as alterações a ${corpo.chapas.length} colaborador(es)?`,
+    { titulo: 'Editar em massa', textoConfirmar: 'Aplicar', perigo: false }
+  )
+
+  if (!confirmado) {
+    return
+  }
+
+  salvandoMassa.value = true
+
+  try {
+    const resposta = await fetch('/api/colaboradores/cadastro/editar-massa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo)
+    })
+
+    const dados = await resposta.json()
+
+    if (!resposta.ok || dados.erro) {
+      throw new Error(dados.erro || 'Não foi possível atualizar os colaboradores.')
+    }
+
+    dialogMassa.value = false
+    sucesso.value = dados.mensagem
+    selecionados.value = []
+    await carregarColaboradores()
+  } catch (e) {
+    erroMassa.value = e.message || 'Não foi possível atualizar os colaboradores.'
+  } finally {
+    salvandoMassa.value = false
+  }
+}
+
+async function removerSelecionados() {
+  limparAvisos()
+
+  const chapas = selecionados.value.map(item => item.chapa)
+  const alocados = selecionados.value.filter(item => item.alocado).length
+
+  const mensagem = alocados
+    ? `Remover ${chapas.length} colaborador(es)? ${alocados} deles estão alocados em equipes e as vagas serão liberadas. Esta ação não pode ser desfeita.`
+    : `Remover ${chapas.length} colaborador(es)? Esta ação não pode ser desfeita.`
+
+  const confirmado = await confirmar(mensagem, {
+    titulo: 'Excluir selecionados',
+    textoConfirmar: 'Excluir'
+  })
+
+  if (!confirmado) {
+    return
+  }
+
+  try {
+    const resposta = await fetch('/api/colaboradores/cadastro/excluir-massa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chapas, desalocar: alocados > 0 })
+    })
+
+    const dados = await resposta.json()
+
+    if (!resposta.ok || dados.erro) {
+      throw new Error(dados.erro || 'Não foi possível remover os colaboradores.')
+    }
+
+    sucesso.value = dados.mensagem
+    selecionados.value = []
+    await carregarColaboradores()
+  } catch (e) {
+    erro.value = e.message || 'Não foi possível remover os colaboradores.'
+  }
+}
+
 onMounted(carregarColaboradores)
 </script>
 
 <style scoped>
+.barra-selecao {
+  border-bottom: 1px solid var(--q-primary);
+}
+
 .cartao-formulario {
   width: 100%;
   max-width: 480px;

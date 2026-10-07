@@ -281,7 +281,7 @@
       <a class="nav-item" href="#resumo" data-alvo="resumo">3. Resumo</a>
       <a class="nav-item" href="#banco-dados" data-alvo="banco-dados">4. Banco de Dados</a>
       <div class="nav-group-label">Administração</div>
-      <a class="nav-item" href="#administracao" data-alvo="administracao">5. Vagas e Usuários</a>
+      <a class="nav-item" href="#administracao" data-alvo="administracao">5. Vagas, Usuários e Colaboradores</a>
       <div class="nav-group-label">Referência</div>
       <a class="nav-item" href="#legenda" data-alvo="legenda">Legenda de cores</a>
     </nav>
@@ -398,7 +398,7 @@
           </div>
           <div class="camada admin">
             <h4>Administração do sistema</h4>
-            <ul><li><b>Vagas</b> — criar a estrutura das equipes</li><li><b>Usuários</b> — controlar quem acessa</li></ul>
+            <ul><li><b>Vagas</b> — criar a estrutura das equipes</li><li><b>Usuários</b> — controlar quem acessa</li><li><b>Colaboradores</b> — manter o cadastro das pessoas</li></ul>
           </div>
         </div>
       </div>
@@ -579,7 +579,7 @@
       <h1>Administração do sistema</h1>
       <div class="faixa-restrita">
         <span class="selo-restrito">Acesso restrito</span>
-        <p>As duas telas a seguir normalmente não fazem parte do uso diário de um analista ou supervisor comum. Elas envolvem decisões estruturais — criar ou excluir equipes, dar ou tirar acesso de alguém — por isso costumam ficar restritas a quem tem o nível Administrador.</p>
+        <p>As três telas a seguir normalmente não fazem parte do uso diário de um analista ou supervisor comum. Elas envolvem decisões estruturais — criar ou excluir equipes, dar ou tirar acesso de alguém, incluir ou remover colaboradores — por isso costumam ficar restritas a quem tem o nível Administrador.</p>
       </div>
 
       <div class="subtela" id="vagas">
@@ -646,6 +646,40 @@
                     Marcos Aurélio · marcos.aurelio &nbsp; Supervisor &nbsp; <span class="chip">Base Bacabal</span><br><br>
                     Pedro Lima · pedro.lima &nbsp; Administrador &nbsp; <span class="chip">Enxerga todas as equipes</span>
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subtela" id="colaboradores">
+        <h2>5.3 Colaboradores</h2>
+        <div class="split">
+          <div class="lado-texto">
+            <p>Aqui o Administrador mantém o cadastro das pessoas: <b>incluir</b> um colaborador novo, <b>editar</b> qualquer informação (inclusive a chapa) ou <b>remover</b>. Chapa, nome, tipo de função (direto ou indireto) e ao menos um rateio são obrigatórios; função, seção, situação e admissão são opcionais.</p>
+            <p>Ao editar, os rateios informados substituem os anteriores, e um colaborador alocado só pode ser marcado como indireto depois de ser retirado da vaga. Ao remover alguém alocado, o sistema avisa que a vaga será liberada.</p>
+            <p>No topo da página fica a <b>importação por planilha</b>: baixe o modelo, preencha uma linha por colaborador e envie. O sistema mostra uma prévia (novos, atualizados, rateios e erros) antes de aplicar, e quem não está na planilha <b>não é alterado nem excluído</b>.</p>
+            <p class="muted" style="font-size:.9rem;">O afastamento continua sendo marcado no Banco de Dados, porque exige justificativa.</p>
+          </div>
+          <div class="lado-visual">
+            <div class="janela">
+              <div class="janela-barra"><span class="bolinha"></span><span class="bolinha"></span><span class="bolinha"></span></div>
+              <div class="cabecalho-app">Cadastro de Colaboradores<div class="cab-spacer"></div>
+                <span class="cab-icone">⟳</span><span class="cab-icone">◐</span><span class="cab-icone">☰</span>
+                <span class="cab-usuario">Pedro Lima</span>
+              </div>
+              <div class="janela-corpo">
+                <div class="cartao">
+                  <h5>Colaboradores</h5>
+                  <div class="tabela-scroll">
+                    <table class="tabela">
+                      <tr><th>Chapa</th><th>Nome</th><th>Tipo</th><th>Status</th><th></th></tr>
+                      <tr><td>12345</td><td>João</td><td>DIRETO</td><td><span class="selo selo-verde">ALOCADO</span></td><td>✎ 🗑</td></tr>
+                      <tr><td>12346</td><td>Lucas</td><td>DIRETO</td><td><span class="selo selo-cinza">LIVRE</span></td><td>✎ 🗑</td></tr>
+                    </table>
+                  </div>
+                  <span class="btn">Novo colaborador</span>
                 </div>
               </div>
             </div>

@@ -14,6 +14,7 @@ def corpo(**extra):
         "tipo_funcao": "direto",
         "funcao": "ELETRICISTA",
         "admissao": "2024-01-31",
+        "rateios": [{"rateio": "2.127.01", "grpccusto": "A"}],
     }
     base.update(extra)
     return base
@@ -23,7 +24,7 @@ def test_cadastro_valido_normaliza_campos():
     campos, rateios, erro = validar_cadastro_colaborador(corpo())
 
     assert erro is None
-    assert rateios == []
+    assert rateios == [("2.127.01", "A")]
     assert campos["chapa"] == "12345"
     assert campos["TIPO_FUNÇÃO"] == "DIRETO"
     assert campos["ADMISSÃO"] == date(2024, 1, 31)
@@ -52,6 +53,9 @@ def test_admissao_vazia_fica_sem_data():
         ({"tipo_funcao": ""}, "TIPO_FUNÇÃO"),
         ({"tipo_funcao": "OUTRO"}, "DIRETO ou INDIRETO"),
         ({"admissao": "31-31-2024"}, "ADMISSÃO"),
+        ({"rateios": []}, "RATEIO"),
+        ({"rateios": [{"rateio": "  ", "grpccusto": "A"}]}, "RATEIO"),
+        ({"rateios": None}, "RATEIO"),
     ],
 )
 def test_cadastro_invalido_devolve_erro(alteracao, trecho):
@@ -71,3 +75,55 @@ def test_rateios_ignoram_vazios_e_repetidos():
 
     assert erro is None
     assert rateios == [("2.127.01", "A"), ("2.169.04", None)]
+
+
+# ============================================================
+# EDIÇÃO EM MASSA
+# ============================================================
+
+from app import validar_edicao_massa  # noqa: E402
+
+
+def test_edicao_em_massa_so_altera_o_que_foi_preenchido():
+    alteracoes, rateios, erro = validar_edicao_massa({
+        "funcao": " ELETRICISTA ",
+        "secao": "",
+        "tipo_funcao": "indireto",
+        "admissao": "31/01/2024",
+    })
+
+    assert erro is None
+    assert rateios is None
+    assert alteracoes == {
+        "FUNÇÃO": "ELETRICISTA",
+        "TIPO_FUNÇÃO": "INDIRETO",
+        "ADMISSÃO": date(2024, 1, 31),
+    }
+
+
+def test_edicao_em_massa_com_rateios_substitui_a_lista():
+    alteracoes, rateios, erro = validar_edicao_massa({
+        "rateios": [{"rateio": "2.127.01", "grpccusto": "A"}],
+    })
+
+    assert erro is None
+    assert alteracoes == {}
+    assert rateios == [("2.127.01", "A")]
+
+
+@pytest.mark.parametrize(
+    ("dados", "trecho"),
+    [
+        ({}, "ao menos um campo"),
+        ({"funcao": "  "}, "ao menos um campo"),
+        ({"tipo_funcao": "OUTRO"}, "DIRETO ou INDIRETO"),
+        ({"admissao": "99/99/2024"}, "ADMISSÃO"),
+        ({"rateios": []}, "RATEIO"),
+        ({"rateios": [{"rateio": " "}]}, "RATEIO"),
+    ],
+)
+def test_edicao_em_massa_invalida(dados, trecho):
+    alteracoes, rateios, erro = validar_edicao_massa(dados)
+
+    assert alteracoes is None and rateios is None
+    assert trecho in erro

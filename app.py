@@ -3421,7 +3421,8 @@ def validar_cadastro_colaborador(dados):
     """Valida o corpo do cadastro. Devolve (campos, rateios, erro).
 
     `campos` traz a chave "chapa" mais as colunas de Colaborador; `rateios`
-    é uma lista de (RATEIO_FUNCIONARIO, GRPCCUSTO) sem repetições.
+    é uma lista de (RATEIO_FUNCIONARIO, GRPCCUSTO) sem repetições, com ao
+    menos um item (o rateio é obrigatório, como CHAPA, NOME e TIPO_FUNÇÃO).
     """
     def texto(chave):
         valor = str(dados.get(chave) or "").strip()
@@ -3456,6 +3457,9 @@ def validar_cadastro_colaborador(dados):
         grupo = str(item.get("grpccusto") or "").strip() or None
         if rateio and (rateio, grupo) not in rateios:
             rateios.append((rateio, grupo))
+
+    if not rateios:
+        return None, None, "RATEIO não informado. Informe ao menos um rateio."
 
     campos = {
         "chapa": chapa,
@@ -3679,6 +3683,201 @@ def remover_colaborador_cadastro(chapa):
         session.rollback()
         print(f"[ERRO] remover_colaborador_cadastro: {erro}")
         return jsonify({"erro": "Não foi possível remover o colaborador."}), 500
+    finally:
+        session.close()
+
+
+# ------------------------------------------------------------
+# Em massa: editar / excluir vários colaboradores de uma vez
+# ------------------------------------------------------------
+
+LIMITE_MASSA_COLABORADORES = 2000
+
+
+def _chapas_da_massa(dados):
+    """Lista de chapas (sem repetição, na ordem) do corpo, ou None."""
+    bruto = dados.get("chapas")
+    if not isinstance(bruto, list):
+        return None
+
+    chapas = []
+    for item in bruto:
+        chapa = str(item or "").strip()
+        if chapa and chapa not in chapas:
+            chapas.append(chapa)
+    return chapas
+
+
+def validar_edicao_massa(dados):
+    """Só o que foi preenchido é alterado; vazio = não mexe. Devolve
+    (alteracoes, rateios, erro): `alteracoes` com as colunas de Colaborador a
+    trocar e `rateios` None (não mexe) ou a lista que substitui os atuais."""
+    def texto(chave):
+        return str(dados.get(chave) or "").strip() or None
+
+    alteracoes = {}
+
+    for chave, coluna in (("funcao", "FUNÇÃO"), ("secao", "SEÇÃO"), ("situacao", "SITUAÇÃO")):
+        valor = texto(chave)
+        if valor:
+            alteracoes[coluna] = valor
+
+    tipo_funcao = (texto("tipo_funcao") or "").upper()
+    if tipo_funcao:
+        if tipo_funcao not in ("DIRETO", "INDIRETO"):
+            return None, None, "TIPO_FUNÇÃO deve ser DIRETO ou INDIRETO."
+        alteracoes["TIPO_FUNÇÃO"] = tipo_funcao
+
+    try:
+        admissao = _data_do_cadastro(dados.get("admissao"))
+    except ValueError as erro:
+        return None, None, str(erro)
+    if admissao:
+        alteracoes["ADMISSÃO"] = admissao
+
+    rateios = None
+    if dados.get("rateios") is not None:
+        rateios = []
+        for item in dados.get("rateios") or []:
+            if not isinstance(item, dict):
+                continue
+            rateio = str(item.get("rateio") or "").strip()
+            grupo = str(item.get("grpccusto") or "").strip() or None
+            if rateio and (rateio, grupo) not in rateios:
+                rateios.append((rateio, grupo))
+        if not rateios:
+            return None, None, "RATEIO não informado. Informe ao menos um rateio."
+
+    if not alteracoes and rateios is None:
+        return None, None, "Preencha ao menos um campo para alterar."
+
+    return alteracoes, rateios, None
+
+
+@app.route("/api/colaboradores/cadastro/editar-massa", methods=["POST"])
+@exige_permissao(auth.GERENCIAR_COLABORADORES)
+def editar_colaboradores_massa():
+    dados = corpo_json()
+    if not dados:
+        return jsonify({"erro": "Dados não enviados."}), 400
+
+    chapas = _chapas_da_massa(dados)
+    if not chapas:
+        return jsonify({"erro": "Selecione ao menos um colaborador."}), 400
+    if len(chapas) > LIMITE_MASSA_COLABORADORES:
+        return jsonify({"erro": f"Selecione no máximo {LIMITE_MASSA_COLABORADORES} colaboradores por vez."}), 400
+
+    alteracoes, rateios, erro_validacao = validar_edicao_massa(dados)
+    if erro_validacao:
+        return jsonify({"erro": erro_validacao}), 400
+
+    session = SessionLocal()
+    try:
+        colaboradores = (
+            session.query(Colaborador).filter(Colaborador.CHAPA.in_(chapas)).all()
+        )
+        if len(colaboradores) != len(chapas):
+            return jsonify({"erro": "Algum colaborador selecionado não existe mais. Atualize a lista."}), 404
+
+        # mesma regra da edição individual: alocação nunca é desfeita em silêncio
+        if alteracoes.get("TIPO_FUNÇÃO") == "INDIRETO":
+            alocadas = chapas_alocadas_do_banco(session)
+            bloqueados = [c.NOME for c in colaboradores if str(c.CHAPA).strip() in alocadas]
+            if bloqueados:
+                return jsonify({
+                    "erro": f"{len(bloqueados)} colaborador(es) selecionado(s) estão alocados e "
+                            "não podem virar indiretos: remova a alocação antes. "
+                            f"Ex.: {', '.join(bloqueados[:3])}."
+                }), 409
+
+        # só a seção mudou: o TIPO_CCUSTO continua vindo dos rateios atuais
+        rateios_atuais = {}
+        if rateios is None and "SEÇÃO" in alteracoes:
+            for r in session.query(Rateio).filter(Rateio.CHAPA.in_(chapas)).all():
+                if r.RATEIO_FUNCIONARIO:
+                    rateios_atuais.setdefault(r.CHAPA, []).append(r.RATEIO_FUNCIONARIO)
+
+        usuario = (auth.usuario_logado() or {}).get("usuario")
+        agora = datetime.now(timezone.utc)
+
+        for colaborador in colaboradores:
+            mudou_tipo = (
+                "TIPO_FUNÇÃO" in alteracoes
+                and (colaborador.TIPO_FUNÇÃO or "").strip().upper() != alteracoes["TIPO_FUNÇÃO"]
+            )
+            for coluna, valor in alteracoes.items():
+                setattr(colaborador, coluna, valor)
+            if mudou_tipo:
+                colaborador.TIPO_FUNÇÃO_ALTERADO_POR = usuario
+                colaborador.TIPO_FUNÇÃO_ALTERADO_EM = agora
+
+            if rateios is not None:
+                _gravar_rateios_colaborador(session, colaborador, rateios)
+            elif "SEÇÃO" in alteracoes:
+                colaborador.SEÇÃO_TRATADA = secao_tratada(colaborador.SEÇÃO)
+                colaborador.TIPO_CCUSTO = tipos_ccusto_dos_rateios(
+                    rateios_atuais.get(colaborador.CHAPA, [])
+                )
+
+        session.commit()
+        return jsonify({
+            "sucesso": True,
+            "mensagem": f"{len(colaboradores)} colaborador(es) atualizado(s).",
+            "total": len(colaboradores),
+        })
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] editar_colaboradores_massa: {erro}")
+        return jsonify({"erro": "Não foi possível atualizar os colaboradores."}), 500
+    finally:
+        session.close()
+
+
+@app.route("/api/colaboradores/cadastro/excluir-massa", methods=["POST"])
+@exige_permissao(auth.GERENCIAR_COLABORADORES)
+def excluir_colaboradores_massa():
+    dados = corpo_json()
+    if not dados:
+        return jsonify({"erro": "Dados não enviados."}), 400
+
+    chapas = _chapas_da_massa(dados)
+    if not chapas:
+        return jsonify({"erro": "Selecione ao menos um colaborador."}), 400
+    if len(chapas) > LIMITE_MASSA_COLABORADORES:
+        return jsonify({"erro": f"Selecione no máximo {LIMITE_MASSA_COLABORADORES} colaboradores por vez."}), 400
+
+    desalocar = dados.get("desalocar") is True
+
+    session = SessionLocal()
+    try:
+        alocadas = sorted(set(chapas) & chapas_alocadas_do_banco(session))
+
+        if alocadas and not desalocar:
+            return jsonify({
+                "erro": f"{len(alocadas)} colaborador(es) selecionado(s) estão alocados em equipes.",
+                "alocados": len(alocadas),
+            }), 409
+
+        if alocadas:
+            session.query(MembroEquipe).filter(MembroEquipe.CHAPA.in_(alocadas)).delete(
+                synchronize_session=False
+            )
+
+        session.query(Rateio).filter(Rateio.CHAPA.in_(chapas)).delete(synchronize_session=False)
+        removidos = session.query(Colaborador).filter(Colaborador.CHAPA.in_(chapas)).delete(
+            synchronize_session=False
+        )
+        session.commit()
+
+        return jsonify({
+            "sucesso": True,
+            "mensagem": f"{removidos} colaborador(es) removido(s).",
+            "total": removidos,
+        })
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] excluir_colaboradores_massa: {erro}")
+        return jsonify({"erro": "Não foi possível remover os colaboradores."}), 500
     finally:
         session.close()
 

@@ -6,7 +6,7 @@ serve e o que você pode fazer nela — sem complicação.
 
 Alguns itens deste guia podem não aparecer para você da mesma forma que
 aparecem para outra pessoa: o sistema mostra só o que faz sentido para o seu
-nível de acesso. Por exemplo, cadastrar equipes ou gerenciar usuários costuma
+nível de acesso. Por exemplo, cadastrar equipes, gerenciar usuários ou cadastrar colaboradores costuma
 ficar disponível apenas para quem administra o sistema.
 
 ## Sumário
@@ -17,6 +17,7 @@ ficar disponível apenas para quem administra o sistema.
 4. [Banco de Dados](#4-banco-de-dados)
 5. [Cadastro de Vagas](#5-cadastro-de-vagas)
 6. [Usuários](#6-usuários)
+7. [Colaboradores](#7-colaboradores)
 
 ---
 
@@ -174,9 +175,6 @@ Gerenciador de Equipes.
   Gerente, Coordenador, Supervisor) e o que cada um pode fazer, marcando ou
   desmarcando permissões como ver o resumo, ver equipes, alocar, editar ou
   remover colaboradores.
-- **Atualizar o cadastro de colaboradores** enviando a planilha oficial de
-  colaboradores, com uma prévia de quantos registros serão criados ou
-  atualizados antes de confirmar.
 - Ver a lista de **todos os usuários cadastrados** no sistema, com o nível
   de acesso de cada um e um resumo de sobre quais equipes cada pessoa pode
   atuar.
@@ -192,3 +190,42 @@ Gerenciador de Equipes.
 **Para onde você vai depois:** depois de organizar o acesso das pessoas,
 o ciclo de uso volta ao normal: **Resumo**, **Banco de Dados** e
 **Cadastro de Vagas**, conforme a necessidade do dia a dia.
+
+---
+
+## 7. Colaboradores
+
+### Cadastro de Colaboradores
+
+**Para que serve:** é onde o cadastro das pessoas é mantido — quem existe no
+sistema, com função, seção, situação e rateios. Disponível apenas para o
+**Administrador**; aparece no menu como **Colaboradores**.
+
+**O que você pode fazer aqui:**
+- Ver a lista de **todos os colaboradores**, pesquisando por nome, chapa,
+  função, seção ou rateio, filtrando entre diretos e indiretos e ordenando
+  pelas colunas. Cada linha mostra se a pessoa está **alocada**, **livre** ou
+  **afastada**.
+- **Cadastrar um colaborador novo** direto pelo sistema, sem planilha:
+  chapa, nome, tipo de função (direto ou indireto) e **ao menos um rateio**
+  são obrigatórios; função, seção, situação e data de admissão são
+  opcionais (pode haver mais de um rateio).
+- **Editar** qualquer informação de um colaborador, inclusive a chapa. Se ele
+  estiver alocado, a alocação acompanha a chapa nova. Os rateios informados
+  substituem os que ele tinha, e a seção tratada e o tipo de ccusto são
+  recalculados automaticamente. Para marcar alguém como **indireto**, ele
+  precisa estar livre (sem alocação).
+- **Remover** um colaborador. Se ele estiver alocado, o sistema avisa que a
+  vaga será liberada e pede confirmação; os rateios dele também são
+  excluídos.
+- **Atualizar o cadastro por planilha** (bloco no topo da página): baixar a
+  planilha modelo, preencher uma linha por colaborador e enviar. O sistema
+  mostra uma prévia de quantos registros serão criados ou atualizados, quais
+  rateios mudam e quais linhas têm erro, antes de você confirmar. Quem não
+  está na planilha **não é alterado nem excluído**.
+
+**Observação:** o **afastamento** de um colaborador continua sendo marcado
+no **Banco de Dados**, porque exige uma justificativa.
+
+**Para onde você vai depois:** com o cadastro em dia, siga para o **Banco de
+Dados** para alocar as pessoas nas vagas.
