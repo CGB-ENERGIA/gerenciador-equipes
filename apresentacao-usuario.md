@@ -215,6 +215,19 @@ sistema, com função, seção, situação e rateios. Disponível apenas para o
   substituem os que ele tinha, e a seção tratada e o tipo de ccusto são
   recalculados automaticamente. Para marcar alguém como **indireto**, ele
   precisa estar livre (sem alocação).
+- **Pesquisar várias chapas de uma vez**: cole no campo de pesquisa as
+  chapas separadas por espaço, vírgula ou quebra de linha (dá para copiar uma
+  coluna do Excel). A lista mostra só essas pessoas e avisa quais chapas não
+  foram encontradas.
+- **Editar ou excluir vários de uma vez**: marque os colaboradores na caixa
+  da primeira coluna (ou use **Selecionar todos** para marcar tudo o que o
+  filtro mostra) e use a barra que aparece:
+  - **Editar em massa** altera tipo de função, função, seção, situação,
+    admissão e, se quiser, substitui os rateios de todos os selecionados.
+    Só o que você preencher é alterado; campo em branco mantém o que cada um
+    já tem. Alocados não podem virar indiretos.
+  - **Excluir selecionados** remove todos de uma vez, liberando as vagas de
+    quem estiver alocado, depois de uma confirmação.
 - **Remover** um colaborador. Se ele estiver alocado, o sistema avisa que a
   vaga será liberada e pede confirmação; os rateios dele também são
   excluídos.
