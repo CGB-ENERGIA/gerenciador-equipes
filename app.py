@@ -689,6 +689,11 @@ def obter_resumo():
                         "codigo_base": codigo_base,
                         "equipe": prefixo,
                         "tipo": tipo,
+                        # disciplina como aparece na tela (FOLGUISTA para equipes
+                        # folguista) e se a vaga e Folguista Extra -- usados pelo
+                        # detalhe da Diferenca na tela inicial
+                        "grupo": chave,
+                        "extra": vaga_extra,
                         "chapa": str(colaborador.CHAPA).strip(),
                         "nome": str(colaborador.NOME).strip(),
                         "funcao": funcao_exibicao,

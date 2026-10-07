@@ -268,7 +268,7 @@
                             class="marcador-diferenca marcador-clicavel"
                             :class="classeDiferenca(linha.diferenca)"
                             title="Ver detalhes da diferença"
-                            @click="abrirDiferenca(grupo, linha, base.base)"
+                            @click="abrirDiferenca(grupo, linha, base)"
                           >
                             {{ linha.diferenca }}
                           </span>
@@ -797,40 +797,29 @@
 
                 <q-separator />
 
-                <q-card-section class="q-pa-none">
-                  <q-markup-table flat square dense>
-                    <tbody>
-                      <tr>
-                        <td class="text-left">Vagas (padrão)</td>
-                        <td class="text-right">{{ diferencaSelecionada.vagas }}</td>
-                      </tr>
-                      <tr>
-                        <td class="text-left">Alocados em vagas padrão</td>
-                        <td class="text-right">
-                          {{ diferencaSelecionada.alocados - diferencaSelecionada.extra }}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td class="text-left">Alocados extras (Folguista Extra)</td>
-                        <td class="text-right">{{ diferencaSelecionada.extra }}</td>
-                      </tr>
-                      <tr class="text-weight-bold">
-                        <td class="text-left">Total alocados</td>
-                        <td class="text-right">{{ diferencaSelecionada.alocados }}</td>
-                      </tr>
-                      <tr class="text-weight-bold">
-                        <td class="text-left">Diferença (alocados − vagas)</td>
-                        <td class="text-right">
-                          <span
-                            class="marcador-diferenca"
-                            :class="classeDiferenca(diferencaSelecionada.diferenca)"
-                          >
-                            {{ diferencaSelecionada.diferenca }}
-                          </span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </q-markup-table>
+                <q-card-section class="q-pb-none">
+                  {{ diferencaSelecionada.vagas }} vaga(s) ·
+                  {{ diferencaSelecionada.alocados }} alocado(s)
+                  ({{ diferencaSelecionada.extra }} extra) · diferença
+                  <span
+                    class="marcador-diferenca"
+                    :class="classeDiferenca(diferencaSelecionada.diferenca)"
+                  >
+                    {{ diferencaSelecionada.diferenca }}
+                  </span>
+                </q-card-section>
+
+                <q-card-section>
+                  <q-table
+                    flat
+                    bordered
+                    dense
+                    :rows="diferencaLinhas"
+                    :columns="colunasDiferenca"
+                    hide-pagination
+                    :rows-per-page-options="[0]"
+                    no-data-label="Nenhum colaborador alocado"
+                  />
                 </q-card-section>
               </q-card>
             </q-dialog>
@@ -946,6 +935,8 @@ const diferencaAberta = ref(false)
 const diferencaSelecionada = ref({
   funcao: '',
   contexto: '',
+  rotulo: '',
+  codigo: '',
   vagas: 0,
   alocados: 0,
   extra: 0,
@@ -954,10 +945,12 @@ const diferencaSelecionada = ref({
 
 // Detalha a diferenca de uma linha da Composicao: vagas padrao x alocados,
 // separando quem ocupa vaga Folguista Extra (conta como alocado, nao como vaga)
-function abrirDiferenca(grupo, linha, base = '') {
+function abrirDiferenca(grupo, linha, base = null) {
   diferencaSelecionada.value = {
     funcao: linha.funcao,
-    contexto: [base, grupo.rotulo].filter(Boolean).join(' · '),
+    contexto: [base?.base, grupo.rotulo].filter(Boolean).join(' · '),
+    rotulo: grupo.rotulo,
+    codigo: base?.codigo || '',
     vagas: linha.vagas || 0,
     alocados: linha.alocados || 0,
     extra: linha.extra || 0,
@@ -965,6 +958,42 @@ function abrirDiferenca(grupo, linha, base = '') {
   }
   diferencaAberta.value = true
 }
+
+const colunasDiferenca = [
+  { name: 'equipe', label: 'EQUIPE', field: 'equipe', align: 'left' },
+  { name: 'vaga', label: 'VAGAS', field: 'vaga', align: 'left' },
+  { name: 'nome', label: 'NOME', field: 'nome', align: 'left' },
+  {
+    name: 'funcao_cadastrada',
+    label: 'FUNÇÃO CADASTRADA',
+    field: 'funcao_cadastrada',
+    align: 'left'
+  }
+]
+
+// um colaborador por linha, de toda a disciplina clicada (todas as funcoes),
+// com "EXTRA" no lugar da vaga quando ocupa uma vaga de Folguista Extra
+const diferencaLinhas = computed(() => {
+  const { rotulo, codigo } = diferencaSelecionada.value
+
+  return pessoasDisponiveisFiltradas.value
+    .filter(base => !codigo || base.codigo === codigo)
+    .flatMap(base => Object.values(base.detalhes || {}).flat())
+    .filter(pessoa => pessoa.grupo === rotulo)
+    .map(pessoa => ({
+      equipe: pessoa.grupo,
+      vaga: pessoa.extra ? 'EXTRA' : pessoa.funcao,
+      nome: pessoa.nome,
+      funcao_cadastrada: pessoa.funcao_sistema,
+      ordem: ordemFuncaoIndice(pessoa.funcao)
+    }))
+    .sort(
+      (a, b) =>
+        Number(a.vaga === 'EXTRA') - Number(b.vaga === 'EXTRA') ||
+        a.ordem - b.ordem ||
+        a.nome.localeCompare(b.nome, 'pt-BR')
+    )
+})
 
 const necessidadesAbertas = ref(false)
 
