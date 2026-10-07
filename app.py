@@ -24,7 +24,7 @@ from sqlalchemy.orm import joinedload
 import auth
 from auth import exige_permissao
 from database.database import SessionLocal
-from database.depara import DE_PARA_SECAO
+from database.depara import DE_PARA_SECAO, secao_tratada, tipos_ccusto_dos_rateios
 from database.importacao.importar_colaboradores import (
     COLUNAS_OBRIGATORIAS as COLUNAS_OBRIGATORIAS_COLABORADORES,
     processar_planilha_colaboradores,
@@ -3388,6 +3388,297 @@ def aplicar_planilha_colaboradores():
         session.rollback()
         print(f"[ERRO] aplicar_planilha_colaboradores: {erro}")
         return jsonify({"erro": "Não foi possível aplicar a planilha."}), 500
+    finally:
+        session.close()
+
+
+# ============================================================
+# API - CADASTRO DE COLABORADORES (inserir / editar / remover um a um)
+# ============================================================
+#
+# Exclusivo do Administrador (GERENCIAR_COLABORADORES), igual a planilha. Usa
+# as mesmas regras de normalizar_linha_colaborador: CHAPA, NOME e TIPO_FUNÇÃO
+# obrigatórios. SEÇÃO_TRATADA e TIPO_CCUSTO são recalculados a cada gravação,
+# com os rateios que o colaborador ficou. Afastamento continua sendo marcado
+# na tela Banco de Dados (exige justificativa).
+
+def _data_do_cadastro(valor):
+    """Aceita AAAA-MM-DD (campo de data da tela) ou DD/MM/AAAA; vazio = None."""
+    texto = str(valor or "").strip()
+    if not texto:
+        return None
+
+    for formato in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(texto, formato).date()
+        except ValueError:
+            continue
+
+    raise ValueError("ADMISSÃO inválida. Use o formato DD/MM/AAAA.")
+
+
+def validar_cadastro_colaborador(dados):
+    """Valida o corpo do cadastro. Devolve (campos, rateios, erro).
+
+    `campos` traz a chave "chapa" mais as colunas de Colaborador; `rateios`
+    é uma lista de (RATEIO_FUNCIONARIO, GRPCCUSTO) sem repetições.
+    """
+    def texto(chave):
+        valor = str(dados.get(chave) or "").strip()
+        return valor or None
+
+    chapa = texto("chapa")
+    if not chapa:
+        return None, None, "CHAPA não informada."
+    if chapa.endswith(".0"):
+        chapa = chapa[:-2]
+
+    nome = texto("nome")
+    if not nome:
+        return None, None, "NOME não informado."
+
+    tipo_funcao = (texto("tipo_funcao") or "").upper()
+    if not tipo_funcao:
+        return None, None, "TIPO_FUNÇÃO não informado."
+    if tipo_funcao not in ("DIRETO", "INDIRETO"):
+        return None, None, "TIPO_FUNÇÃO deve ser DIRETO ou INDIRETO."
+
+    try:
+        admissao = _data_do_cadastro(dados.get("admissao"))
+    except ValueError as erro:
+        return None, None, str(erro)
+
+    rateios = []
+    for item in dados.get("rateios") or []:
+        if not isinstance(item, dict):
+            continue
+        rateio = str(item.get("rateio") or "").strip()
+        grupo = str(item.get("grpccusto") or "").strip() or None
+        if rateio and (rateio, grupo) not in rateios:
+            rateios.append((rateio, grupo))
+
+    campos = {
+        "chapa": chapa,
+        "NOME": nome,
+        "FUNÇÃO": texto("funcao"),
+        "ADMISSÃO": admissao,
+        "SEÇÃO": texto("secao"),
+        "SITUAÇÃO": texto("situacao"),
+        "TIPO_FUNÇÃO": tipo_funcao,
+    }
+    return campos, rateios, None
+
+
+def _json_cadastro_colaborador(colaborador, rateios, alocado):
+    return {
+        "chapa": str(colaborador.CHAPA).strip(),
+        "nome": colaborador.NOME or "",
+        "funcao": colaborador.FUNÇÃO or "",
+        "secao": colaborador.SEÇÃO or "",
+        "situacao": colaborador.SITUAÇÃO or "",
+        "admissao": colaborador.ADMISSÃO.isoformat() if colaborador.ADMISSÃO else "",
+        "tipo_funcao": colaborador.TIPO_FUNÇÃO or "",
+        "secao_tratada": colaborador.SEÇÃO_TRATADA or "",
+        "tipo_ccusto": colaborador.TIPO_CCUSTO or "",
+        "afastado": bool(colaborador.AFASTADO),
+        "alocado": alocado,
+        "rateios": [{"rateio": r or "", "grpccusto": g or ""} for r, g in rateios],
+    }
+
+
+def _gravar_rateios_colaborador(session, colaborador, rateios):
+    """Troca os rateios do colaborador pelos informados e recalcula
+    SEÇÃO_TRATADA e TIPO_CCUSTO."""
+    session.query(Rateio).filter(Rateio.CHAPA == colaborador.CHAPA).delete(
+        synchronize_session=False
+    )
+    for rateio, grupo in rateios:
+        session.add(Rateio(
+            CHAPA=colaborador.CHAPA,
+            RATEIO_FUNCIONARIO=rateio,
+            GRPCCUSTO=grupo,
+        ))
+
+    colaborador.SEÇÃO_TRATADA = secao_tratada(colaborador.SEÇÃO)
+    colaborador.TIPO_CCUSTO = tipos_ccusto_dos_rateios([r for r, _ in rateios])
+
+
+@app.route("/api/colaboradores/cadastro", methods=["GET"])
+@exige_permissao(auth.GERENCIAR_COLABORADORES)
+def listar_cadastro_colaboradores():
+    session = SessionLocal()
+    try:
+        rateios_por_chapa = {}
+        for r in session.query(Rateio).order_by(Rateio.id).all():
+            rateios_por_chapa.setdefault(r.CHAPA, []).append(
+                (r.RATEIO_FUNCIONARIO, r.GRPCCUSTO)
+            )
+
+        chapas_alocadas = chapas_alocadas_do_banco(session)
+
+        return jsonify([
+            _json_cadastro_colaborador(
+                c,
+                rateios_por_chapa.get(c.CHAPA, []),
+                str(c.CHAPA).strip() in chapas_alocadas,
+            )
+            for c in session.query(Colaborador).order_by(Colaborador.NOME).all()
+        ])
+    except Exception as erro:
+        print(f"[ERRO] listar_cadastro_colaboradores: {erro}")
+        return jsonify({"erro": "Não foi possível carregar o cadastro."}), 500
+    finally:
+        session.close()
+
+
+@app.route("/api/colaboradores/cadastro", methods=["POST"])
+@exige_permissao(auth.GERENCIAR_COLABORADORES)
+def criar_colaborador_cadastro():
+    dados = corpo_json()
+    if not dados:
+        return jsonify({"erro": "Dados não enviados."}), 400
+
+    campos, rateios, erro_validacao = validar_cadastro_colaborador(dados)
+    if erro_validacao:
+        return jsonify({"erro": erro_validacao}), 400
+
+    session = SessionLocal()
+    try:
+        chapa = campos.pop("chapa")
+        if session.query(Colaborador).filter(Colaborador.CHAPA == chapa).first():
+            return jsonify({"erro": f"Já existe um colaborador com a CHAPA {chapa}."}), 409
+
+        colaborador = Colaborador(CHAPA=chapa, **campos)
+        session.add(colaborador)
+        _gravar_rateios_colaborador(session, colaborador, rateios)
+        session.commit()
+
+        return jsonify({
+            "sucesso": True,
+            "mensagem": "Colaborador cadastrado.",
+            "colaborador": _json_cadastro_colaborador(colaborador, rateios, False),
+        }), 201
+    except IntegrityError:
+        session.rollback()
+        return jsonify({"erro": "Já existe um colaborador com essa CHAPA."}), 409
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] criar_colaborador_cadastro: {erro}")
+        return jsonify({"erro": "Não foi possível cadastrar o colaborador."}), 500
+    finally:
+        session.close()
+
+
+@app.route("/api/colaboradores/cadastro/<chapa>", methods=["PUT"])
+@exige_permissao(auth.GERENCIAR_COLABORADORES)
+def editar_colaborador_cadastro(chapa):
+    dados = corpo_json()
+    if not dados:
+        return jsonify({"erro": "Dados não enviados."}), 400
+
+    campos, rateios, erro_validacao = validar_cadastro_colaborador(dados)
+    if erro_validacao:
+        return jsonify({"erro": erro_validacao}), 400
+
+    session = SessionLocal()
+    try:
+        colaborador = session.query(Colaborador).filter(Colaborador.CHAPA == chapa).first()
+        if not colaborador:
+            return jsonify({"erro": "Colaborador não encontrado."}), 404
+
+        nova_chapa = campos.pop("chapa")
+        alocacao = session.query(MembroEquipe).filter(MembroEquipe.CHAPA == chapa).first()
+
+        # mesma regra de /api/colaboradores/tipo-funcao: a alocação nunca é
+        # desfeita em silêncio
+        if campos["TIPO_FUNÇÃO"] == "INDIRETO" and alocacao:
+            return jsonify({
+                "erro": "Este colaborador está alocado em uma equipe. "
+                        "Remova a alocação antes de marcá-lo como indireto."
+            }), 409
+
+        if nova_chapa != chapa:
+            if session.query(Colaborador).filter(Colaborador.CHAPA == nova_chapa).first():
+                return jsonify({"erro": f"Já existe um colaborador com a CHAPA {nova_chapa}."}), 409
+
+            # Membro e rateio apontam para Colaborador.CHAPA sem ON UPDATE
+            # CASCADE, então a chapa não pode ser trocada no lugar: cria o
+            # registro novo com os mesmos dados, move as referências e só
+            # então apaga o antigo.
+            novo = Colaborador(CHAPA=nova_chapa, **{
+                coluna.key: getattr(colaborador, coluna.key)
+                for coluna in Colaborador.__table__.columns
+                if coluna.key not in ("id", "CHAPA")
+            })
+            session.add(novo)
+            session.flush()
+            session.query(MembroEquipe).filter(MembroEquipe.CHAPA == chapa).update(
+                {MembroEquipe.CHAPA: nova_chapa}, synchronize_session=False
+            )
+            session.query(Rateio).filter(Rateio.CHAPA == chapa).update(
+                {Rateio.CHAPA: nova_chapa}, synchronize_session=False
+            )
+            session.expire(colaborador, ["rateios"])
+            session.delete(colaborador)
+            colaborador = novo
+
+        if (colaborador.TIPO_FUNÇÃO or "").strip().upper() != campos["TIPO_FUNÇÃO"]:
+            colaborador.TIPO_FUNÇÃO_ALTERADO_POR = (auth.usuario_logado() or {}).get("usuario")
+            colaborador.TIPO_FUNÇÃO_ALTERADO_EM = datetime.now(timezone.utc)
+
+        for campo, valor in campos.items():
+            setattr(colaborador, campo, valor)
+        _gravar_rateios_colaborador(session, colaborador, rateios)
+        session.commit()
+
+        return jsonify({
+            "sucesso": True,
+            "mensagem": "Colaborador atualizado.",
+            "colaborador": _json_cadastro_colaborador(colaborador, rateios, bool(alocacao)),
+        })
+    except IntegrityError:
+        session.rollback()
+        return jsonify({"erro": "Já existe um colaborador com essa CHAPA."}), 409
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] editar_colaborador_cadastro: {erro}")
+        return jsonify({"erro": "Não foi possível atualizar o colaborador."}), 500
+    finally:
+        session.close()
+
+
+@app.route("/api/colaboradores/cadastro/<chapa>", methods=["DELETE"])
+@exige_permissao(auth.GERENCIAR_COLABORADORES)
+def remover_colaborador_cadastro(chapa):
+    # ?desalocar=1: confirma que a vaga ocupada por ele deve ser liberada
+    desalocar = request.args.get("desalocar") == "1"
+
+    session = SessionLocal()
+    try:
+        colaborador = session.query(Colaborador).filter(Colaborador.CHAPA == chapa).first()
+        if not colaborador:
+            return jsonify({"erro": "Colaborador não encontrado."}), 404
+
+        alocacao = session.query(MembroEquipe).filter(MembroEquipe.CHAPA == chapa).first()
+        if alocacao and not desalocar:
+            return jsonify({
+                "erro": "Este colaborador está alocado em uma equipe.",
+                "alocado": True,
+            }), 409
+
+        if alocacao:
+            session.delete(alocacao)
+            session.flush()
+
+        # os rateios saem junto (cascade em Colaborador.rateios)
+        session.delete(colaborador)
+        session.commit()
+
+        return jsonify({"sucesso": True, "mensagem": "Colaborador removido."})
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] remover_colaborador_cadastro: {erro}")
+        return jsonify({"erro": "Não foi possível remover o colaborador."}), 500
     finally:
         session.close()
 

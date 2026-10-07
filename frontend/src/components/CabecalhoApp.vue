@@ -186,6 +186,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useModoNoturno } from '../composables/useModoNoturno'
 import {
+  PODE_GERENCIAR_COLABORADORES,
   PODE_GERENCIAR_USUARIOS,
   PODE_GERENCIAR_VAGAS,
   PODE_VER_EQUIPES,
@@ -232,6 +233,13 @@ const PAGINAS = [
     caminhos: ['/cadastro-vagas'],
     icone: 'assignment',
     permissao: PODE_GERENCIAR_VAGAS
+  },
+  {
+    titulo: 'Colaboradores',
+    rota: '/cadastro-colaboradores',
+    caminhos: ['/cadastro-colaboradores'],
+    icone: 'badge',
+    permissao: PODE_GERENCIAR_COLABORADORES
   },
   {
     titulo: 'Usuários',
