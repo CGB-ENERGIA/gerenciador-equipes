@@ -968,6 +968,7 @@ def exportar_pessoas_resumo():
             ("TIPO CCUSTO", "tipo_ccusto"),
             ("BASE", "base"),
             ("AFASTADO", "afastado"),
+            ("JUSTIFICATIVA", "justificativa"),
         ]),
     ]
 
