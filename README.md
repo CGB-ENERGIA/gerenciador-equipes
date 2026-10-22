@@ -67,6 +67,8 @@ nada. Cada arquivo traz no cabeçalho o que conferir antes de rodar.
 - `012_add_tipo_funcao.sql`: TIPO_FUNÇÃO (DIRETO/INDIRETO). Só colaboradores DIRETO aparecem como disponíveis para alocação.
 - `013_add_tentativas_login.sql`: registra tentativas de login que falharam, para o limite contra força bruta.
 - `014_add_afastado_por.sql`: quem marcou o colaborador como afastado e quando (coluna "Afastado por" nas tabelas). **Rode antes de publicar o código**: sem essas colunas, as consultas de colaboradores falham.
+- `015_add_tipo_funcao_alterado.sql`: quem trocou o colaborador entre DIRETO e INDIRETO pela tela, e quando.
+- `016_padronizar_funcao_vaga.sql`: deixa a função das vagas em maiúsculas e unifica "Munqueiro/Motorista" em "MOTORISTA". O app grava sempre nesse formato (`funcao_da_vaga` no `app.py`).
 
 ## Acesso
 

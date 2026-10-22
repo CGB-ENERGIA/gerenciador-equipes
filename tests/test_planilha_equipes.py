@@ -10,7 +10,7 @@ import io
 import pandas as pd
 import pytest
 
-from app import analisar_planilha_equipes
+from app import analisar_planilha_equipes, funcao_da_vaga
 
 FIXAS = ["BASE", "PREFIXO", "TIPO EQUIPE", "SETOR", "SUPERVISOR", "COORDENADOR", "AÇÃO"]
 
@@ -228,3 +228,55 @@ def test_planilha_sem_coluna_obrigatoria():
 
     with pytest.raises(ValueError, match="PREFIXO"):
         analisar_planilha_equipes(arquivo, SessaoFalsa([]))
+
+
+@pytest.mark.parametrize(
+    ("texto", "esperado"),
+    [
+        ("Eletricista", "ELETRICISTA"),
+        ("  auxiliar   de eletricista ", "AUXILIAR DE ELETRICISTA"),
+        ("Munqueiro/Motorista", "MOTORISTA"),
+        ("PODADOR", "PODADOR"),
+        (None, ""),
+    ],
+)
+def test_funcao_da_vaga_padroniza_o_nome(texto, esperado):
+    assert funcao_da_vaga(texto) == esperado
+
+
+def test_mesma_funcao_em_caixas_diferentes_conta_como_uma_so():
+    """Regressao: "Eletricista" e "ELETRICISTA" no banco viravam duas funcoes,
+    e a planilha com 3 ELETRICISTA mandava criar/remover vagas a toa."""
+    existentes = [
+        VagaFalsa(40, "Eletricista", "CONSTRUÇÃO"),
+        VagaFalsa(41, "Eletricista", "CONSTRUÇÃO"),
+        VagaFalsa(42, "ELETRICISTA", "CONSTRUÇÃO"),
+    ]
+    sessao = SessaoFalsa([equipe_com(existentes)])
+
+    plano = analisar_planilha_equipes(
+        planilha(
+            [{
+                "BASE": "BCB", "PREFIXO": "EQ-1", "TIPO EQUIPE": "CONSTRUÇÃO",
+                "AÇÃO": "editar", "ELETRICISTA": 3,
+            }],
+            funcoes=("ELETRICISTA",),
+        ),
+        sessao,
+    )
+
+    assert not plano["erros"]
+    assert plano["editar"] == []
+    assert plano["ignoradas"] == 1
+
+
+def test_duas_colunas_da_mesma_funcao_sao_recusadas():
+    sessao = SessaoFalsa([])
+    with pytest.raises(ValueError, match="mesma função"):
+        analisar_planilha_equipes(
+            planilha(
+                [{"BASE": "BCB", "PREFIXO": "EQ-1", "AÇÃO": "criar"}],
+                funcoes=("Eletricista", "ELETRICISTA"),
+            ),
+            sessao,
+        )

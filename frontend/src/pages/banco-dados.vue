@@ -1805,7 +1805,9 @@ const colaboradoresDoTipo = computed(() => {
 })
 
 const colaboradoresFiltrados = computed(() => {
-  const filtro = filtroColaborador.value.trim().toLowerCase()
+  // o "X" do campo (clearable) troca o valor por null, não por '' — sem o
+  // "|| ''" o .trim() quebrava o computed e a lista ficava vazia
+  const filtro = (filtroColaborador.value || '').trim().toLowerCase()
 
   return colaboradoresDoTipo.value.filter(colaborador => {
     const correspondeStatus =

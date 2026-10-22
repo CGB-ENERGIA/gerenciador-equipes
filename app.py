@@ -169,6 +169,25 @@ def padronizar_funcao(funcao):
     return str(funcao).strip().upper()
 
 
+# Nomes de funcao de VAGA que sao a mesma funcao na operacao, e nao so a
+# mesma palavra em outra caixa (decisao do usuario — ver migrations/016).
+APELIDOS_FUNCAO_VAGA = {
+    "MUNQUEIRO/MOTORISTA": "MOTORISTA",
+}
+
+
+def funcao_da_vaga(texto):
+    """Nome canonico da funcao de uma vaga (ComposicaoEquipe.FUNÇÃO_ER):
+    maiusculas, sem espaco sobrando, com os apelidos acima resolvidos.
+
+    Sem isto, "Eletricista" e "ELETRICISTA" viravam duas colunas na planilha
+    de equipes e duas funcoes diferentes na edicao de vagas. Todo ponto que
+    GRAVA ou COMPARA FUNÇÃO_ER passa por aqui.
+    """
+    funcao = " ".join(str(texto or "").split()).upper()
+    return APELIDOS_FUNCAO_VAGA.get(funcao, funcao)
+
+
 def ordem_funcao(funcao):
     funcao_padrao = padronizar_funcao(funcao)
     return ORDEM_FUNCOES.get(funcao_padrao, 99)
@@ -1676,7 +1695,7 @@ def montar_planilha_equipes(session):
 
     funcoes = sorted(
         {
-            str(c.FUNÇÃO_ER).strip()
+            funcao_da_vaga(c.FUNÇÃO_ER)
             for e in equipes
             for c in (e.composicoes or [])
             if c.FUNÇÃO_ER
@@ -1697,7 +1716,7 @@ def montar_planilha_equipes(session):
             if eh_extra(composicao):
                 continue
             tipo = tipo_equipe_da_vaga(composicao)
-            funcao = str(composicao.FUNÇÃO_ER).strip()
+            funcao = funcao_da_vaga(composicao.FUNÇÃO_ER)
             por_tipo.setdefault(tipo, {})
             por_tipo[tipo][funcao] = por_tipo[tipo].get(funcao, 0) + 1
             metadados_por_tipo.setdefault(tipo, {
@@ -1812,7 +1831,7 @@ def aplicar_mudancas_equipe(session, equipe_id, mudancas):
             for _ in range(mudanca["adicionar"]):
                 session.add(ComposicaoEquipe(
                     equipe_id=equipe_id,
-                    FUNÇÃO_ER=mudanca["funcao"],
+                    FUNÇÃO_ER=funcao_da_vaga(mudanca["funcao"]),
                     ESTRUTURA=mudanca["tipo"],
                     SETOR=mudanca.get("setor"),
                     SUPERVISOR=mudanca.get("supervisor"),
@@ -1863,7 +1882,23 @@ def analisar_planilha_equipes(arquivo, session):
     if faltando:
         raise ValueError(f"A planilha precisa das colunas {', '.join(faltando)}.")
 
-    colunas_funcao = [nome for nome in colunas if nome not in COLUNAS_FIXAS_PLANILHA]
+    # cada coluna de funcao vira o nome canonico (funcao_da_vaga): uma planilha
+    # antiga com "Eletricista" cai na mesma funcao que "ELETRICISTA". Duas
+    # colunas que viram a mesma funcao sao erro — somar sem avisar esconderia
+    # quantidade digitada em dobro.
+    colunas_funcao = []
+    coluna_original_da_funcao = {}
+    for nome in colunas:
+        if nome in COLUNAS_FIXAS_PLANILHA:
+            continue
+        funcao = funcao_da_vaga(nome)
+        if funcao in coluna_original_da_funcao:
+            raise ValueError(
+                f"As colunas '{coluna_original_da_funcao[funcao]}' e '{nome}' são "
+                f"a mesma função ({funcao}). Junte as quantidades numa coluna só."
+            )
+        coluna_original_da_funcao[funcao] = nome
+        colunas_funcao.append(funcao)
     if not colunas_funcao:
         raise ValueError("A planilha precisa de ao menos uma coluna de função.")
 
@@ -1931,11 +1966,13 @@ def analisar_planilha_equipes(arquivo, session):
         alvos = {}
         celula_invalida = None
         for nome in colunas_funcao:
-            bruto = linha[colunas[nome]]
+            coluna = coluna_original_da_funcao[nome]
+            bruto = linha[colunas[coluna]]
             try:
                 alvos[nome] = quantidade_da_celula(bruto)
             except (TypeError, ValueError):
-                celula_invalida = (nome, bruto)
+                # a mensagem cita a coluna como esta no arquivo
+                celula_invalida = (coluna, bruto)
                 break
         if celula_invalida:
             nome, bruto = celula_invalida
@@ -2054,7 +2091,7 @@ def analisar_planilha_equipes(arquivo, session):
         for composicao in equipe.composicoes:
             if eh_extra(composicao):
                 continue
-            chave = (tipo_equipe_da_vaga(composicao), str(composicao.FUNÇÃO_ER).strip())
+            chave = (tipo_equipe_da_vaga(composicao), funcao_da_vaga(composicao.FUNÇÃO_ER))
             atual.setdefault(chave, []).append(composicao)
 
         # disciplinas que sumiram do arquivo viram alvo 0: e assim que trocar o
@@ -2312,7 +2349,7 @@ def aplicar_planilha_equipes():
                 for _ in range(quantidade):
                     session.add(ComposicaoEquipe(
                         equipe_id=equipe_id,
-                        FUNÇÃO_ER=funcao,
+                        FUNÇÃO_ER=funcao_da_vaga(funcao),
                         ESTRUTURA=item["tipo"],
                         SETOR=item.get("setor"),
                         SUPERVISOR=item.get("supervisor"),
@@ -2370,7 +2407,7 @@ def criar_vaga():
         return jsonify({"erro": "Dados não enviados."}), 400
 
     equipe_id = dados.get("equipe_id")
-    funcao_er = str(dados.get("funcao_er", "")).strip()
+    funcao_er = funcao_da_vaga(dados.get("funcao_er", ""))
     estrutura = str(dados.get("estrutura", "")).strip()
     setor = str(dados.get("setor", "")).strip() or None
     supervisor = str(dados.get("supervisor", "")).strip() or None
@@ -2971,7 +3008,7 @@ def adicionar_folguista_extra(equipe_id):
     if not dados:
         return jsonify({"erro": "Dados não enviados."}), 400
 
-    funcao_er = str(dados.get("funcao_er", "")).strip()
+    funcao_er = funcao_da_vaga(dados.get("funcao_er", ""))
     chapa = str(dados.get("chapa", "")).strip()
     setor = str(dados.get("setor", "")).strip().upper()
     # disciplina (TIPO EQUIPE) da vaga extra: e ela que a liga aos filtros de tipo
