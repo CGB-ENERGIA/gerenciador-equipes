@@ -283,12 +283,13 @@
                       <div
                         class="row items-center text-center text-caption text-grey-7 text-weight-medium q-pb-sm"
                       >
-                        <div class="col-12 col-sm-2">CHAPA</div>
+                        <div class="col-12 col-sm-1">CHAPA</div>
                         <div class="col-12 col-sm-3">Colaborador</div>
                         <div class="col-12 col-sm-2">Função cadastrada</div>
                         <div class="col-12 col-sm-2">Vaga</div>
                         <div class="col-12 col-sm-1">Equipe</div>
-                        <div class="col-12 col-sm-2">Status</div>
+                        <div class="col-12 col-sm-1">Status</div>
+                        <div class="col-12 col-sm-2">Ações</div>
                       </div>
 
                       <div v-if="!vagasFiltradas(equipe).length" class="text-grey-7">
@@ -301,7 +302,7 @@
                         class="row items-center text-center q-py-sm"
                         :class="{ 'linha-encontrada': vagaCasaComBusca(vaga) }"
                       >
-                        <div class="col-12 col-sm-2 text-caption">
+                        <div class="col-12 col-sm-1 text-caption">
                           {{ vaga.colaborador?.chapa || '-' }}
                         </div>
 
@@ -325,25 +326,24 @@
 
                         <div class="col-12 col-sm-2 text-weight-medium">
                           {{ vaga.funcao_er || 'Não informada' }}
+                          <div v-if="vaga.eh_extra">
+                            <q-chip
+                              color="amber-8"
+                              text-color="white"
+                              size="sm"
+                              icon="star"
+                              class="q-ma-none"
+                            >
+                              EXTRA
+                            </q-chip>
+                          </div>
                         </div>
 
                         <div class="col-12 col-sm-1 text-caption">
                           {{ vaga.tipo || '-' }}
                         </div>
 
-                        <div
-                          class="col-12 col-sm-2 flex justify-center items-center"
-                        >
-                          <q-chip
-                            v-if="vaga.eh_extra"
-                            color="amber-8"
-                            text-color="white"
-                            size="sm"
-                            icon="star"
-                          >
-                            EXTRA
-                          </q-chip>
-
+                        <div class="col-12 col-sm-1 flex justify-center items-center">
                           <q-chip
                             v-if="vaga.colaborador"
                             color="positive"
@@ -361,7 +361,10 @@
                           >
                             LIVRE
                           </q-chip>
+                        </div>
 
+                        <!-- botões sempre numa linha, alinhados entre as vagas -->
+                        <div class="col-12 col-sm-2 acoes-vaga">
                           <template v-if="vaga.colaborador">
                             <q-btn
                               flat
@@ -369,7 +372,6 @@
                               dense
                               :color="vaga.colaborador.observacao ? 'amber-9' : 'grey-7'"
                               icon="edit_note"
-                              class="q-ml-sm"
                               aria-label="Observação do colaborador"
                               @click="abrirObservacao(vaga.colaborador)"
                             >
@@ -384,7 +386,6 @@
                               dense
                               color="primary"
                               icon="swap_horiz"
-                              class="q-ml-sm"
                               aria-label="Trocar colaborador"
                               @click="abrirEdicaoAlocacao(vaga)"
                             />
@@ -396,7 +397,6 @@
                               dense
                               color="negative"
                               icon="person_remove"
-                              class="q-ml-sm"
                               aria-label="Remover colaborador"
                               :loading="removendoComposicaoId === vaga.id"
                               :disable="removendoComposicaoId !== null"
@@ -411,7 +411,6 @@
                             dense
                             color="primary"
                             icon="person_add"
-                            class="q-ml-sm"
                             aria-label="Alocar colaborador"
                             @click="abrirAlocacaoParaVaga(equipe, vaga)"
                           />
@@ -423,7 +422,6 @@
                             dense
                             color="negative"
                             icon="delete"
-                            class="q-ml-sm"
                             aria-label="Excluir vaga"
                             :loading="removendoComposicaoId === vaga.id"
                             :disable="removendoComposicaoId !== null"
@@ -2934,6 +2932,15 @@ watch(
 </script>
 
 <style scoped>
+/* ações da vaga: uma linha só, sem quebrar, mesma posição em todas as vagas */
+.acoes-vaga {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  padding-left: 12px;
+  gap: 4px;
+}
 /* observação livre do colaborador (ex.: férias) — tom de "lembrete" */
 .observacao-colaborador {
   display: inline-flex;

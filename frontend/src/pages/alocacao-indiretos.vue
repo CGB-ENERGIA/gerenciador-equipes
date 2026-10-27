@@ -276,7 +276,11 @@
                             </q-item-section>
 
                             <q-item-section>
-                              <q-item-label class="text-weight-medium">
+                              <q-item-label
+                                v-caber-na-linha
+                                class="text-weight-medium"
+                                :title="pessoa.nome"
+                              >
                                 {{ pessoa.nome }}
                               </q-item-label>
                               <q-item-label v-if="pessoa.alocacao.observacao" caption>
@@ -860,6 +864,38 @@ function responsavelPorChapa(chapa) {
 }
 
 // Primeiro e segundo nome ("CAMILA CORREA ARAUJO" -> "CAMILA CORREA")
+// v-caber-na-linha: diminui a fonte do texto (até 70% do tamanho normal) para
+// ele caber numa linha só; acompanha a largura do cartão. Se nem assim
+// couber, corta com reticências.
+const REDUCAO_MAXIMA = 0.7
+
+function caberNaLinha(el) {
+  el.style.fontSize = ''
+  const normal = parseFloat(getComputedStyle(el).fontSize)
+  let tamanho = normal
+  while (el.scrollWidth > el.clientWidth && tamanho > normal * REDUCAO_MAXIMA) {
+    tamanho -= 0.5
+    el.style.fontSize = `${tamanho}px`
+  }
+}
+
+const vCaberNaLinha = {
+  mounted(el) {
+    el.style.whiteSpace = 'nowrap'
+    el.style.overflow = 'hidden'
+    el.style.textOverflow = 'ellipsis'
+    caberNaLinha(el)
+    el._observador = new ResizeObserver(() => caberNaLinha(el))
+    el._observador.observe(el)
+  },
+  updated(el) {
+    caberNaLinha(el)
+  },
+  unmounted(el) {
+    el._observador?.disconnect()
+  }
+}
+
 function nomeCurto(nome) {
   return String(nome || '').trim().split(/\s+/).slice(0, 2).join(' ')
 }
@@ -1559,14 +1595,14 @@ async function aplicarPlanilha() {
 
 .chapa-pessoa {
   font-family: var(--fonte-ui);
-  font-size: 0.8rem;
+  font-size: 0.88rem;
   font-weight: 700;
   color: var(--marca-clara);
   font-variant-numeric: tabular-nums;
 }
 
 .funcao-pessoa {
-  max-width: 200px;
+  max-width: 260px;
   margin-right: 4px;
   padding: 2px 8px;
   border-radius: 6px;
@@ -1575,7 +1611,7 @@ async function aplicarPlanilha() {
   text-overflow: ellipsis;
   background: var(--realce);
   font-family: var(--fonte-ui);
-  font-size: 0.74rem;
+  font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--marca);
@@ -1613,11 +1649,15 @@ async function aplicarPlanilha() {
   flex-direction: column;
   line-height: 1.1;
   text-align: left;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
 }
 
 /* nomes um pouco menores que o padrão da lista, para harmonizar com as etiquetas */
-.lista-pessoas .text-weight-medium,
+/* nomes nos cartões de setor; a lista "Sem setor" fica mais compacta */
+.lista-pessoas .text-weight-medium {
+  font-size: 1.1rem;
+}
+
 .lista-sem-setor .text-weight-medium {
   font-size: 0.82rem;
 }
@@ -1635,7 +1675,7 @@ async function aplicarPlanilha() {
 
 .responsavel-chip__texto small {
   color: var(--tinta-fraca);
-  font-size: 0.7rem;
+  font-size: 0.76rem;
 }
 
 .responsavel-chip__editar {
