@@ -27,6 +27,7 @@ from database.database import SessionLocal
 from database.depara import DE_PARA_SECAO, secao_tratada, tipos_ccusto_dos_rateios
 from database.importacao.importar_colaboradores import (
     COLUNAS_OBRIGATORIAS as COLUNAS_OBRIGATORIAS_COLABORADORES,
+    codigo_grupo_ccusto,
     processar_planilha_colaboradores,
 )
 from database.models import (
@@ -3492,7 +3493,7 @@ def validar_cadastro_colaborador(dados):
         if not isinstance(item, dict):
             continue
         rateio = str(item.get("rateio") or "").strip()
-        grupo = str(item.get("grpccusto") or "").strip() or None
+        grupo = codigo_grupo_ccusto(item.get("grpccusto"))
         if rateio and (rateio, grupo) not in rateios:
             rateios.append((rateio, grupo))
 
@@ -3780,7 +3781,7 @@ def validar_edicao_massa(dados):
             if not isinstance(item, dict):
                 continue
             rateio = str(item.get("rateio") or "").strip()
-            grupo = str(item.get("grpccusto") or "").strip() or None
+            grupo = codigo_grupo_ccusto(item.get("grpccusto"))
             if rateio and (rateio, grupo) not in rateios:
                 rateios.append((rateio, grupo))
         if not rateios:

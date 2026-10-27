@@ -1,5 +1,7 @@
-import pandas as pd
+import re
 from pathlib import Path
+
+import pandas as pd
 
 from database.database import SessionLocal
 from database.depara import secao_tratada, tipos_ccusto_dos_rateios
@@ -13,6 +15,29 @@ COLUNAS_OBRIGATORIAS = (
 )
 
 TIPOS_FUNCAO_VALIDOS = ("DIRETO", "INDIRETO")
+
+
+def codigo_grupo_ccusto(valor):
+    """GRPCCUSTO como texto, sempre com 3 casas depois do ponto ("2.170").
+
+    No Excel o código costuma estar gravado como NÚMERO e só aparece com três
+    casas por causa da formatação da célula: 2.170 e 2.17 são o mesmo número,
+    então a leitura devolvia "2.17" (e "2.100" viraria "2.1"). Os códigos de
+    grupo têm sempre 3 dígitos depois do ponto (2.127, 2.169, 2.170...), então
+    completar com zeros à direita devolve o código original. Vale para o que
+    vem da planilha e para o que vem das telas.
+    """
+    if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+        return None
+    if isinstance(valor, (int, float)) and not isinstance(valor, bool):
+        return f"{float(valor):.3f}"
+    texto = str(valor).strip()
+    if not texto:
+        return None
+    if re.fullmatch(r"\d+\.\d{1,2}", texto):
+        inteiro, decimais = texto.split(".")
+        return f"{inteiro}.{decimais.ljust(3, '0')}"
+    return texto
 
 
 def normalizar_linha_colaborador(linha):
@@ -56,8 +81,7 @@ def normalizar_linha_colaborador(linha):
     if rateio_funcionario == "":
         rateio_funcionario = None
 
-    grpccusto = linha.get("GRPCCUSTO")
-    grpccusto = None if pd.isna(grpccusto) else str(grpccusto).strip()
+    grpccusto = codigo_grupo_ccusto(linha.get("GRPCCUSTO"))
 
     def texto(valor):
         if valor is None or (isinstance(valor, float) and pd.isna(valor)):

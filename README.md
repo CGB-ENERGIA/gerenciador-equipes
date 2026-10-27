@@ -69,6 +69,7 @@ nada. Cada arquivo traz no cabeçalho o que conferir antes de rodar.
 - `014_add_afastado_por.sql`: quem marcou o colaborador como afastado e quando (coluna "Afastado por" nas tabelas). **Rode antes de publicar o código**: sem essas colunas, as consultas de colaboradores falham.
 - `015_add_tipo_funcao_alterado.sql`: quem trocou o colaborador entre DIRETO e INDIRETO pela tela, e quando.
 - `016_padronizar_funcao_vaga.sql`: deixa a função das vagas em maiúsculas e unifica "Munqueiro/Motorista" em "MOTORISTA". O app grava sempre nesse formato (`funcao_da_vaga` no `app.py`).
+- `017_corrigir_grpccusto_zero_final.sql`: devolve o zero final do GRPCCUSTO ("2.17" → "2.170"), perdido quando o Excel guardava o código como número. O app grava sempre com 3 casas (`codigo_grupo_ccusto` em `database/importacao/importar_colaboradores.py`).
 
 ## Acesso
 

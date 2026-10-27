@@ -127,3 +127,51 @@ def test_edicao_em_massa_invalida(dados, trecho):
 
     assert alteracoes is None and rateios is None
     assert trecho in erro
+
+
+# ============================================================
+# GRPCCUSTO: zero final perdido quando o Excel guarda como número
+# ============================================================
+
+from database.importacao.importar_colaboradores import (  # noqa: E402
+    codigo_grupo_ccusto,
+    normalizar_linha_colaborador,
+)
+
+
+@pytest.mark.parametrize(
+    ("valor", "esperado"),
+    [
+        (2.17, "2.170"),      # célula numérica 2.170 lida pelo pandas
+        (2.127, "2.127"),
+        (2.1, "2.100"),
+        ("2.17", "2.170"),    # já gravado como texto sem o zero
+        ("2.169", "2.169"),
+        (" 2.170 ", "2.170"),
+        ("A", "A"),           # texto livre passa como está
+        ("", None),
+        (None, None),
+        (float("nan"), None),
+    ],
+)
+def test_codigo_grupo_ccusto_mantem_tres_casas(valor, esperado):
+    assert codigo_grupo_ccusto(valor) == esperado
+
+
+def test_planilha_com_grpccusto_numerico_grava_2_170():
+    dados, erro = normalizar_linha_colaborador({
+        "CHAPA": 12345, "NOME": "FULANO", "TIPO_FUNÇÃO": "DIRETO",
+        "RATEIO_FUNCIONARIO": "2.170.05", "GRPCCUSTO": 2.17,
+    })
+
+    assert erro is None
+    assert dados["grpccusto"] == "2.170"
+
+
+def test_tela_com_grpccusto_sem_zero_grava_2_170():
+    _, rateios, erro = validar_cadastro_colaborador(corpo(rateios=[
+        {"rateio": "2.170.05", "grpccusto": "2.17"},
+    ]))
+
+    assert erro is None
+    assert rateios == [("2.170.05", "2.170")]
