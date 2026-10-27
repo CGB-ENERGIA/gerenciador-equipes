@@ -207,14 +207,14 @@
                       color="negative"
                       icon="person_remove"
                       label="Remover todas as alocações"
-                      :disable="!colaboradoresAlocados"
+                      :disable="!vagasOcupadas"
                       :loading="limpandoAlocacoes"
                       @click="removerTodasAlocacoes"
                     >
                       <q-tooltip>
                         {{
-                          colaboradoresAlocados
-                            ? `Libera as ${colaboradoresAlocados} vagas ocupadas de todas as bases`
+                          vagasOcupadas
+                            ? `Libera as ${vagasOcupadas} vagas ocupadas de todas as bases`
                             : 'Nenhum colaborador alocado'
                         }}
                       </q-tooltip>
@@ -553,6 +553,22 @@
                         EQUIPE: {{ equipeAtualDoColaborador(colaborador.chapa) }}
                       </q-item-label>
 
+                      <!-- indiretos: vem da página Indiretos -->
+                      <q-item-label
+                        v-else-if="ehIndireto(colaborador) && colaborador.setor_indireto"
+                        caption
+                        class="text-weight-medium"
+                      >
+                        SETOR: {{ colaborador.setor_indireto }}
+                      </q-item-label>
+                      <q-item-label
+                        v-else-if="ehIndireto(colaborador) && colaborador.lidera_indiretos"
+                        caption
+                        class="text-weight-medium"
+                      >
+                        RESPONSÁVEL NA PÁGINA INDIRETOS
+                      </q-item-label>
+
                       <q-item-label v-if="colaborador.afastado" caption>
                         Justificativa: {{ colaborador.justificativa_afastamento || 'Não informada' }}
                       </q-item-label>
@@ -574,7 +590,7 @@
 
                     <q-item-section side class="text-center">
                       <q-chip
-                        v-if="colaborador.alocado"
+                        v-if="estaAlocado(colaborador)"
                         color="positive"
                         text-color="white"
                         size="sm"
@@ -1918,8 +1934,8 @@ const colaboradoresFiltrados = computed(() => {
   return colaboradoresDoTipo.value.filter(colaborador => {
     const correspondeStatus =
       statusColaborador.value === 'TODOS' ||
-      (statusColaborador.value === 'ALOCADOS' && colaborador.alocado) ||
-      (statusColaborador.value === 'LIVRES' && !colaborador.alocado && !colaborador.afastado) ||
+      (statusColaborador.value === 'ALOCADOS' && estaAlocado(colaborador)) ||
+      (statusColaborador.value === 'LIVRES' && !estaAlocado(colaborador) && !colaborador.afastado) ||
       (statusColaborador.value === 'AFASTADOS' && colaborador.afastado)
 
     const correspondeTexto =
@@ -1942,16 +1958,34 @@ const colaboradoresFiltrados = computed(() => {
 // CONTADORES
 // ============================================================
 
+// Direto: alocado = ocupa uma vaga de equipe. Indireto: também quem está
+// num setor da página Indiretos ou é responsável por alguém lá (a mesma
+// regra daquela página).
+function ehIndireto(colaborador) {
+  return colaborador.tipo_funcao === 'INDIRETO'
+}
+
+function estaAlocado(colaborador) {
+  return (
+    Boolean(colaborador.alocado) ||
+    (ehIndireto(colaborador) &&
+      (Boolean(colaborador.setor_indireto) || Boolean(colaborador.lidera_indiretos)))
+  )
+}
+
 const colaboradoresAlocados = computed(() => {
-  return colaboradoresDoTipo.value.filter(colaborador => colaborador.alocado)
-    .length
+  return colaboradoresDoTipo.value.filter(estaAlocado).length
 })
 
 const colaboradoresLivres = computed(() => {
   return colaboradoresDoTipo.value.filter(
-    colaborador => !colaborador.alocado && !colaborador.afastado
+    colaborador => !estaAlocado(colaborador) && !colaborador.afastado
   ).length
 })
+
+// vagas de equipe ocupadas em todas as bases — o que "Remover todas as
+// alocações" libera (não inclui os indiretos)
+const vagasOcupadas = computed(() => colaboradores.value.filter(c => c.alocado).length)
 
 const colaboradoresAfastados = computed(() => {
   return colaboradoresDoTipo.value.filter(colaborador => colaborador.afastado)
@@ -2819,7 +2853,7 @@ async function excluirVagaExtra(equipe, vaga) {
 async function removerTodasAlocacoes() {
   if (
     !await confirmar(
-      `Remover as ${colaboradoresAlocados.value} alocações de TODAS as bases?
+      `Remover as ${vagasOcupadas.value} alocações de TODAS as bases?
 
 ` +
         'As vagas continuam cadastradas — só os colaboradores saem delas. ' +

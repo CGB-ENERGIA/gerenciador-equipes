@@ -3408,11 +3408,16 @@ def obter_colaboradores():
             .all()
         )
         chapas_alocadas = chapas_alocadas_do_banco(session)
+        # página Indiretos: onde cada indireto está e quem é responsável por
+        # alguém (conta como alocado lá, mesmo sem setor próprio)
+        indiretos = {a.CHAPA: a for a in session.query(AlocacaoIndireto).all()}
+        lideres_indiretos = {a.RESPONSAVEL_CHAPA for a in indiretos.values() if a.RESPONSAVEL_CHAPA}
 
         resultado = []
         for colaborador in colaboradores:
             chapa = str(colaborador.CHAPA).strip()
             dados_base = base_da_secao(colaborador.SEÇÃO)
+            alocacao_indireto = indiretos.get(colaborador.CHAPA)
 
             resultado.append({
                 "chapa": chapa,
@@ -3430,6 +3435,11 @@ def obter_colaboradores():
                 **dados_afastamento(colaborador),
                 **dados_tipo_funcao(colaborador),
                 **dados_observacao(colaborador),
+                "setor_indireto": (
+                    f"{alocacao_indireto.SETOR} · {alocacao_indireto.BASE}"
+                    if alocacao_indireto else ""
+                ),
+                "lidera_indiretos": colaborador.CHAPA in lideres_indiretos,
             })
 
         return jsonify(resultado)
