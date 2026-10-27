@@ -284,3 +284,28 @@ class TentativaLogin(Base):
     USUARIO = Column(String, nullable=False)
     IP = Column(String, nullable=True)
     CRIADO_EM = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class AlocacaoIndireto(Base):
+    """Onde um colaborador INDIRETO trabalha: setor, base e responsável.
+
+    Controle nominal (sem vagas): uma linha por indireto. O responsável é por
+    pessoa e fica como CHAPA em texto — ver migrations/018.
+    """
+
+    __tablename__ = "alocacoes_indiretos"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    CHAPA = Column(
+        String,
+        ForeignKey("colaboradores.CHAPA", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+    SETOR = Column(String, nullable=False)
+    BASE = Column(String, nullable=False)
+    RESPONSAVEL_CHAPA = Column(String, nullable=True)
+    OBSERVACAO = Column(String, nullable=True)
+    ALOCADO_POR = Column(String, nullable=True)
+    ALOCADO_EM = Column(DateTime(timezone=True), server_default=func.now())

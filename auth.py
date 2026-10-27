@@ -547,6 +547,21 @@ def exige_permissao(permissao):
     return decorador
 
 
+def exige_administrador(funcao):
+    """Só o Administrador (nível que ignora vínculos). Usado em páginas em
+    liberação gradual, antes de terem permissão própria por nível."""
+    @wraps(funcao)
+    def protegida(*args, **kwargs):
+        usuario = usuario_logado()
+        if not usuario:
+            return jsonify({"erro": "Faça login para continuar."}), 401
+        if not usuario.get("ignora_vinculos"):
+            return jsonify({"erro": "Disponível apenas para o Administrador."}), 403
+        return funcao(*args, **kwargs)
+
+    return protegida
+
+
 # ============================================================
 # APLICAR VÍNCULOS
 # ============================================================

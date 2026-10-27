@@ -321,7 +321,9 @@
                         :loading="exportandoPessoas"
                         @click="exportarPessoasExcel"
                       >
-                        <q-tooltip>Exportar alocadas e não alocadas (Excel)</q-tooltip>
+                        <q-tooltip>
+                          Exportar base: alocadas, não alocadas, indiretos e cadastro (Excel)
+                        </q-tooltip>
                       </q-btn>
                     </div>
 
@@ -472,8 +474,13 @@
                       label="Exportar Base"
                       dense
                       :disable="!composicaoConsolidada.length"
-                      @click="abrirDetalhes('')"
-                    />
+                      :loading="exportandoPessoas"
+                      @click="exportarPessoasExcel"
+                    >
+                      <q-tooltip>
+                        Alocadas, não alocadas, indiretos e cadastro completo (Excel)
+                      </q-tooltip>
+                    </q-btn>
                   </q-card-section>
 
                   <q-separator />
@@ -1875,8 +1882,11 @@ function exportarNaoAlocados() {
 
 const exportandoPessoas = ref(false)
 
-// Um arquivo só, duas abas (Alocadas / Não alocadas), respeitando os filtros
-// atuais da tela (bases visíveis).
+// O mesmo arquivo nos dois botões (ícone do Excel em "Pessoas alocadas" e
+// "Exportar Base" da Composição): alocadas e não alocadas respeitando os
+// filtros da tela, mais Indiretos e o cadastro inteiro (ver
+// exportar_pessoas_resumo no app.py). A tela manda só quem está em cada
+// lista; os detalhes vêm do banco.
 async function exportarPessoasExcel() {
   exportandoPessoas.value = true
 
@@ -1919,7 +1929,7 @@ async function exportarPessoasExcel() {
     const link = document.createElement('a')
 
     link.href = url
-    link.download = 'pessoas-alocadas-e-nao-alocadas.xlsx'
+    link.download = 'base-resumo.xlsx'
     link.click()
     URL.revokeObjectURL(url)
   } catch (e) {

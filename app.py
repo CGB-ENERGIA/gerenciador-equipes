@@ -37,12 +37,18 @@ from database.models import (
     ComposicaoEquipe,
     Equipe,
     MembroEquipe,
+    AlocacaoIndireto,
     Rateio,
     TentativaLogin,
     Usuario,
 )
 
 app = Flask(__name__, static_folder=None, template_folder=None)
+
+# rotas da página Indiretos (alocação nominal do pessoal indireto)
+from indiretos import bp as bp_indiretos  # noqa: E402
+
+app.register_blueprint(bp_indiretos)
 
 # Assina o cookie de sessao. Sem um valor fixo no .env, todo reinicio do
 # servidor derruba quem estava logado — por isso o aviso em vez do silencio.
@@ -965,66 +971,181 @@ def obter_pessoas_nao_alocadas():
 @app.route("/api/exportar-pessoas", methods=["POST"])
 @exige_permissao(auth.VER_RESUMO)
 def exportar_pessoas_resumo():
-    """Um xlsx com duas abas -- "Alocadas" e "Não alocadas" -- das linhas que a
-    tela do Resumo está mostrando (já com os filtros aplicados). As linhas vêm
-    da própria tela: assim o arquivo bate com o que a pessoa está vendo."""
+    """Base completa do Resumo, num xlsx com 4 abas — o MESMO arquivo nos dois
+    botões da tela (ícone do Excel em "Pessoas alocadas" e "Exportar Base"
+    da Composição):
+
+    - Pessoas alocadas / Pessoas não alocadas: as pessoas que a tela está
+      mostrando (já com os filtros). A tela manda só QUEM; o resto (vaga,
+      equipe, responsáveis, cadastro, rateio, quem justificou o afastamento
+      e quando) vem do banco, para o arquivo ter tudo.
+    - Indiretos: quem está alocado na página Indiretos (setor, base,
+      responsável).
+    - Colaboradores: o cadastro inteiro.
+    """
     dados = corpo_json() or {}
 
-    abas = [
-        ("Alocadas", dados.get("alocadas"), [
-            ("EQUIPE", "equipe"),
-            ("CHAPA", "chapa"),
-            ("COLABORADOR", "nome"),
-            ("FUNÇÃO NO SISTEMA", "funcao_sistema"),
-            ("VAGA", "vaga"),
-            ("SEÇÃO", "secao"),
-            ("TIPO CCUSTO", "tipo_ccusto"),
-            ("BASE", "base"),
-            ("AFASTADO", "afastado"),
-        ]),
-        ("Não alocadas", dados.get("nao_alocadas"), [
-            ("CHAPA", "chapa"),
-            ("COLABORADOR", "nome"),
-            ("FUNÇÃO NO SISTEMA", "funcao"),
-            ("SEÇÃO", "secao"),
-            ("TIPO CCUSTO", "tipo_ccusto"),
-            ("BASE", "base"),
-            ("AFASTADO", "afastado"),
-            ("JUSTIFICATIVA", "justificativa"),
-        ]),
-    ]
+    def chapas_da_lista(chave):
+        chapas = []
+        for linha in dados.get(chave) or []:
+            if isinstance(linha, dict):
+                chapa = str(linha.get("chapa") or "").strip()
+                if chapa and chapa not in chapas:
+                    chapas.append(chapa)
+        return chapas
 
+    chapas_alocadas = chapas_da_lista("alocadas")
+    chapas_nao_alocadas = chapas_da_lista("nao_alocadas")
+
+    session = SessionLocal()
     try:
+        colaboradores = session.query(Colaborador).order_by(Colaborador.NOME).all()
+        por_chapa = {c.CHAPA: c for c in colaboradores}
+
+        rateios = {}
+        for chapa, rateio, grupo in session.query(
+            Rateio.CHAPA, Rateio.RATEIO_FUNCIONARIO, Rateio.GRPCCUSTO
+        ).all():
+            item = rateios.setdefault(chapa, {"rateios": [], "grupos": []})
+            if rateio and rateio not in item["rateios"]:
+                item["rateios"].append(rateio)
+            if grupo and grupo not in item["grupos"]:
+                item["grupos"].append(grupo)
+
+        def rateio_de(chapa, campo):
+            return " / ".join(rateios.get(chapa, {}).get(campo, []))
+
+        # CHAPA -> vaga que ocupa (com a equipe)
+        vagas = {
+            membro.CHAPA: membro.composicao
+            for membro in session.query(MembroEquipe)
+            .options(joinedload(MembroEquipe.composicao).joinedload(ComposicaoEquipe.equipe))
+            .all()
+        }
+
+        def cadastro(colaborador):
+            return {
+                "FUNÇÃO NO CADASTRO": colaborador.FUNÇÃO or "",
+                "SEÇÃO": colaborador.SEÇÃO_TRATADA or colaborador.SEÇÃO or "",
+                "TIPO CCUSTO": colaborador.TIPO_CCUSTO or "",
+                "RATEIO_FUNCIONARIO": rateio_de(colaborador.CHAPA, "rateios"),
+                "GRPCCUSTO": rateio_de(colaborador.CHAPA, "grupos"),
+                "SITUAÇÃO": colaborador.SITUAÇÃO or "",
+                "ADMISSÃO": data_br(colaborador.ADMISSÃO),
+            }
+
+        # ---------- Pessoas alocadas
+        alocadas = []
+        for chapa in chapas_alocadas:
+            colaborador = por_chapa.get(chapa)
+            vaga = vagas.get(chapa)
+            if not colaborador or not vaga:
+                continue
+            equipe = vaga.equipe
+            alocadas.append({
+                "BASE": equipe.BASE if equipe else "",
+                "EQUIPE": equipe.PREFIXO if equipe else "",
+                "TIPO EQUIPE": tipo_equipe_da_vaga(vaga),
+                "FUNÇÃO DA VAGA": vaga.FUNÇÃO_ER or "",
+                "VAGA": "EXTRA" if eh_extra(vaga) else "PADRÃO",
+                "SETOR": vaga.SETOR or "",
+                "SUPERVISOR": vaga.SUPERVISOR or "",
+                "COORDENADOR": vaga.COORDENADOR or "",
+                "CHAPA": chapa,
+                "COLABORADOR": colaborador.NOME or "",
+                **cadastro(colaborador),
+            })
+
+        # ---------- Pessoas não alocadas
+        nao_alocadas = []
+        for chapa in chapas_nao_alocadas:
+            colaborador = por_chapa.get(chapa)
+            if not colaborador:
+                continue
+            nao_alocadas.append({
+                "CHAPA": chapa,
+                "COLABORADOR": colaborador.NOME or "",
+                "BASE (CADASTRO)": base_da_secao(colaborador.SEÇÃO)["codigo"],
+                **cadastro(colaborador),
+                "AFASTADO": "SIM" if colaborador.AFASTADO else "",
+                "JUSTIFICATIVA": colaborador.JUSTIFICATIVA_AFASTAMENTO or "",
+                "JUSTIFICADO POR": colaborador.AFASTADO_POR or "",
+                "DATA DA JUSTIFICATIVA": data_br(colaborador.AFASTADO_EM),
+            })
+
+        # ---------- Indiretos (página Indiretos)
+        indiretos = []
+        try:
+            alocacoes_indiretos = (
+                session.query(AlocacaoIndireto)
+                .order_by(AlocacaoIndireto.SETOR, AlocacaoIndireto.BASE)
+                .all()
+            )
+        except Exception as erro:
+            # tabela ainda não criada (migrations/018): o Resumo continua
+            # exportando, só a aba Indiretos sai vazia
+            session.rollback()
+            print(f"[AVISO] exportar_pessoas_resumo sem indiretos: {erro}")
+            alocacoes_indiretos = []
+        for alocacao in alocacoes_indiretos:
+            colaborador = por_chapa.get(alocacao.CHAPA)
+            responsavel = por_chapa.get(alocacao.RESPONSAVEL_CHAPA)
+            indiretos.append({
+                "SETOR": alocacao.SETOR,
+                "BASE": alocacao.BASE,
+                "CHAPA": alocacao.CHAPA,
+                "COLABORADOR": colaborador.NOME if colaborador else "",
+                "FUNÇÃO NO CADASTRO": (colaborador.FUNÇÃO or "") if colaborador else "",
+                "CHAPA RESPONSÁVEL": alocacao.RESPONSAVEL_CHAPA or "",
+                "RESPONSÁVEL": responsavel.NOME if responsavel else "",
+                "OBSERVAÇÃO": alocacao.OBSERVACAO or "",
+                "ALOCADO POR": alocacao.ALOCADO_POR or "",
+                "ALOCADO EM": data_br(alocacao.ALOCADO_EM),
+            })
+        indiretos.sort(key=lambda l: (l["SETOR"], l["BASE"], l["COLABORADOR"]))
+
+        # ---------- Colaboradores (cadastro inteiro)
+        df_colaboradores = montar_consulta_colaboradores(session, colaboradores)
+        df_colaboradores["AFASTADO"] = ["SIM" if c.AFASTADO else "" for c in colaboradores]
+        df_colaboradores["ADMISSÃO"] = [data_br(c.ADMISSÃO) for c in colaboradores]
+
+        colunas_cadastro = [
+            "FUNÇÃO NO CADASTRO", "SEÇÃO", "TIPO CCUSTO", "RATEIO_FUNCIONARIO",
+            "GRPCCUSTO", "SITUAÇÃO", "ADMISSÃO",
+        ]
+        abas = [
+            ("Pessoas alocadas", pd.DataFrame(alocadas, columns=[
+                "BASE", "EQUIPE", "TIPO EQUIPE", "FUNÇÃO DA VAGA", "VAGA", "SETOR",
+                "SUPERVISOR", "COORDENADOR", "CHAPA", "COLABORADOR", *colunas_cadastro,
+            ])),
+            ("Pessoas não alocadas", pd.DataFrame(nao_alocadas, columns=[
+                "CHAPA", "COLABORADOR", "BASE (CADASTRO)", *colunas_cadastro,
+                "AFASTADO", "JUSTIFICATIVA", "JUSTIFICADO POR", "DATA DA JUSTIFICATIVA",
+            ])),
+            ("Indiretos", pd.DataFrame(indiretos, columns=[
+                "SETOR", "BASE", "CHAPA", "COLABORADOR", "FUNÇÃO NO CADASTRO",
+                "CHAPA RESPONSÁVEL", "RESPONSÁVEL", "OBSERVAÇÃO", "ALOCADO POR", "ALOCADO EM",
+            ])),
+            ("Colaboradores", df_colaboradores),
+        ]
+
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            for nome_aba, linhas, colunas in abas:
-                if not isinstance(linhas, list):
-                    linhas = []
-                registros = []
-                for linha in linhas:
-                    if not isinstance(linha, dict):
-                        continue
-                    registro = {}
-                    for titulo, campo in colunas:
-                        valor = linha.get(campo, "")
-                        if campo == "afastado":
-                            valor = "SIM" if valor else ""
-                        registro[titulo] = "" if valor is None else str(valor)
-                    registros.append(registro)
-
-                df = pd.DataFrame(registros, columns=[c[0] for c in colunas])
+            for nome_aba, df in abas:
                 df.to_excel(writer, index=False, sheet_name=nome_aba)
                 planilhas_estilo.estilizar_aba(writer.sheets[nome_aba], consulta=True)
                 planilhas_estilo.destacar_valor(writer.sheets[nome_aba], "AFASTADO", "SIM")
 
             planilhas_estilo.adicionar_instrucoes(
                 writer.book,
-                "Pessoas alocadas e não alocadas",
+                "Base do Resumo",
                 [
-                    ("O que é", "Exportação do Resumo com os filtros que estavam na tela no momento do download. É só consulta: o sistema não lê este arquivo de volta."),
-                    ("Alocadas", "Quem ocupa uma vaga, com a equipe e a vaga ocupada."),
-                    ("Não alocadas", "Quem está no quadro e não ocupa nenhuma vaga, com a justificativa quando está afastado."),
-                    ("AFASTADO", "Linhas marcadas com SIM aparecem destacadas em amarelo."),
+                    ("O que é", "Exportação do Resumo. É só consulta: o sistema não lê este arquivo de volta."),
+                    ("Pessoas alocadas", "Quem ocupa uma vaga, entre as pessoas que a tela mostrava com os filtros do momento: equipe, disciplina, vaga, setor, supervisor, coordenador e os dados do cadastro."),
+                    ("Pessoas não alocadas", "Quem está no quadro e não ocupa vaga (com os mesmos filtros), com o afastamento: justificativa, quem justificou e a data."),
+                    ("Indiretos", "Todos os indiretos alocados na página Indiretos: setor, base e responsável."),
+                    ("Colaboradores", "O cadastro inteiro, sem filtro."),
+                    ("AFASTADO", "Linhas com SIM aparecem destacadas em amarelo."),
                 ],
                 legenda=False,
             )
@@ -1037,11 +1158,29 @@ def exportar_pessoas_resumo():
                 ".spreadsheetml.sheet"
             ),
             as_attachment=True,
-            download_name="pessoas-alocadas-e-nao-alocadas.xlsx",
+            download_name="base-resumo.xlsx",
         )
     except Exception as erro:
         print(f"[ERRO] exportar_pessoas_resumo: {erro}")
         return jsonify({"erro": "Não foi possível gerar a planilha."}), 500
+    finally:
+        session.close()
+
+
+# horário de Brasília (o Maranhão não tem horário de verão): datas gravadas
+# em UTC aparecem na planilha no horário local
+FUSO_LOCAL = timezone(timedelta(hours=-3))
+
+
+def data_br(valor):
+    """Data (ou data e hora) no formato dd/mm/aaaa para as planilhas."""
+    if not valor:
+        return ""
+    if isinstance(valor, datetime):
+        if valor.tzinfo:
+            valor = valor.astimezone(FUSO_LOCAL)
+        return valor.strftime("%d/%m/%Y %H:%M")
+    return valor.strftime("%d/%m/%Y")
 
 
 @app.route("/api/pessoas-afastadas", methods=["GET"])

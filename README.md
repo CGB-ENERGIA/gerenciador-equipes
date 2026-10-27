@@ -18,6 +18,7 @@ Sistema para administrar equipes, vagas, colaboradores e alocações.
 | Banco de Dados | `frontend/src/pages/banco-dados.vue` | `ver_equipes` |
 | Cadastro de Vagas | `frontend/src/pages/cadastro-vagas.vue` | `gerenciar_vagas` |
 | Usuários | `frontend/src/pages/usuarios.vue` | `gerenciar_usuarios` |
+| Indiretos | `frontend/src/pages/alocacao-indiretos.vue` | só Administrador (em liberação gradual) |
 
 ## Configuração local
 
@@ -70,6 +71,7 @@ nada. Cada arquivo traz no cabeçalho o que conferir antes de rodar.
 - `015_add_tipo_funcao_alterado.sql`: quem trocou o colaborador entre DIRETO e INDIRETO pela tela, e quando.
 - `016_padronizar_funcao_vaga.sql`: deixa a função das vagas em maiúsculas e unifica "Munqueiro/Motorista" em "MOTORISTA". O app grava sempre nesse formato (`funcao_da_vaga` no `app.py`).
 - `017_corrigir_grpccusto_zero_final.sql`: devolve o zero final do GRPCCUSTO ("2.17" → "2.170"), perdido quando o Excel guardava o código como número. O app grava sempre com 3 casas (`codigo_grupo_ccusto` em `database/importacao/importar_colaboradores.py`).
+- `018_add_alocacoes_indiretos.sql`: tabela da página Indiretos (setor, base e responsável de cada indireto). **Rode antes de usar a página**; sem ela a página mostra erro e a aba Indiretos da exportação do Resumo sai vazia.
 
 ## Acesso
 
