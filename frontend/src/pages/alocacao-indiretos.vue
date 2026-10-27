@@ -1116,8 +1116,17 @@ const semSetorFiltrados = computed(() =>
 // Ordem das pessoas dentro de cada base: primeiro pelo cargo (a função que
 // contém o termo, ex. "AUXILIAR DE ALMOXARIFADO" -> AUXILIAR), as demais
 // depois, em ordem alfabética. COORDENADOR vem antes de SUPERVISOR por ser
-// o cargo acima na hierarquia.
-const ORDEM_CARGOS = ['COORDENADOR', 'SUPERVISOR', 'ANALISTA', 'ENCARREGADO', 'ASSISTENTE', 'AUXILIAR']
+// o cargo acima na hierarquia. A abreviação "SUP" (ex. "SUP OP SERV EXP E
+// MANUTENÇÃO") conta como SUPERVISOR; como palavra inteira, para não pegar
+// "SUPORTE".
+const ORDEM_CARGOS = [
+  /COORDENADOR/,
+  /SUPERVISOR|\bSUP\b/,
+  /ANALISTA/,
+  /ENCARREGADO/,
+  /ASSISTENTE/,
+  /AUXILIAR/
+]
 
 // maiúsculas e sem acento, para comparar textos
 function normalizarTexto(texto) {
@@ -1129,7 +1138,7 @@ function normalizarTexto(texto) {
 
 function ordemCargo(funcao) {
   const texto = normalizarTexto(funcao)
-  const posicao = ORDEM_CARGOS.findIndex(cargo => texto.includes(cargo))
+  const posicao = ORDEM_CARGOS.findIndex(cargo => cargo.test(texto))
   return posicao === -1 ? ORDEM_CARGOS.length : posicao
 }
 
