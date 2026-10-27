@@ -173,12 +173,36 @@
 
                   <q-card-section class="q-pb-sm">
                     <div class="row items-center no-wrap">
-                      <div class="col">
+                      <div>
                         <div class="cartao-setor__nome">{{ grupo.nome }}</div>
                         <div class="text-caption">
                           {{ grupo.bases.length }}
                           {{ grupo.bases.length === 1 ? 'base' : 'bases' }}
                         </div>
+                      </div>
+
+                      <div class="col q-px-md">
+                        <button
+                          v-if="grupo.responsavelUnico"
+                          type="button"
+                          class="responsavel-chip"
+                          @click="abrirTrocaResponsavel(grupo.responsavelUnico)"
+                        >
+                          <span v-if="grupo.responsavelUnico.responsavel" class="responsavel-chip__texto">
+                            <strong>{{ grupo.responsavelUnico.responsavel.nome }}</strong>
+                            <small>
+                              {{ grupo.responsavelUnico.responsavel.chapa }}
+                              <template v-if="grupo.responsavelUnico.responsavel.funcao">
+                                · {{ grupo.responsavelUnico.responsavel.funcao }}
+                              </template>
+                            </small>
+                          </span>
+                          <span v-else class="sem-responsavel">Definir responsável</span>
+                          <q-icon name="edit" size="14px" class="responsavel-chip__editar" />
+                          <q-tooltip>
+                            Responsável pelo setor inteiro · clique para trocar
+                          </q-tooltip>
+                        </button>
                       </div>
 
                       <div class="cartao-setor__contagem">
@@ -192,40 +216,54 @@
 
                   <div class="secoes-base">
                     <div v-for="secao in grupo.bases" :key="secao.base" class="secao-base">
-                      <div class="secao-base__cabecalho">
-                        <q-chip dense class="chip-base q-ml-none" icon="place">
-                          {{ secao.base }}
-                        </q-chip>
-                        <q-space />
-                        <span class="secao-base__contagem">{{ secao.total }}</span>
-                      </div>
-
+                      <!--
+                        O responsável fica na mesma linha da base (ou no
+                        cabeçalho do setor, quando é um só no setor todo). Se
+                        a base tem mais de um, os demais abrem uma linha
+                        própria (sem repetir a base) acima das suas pessoas.
+                      -->
                       <div
-                        v-for="time in secao.responsaveis"
+                        v-for="(time, indice) in secao.responsaveis"
                         :key="time.chapa || 'sem'"
                         class="time-responsavel"
                       >
-                        <button
-                          type="button"
-                          class="responsavel-chip"
-                          @click="abrirTrocaResponsavel(time)"
+                        <div
+                          class="secao-base__cabecalho"
+                          :class="{ 'secao-base__cabecalho--sub': indice > 0 }"
                         >
-                          <template v-if="time.responsavel">
-                            <q-avatar size="24px" class="avatar-responsavel">
-                              {{ iniciais(time.responsavel.nome) }}
-                            </q-avatar>
-                            <span class="responsavel-chip__texto">
+                          <q-chip
+                            v-if="indice === 0"
+                            dense
+                            class="chip-base q-ma-none"
+                            icon="place"
+                          >
+                            {{ secao.base }}
+                          </q-chip>
+                          <button
+                            v-if="!grupo.responsavelUnico"
+                            type="button"
+                            class="responsavel-chip"
+                            @click="abrirTrocaResponsavel(time)"
+                          >
+                            <span v-if="time.responsavel" class="responsavel-chip__texto">
                               <strong>{{ time.responsavel.nome }}</strong>
-                              <small>{{ time.responsavel.chapa }}</small>
+                              <small>
+                                {{ time.responsavel.chapa }}
+                                <template v-if="time.responsavel.funcao">
+                                  · {{ time.responsavel.funcao }}
+                                </template>
+                              </small>
                             </span>
-                          </template>
-                          <span v-else class="sem-responsavel">Definir responsável</span>
-                          <q-icon name="edit" size="14px" class="responsavel-chip__editar" />
-                          <q-tooltip>
-                            Responsável de {{ time.pessoas.length }}
-                            {{ time.pessoas.length === 1 ? 'pessoa' : 'pessoas' }} · clique para trocar
-                          </q-tooltip>
-                        </button>
+                            <span v-else class="sem-responsavel">Definir responsável</span>
+                            <q-icon name="edit" size="14px" class="responsavel-chip__editar" />
+                            <q-tooltip>
+                              Responsável de {{ time.pessoas.length }}
+                              {{ time.pessoas.length === 1 ? 'pessoa' : 'pessoas' }} · clique para trocar
+                            </q-tooltip>
+                          </button>
+                          <q-space />
+                          <span class="secao-base__contagem">{{ time.pessoas.length }}</span>
+                        </div>
 
                         <q-list dense separator class="lista-pessoas">
                           <q-item
@@ -233,18 +271,13 @@
                             :key="pessoa.chapa"
                             :class="{ 'linha-afastado': pessoa.afastado }"
                           >
-                            <q-item-section avatar>
-                              <q-avatar size="30px" class="avatar-pessoa">
-                                {{ iniciais(pessoa.nome) }}
-                              </q-avatar>
+                            <q-item-section avatar class="secao-chapa">
+                              <span class="chapa-pessoa">{{ pessoa.chapa }}</span>
                             </q-item-section>
 
                             <q-item-section>
                               <q-item-label class="text-weight-medium">
                                 {{ pessoa.nome }}
-                              </q-item-label>
-                              <q-item-label caption>
-                                {{ pessoa.chapa }} · {{ pessoa.funcao }}
                               </q-item-label>
                               <q-item-label v-if="pessoa.alocacao.observacao" caption>
                                 <q-icon name="notes" size="12px" />
@@ -254,6 +287,9 @@
 
                             <q-item-section side>
                               <div class="row items-center no-wrap">
+                                <span class="funcao-pessoa" :title="pessoa.funcao">
+                                  {{ pessoa.funcao }}
+                                </span>
                                 <q-chip
                                   v-if="pessoa.afastado"
                                   dense
@@ -949,7 +985,9 @@ const gruposSetor = computed(() => {
     porResp.get(chave).push(pessoa)
   }
 
-  const porNome = (a, b) => a.nome.localeCompare(b.nome, 'pt-BR')
+  const porFuncaoENome = (a, b) =>
+    (a.funcao || '').localeCompare(b.funcao || '', 'pt-BR') ||
+    a.nome.localeCompare(b.nome, 'pt-BR')
 
   return [...porSetor.entries()]
     .map(([nome, porBase]) => {
@@ -959,7 +997,7 @@ const gruposSetor = computed(() => {
             .map(([chapa, lista]) => ({
               chapa,
               responsavel: responsavelPorChapa(chapa),
-              pessoas: lista.slice().sort(porNome)
+              pessoas: lista.slice().sort(porFuncaoENome)
             }))
             .sort((a, b) => b.pessoas.length - a.pessoas.length)
           return {
@@ -969,10 +1007,22 @@ const gruposSetor = computed(() => {
           }
         })
         .sort((a, b) => a.base.localeCompare(b.base))
+      // Um responsável só no setor inteiro: o chip sobe para o cabeçalho
+      // do setor em vez de se repetir em cada base.
+      const chapas = new Set(secoes.flatMap(s => s.responsaveis.map(t => t.chapa)))
+      const [chapaUnica] = chapas
       return {
         nome,
         bases: secoes,
-        total: secoes.reduce((soma, s) => soma + s.total, 0)
+        total: secoes.reduce((soma, s) => soma + s.total, 0),
+        responsavelUnico:
+          chapas.size === 1
+            ? {
+                chapa: chapaUnica,
+                responsavel: responsavelPorChapa(chapaUnica),
+                pessoas: secoes.flatMap(s => s.responsaveis[0].pessoas)
+              }
+            : null
       }
     })
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
@@ -1505,16 +1555,38 @@ async function aplicarPlanilha() {
   color: #fff;
 }
 
-.time-responsavel {
-  padding: 8px 10px 0;
+.secao-base__cabecalho--sub {
+  padding-left: 18px;
+  border-top: 1px solid var(--linha);
 }
 
-.time-responsavel + .time-responsavel {
-  border-top: 1px dashed var(--linha);
+.secao-chapa {
+  min-width: 64px;
 }
 
-.time-responsavel .lista-pessoas {
-  margin: 6px -10px 0;
+.chapa-pessoa {
+  font-family: var(--fonte-ui);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--marca-clara);
+  font-variant-numeric: tabular-nums;
+}
+
+.funcao-pessoa {
+  max-width: 200px;
+  margin-right: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: var(--realce);
+  font-family: var(--fonte-ui);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--marca);
+  text-transform: uppercase;
 }
 
 .lista-previa {
@@ -1526,7 +1598,7 @@ async function aplicarPlanilha() {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 8px 2px 2px;
+  padding: 3px 10px;
   border: 1px solid var(--linha);
   border-radius: 999px;
   background: var(--superficie);
