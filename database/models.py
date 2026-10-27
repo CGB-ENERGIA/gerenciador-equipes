@@ -313,5 +313,8 @@ class AlocacaoIndireto(Base):
     BASE = Column(String, nullable=False)
     RESPONSAVEL_CHAPA = Column(String, nullable=True)
     OBSERVACAO = Column(String, nullable=True)
+    # função mostrada na página (uma das do cadastro); NULL = a do cadastro
+    # — migrations/020
+    FUNCAO = Column(String, nullable=True)
     ALOCADO_POR = Column(String, nullable=True)
     ALOCADO_EM = Column(DateTime(timezone=True), server_default=func.now())

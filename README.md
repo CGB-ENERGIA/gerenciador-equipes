@@ -73,6 +73,7 @@ nada. Cada arquivo traz no cabeçalho o que conferir antes de rodar.
 - `017_corrigir_grpccusto_zero_final.sql`: devolve o zero final do GRPCCUSTO ("2.17" → "2.170"), perdido quando o Excel guardava o código como número. O app grava sempre com 3 casas (`codigo_grupo_ccusto` em `database/importacao/importar_colaboradores.py`).
 - `018_add_alocacoes_indiretos.sql`: tabela da página Indiretos (setor, base e responsável de cada indireto). **Rode antes de usar a página**; sem ela a página mostra erro e a aba Indiretos da exportação do Resumo sai vazia.
 - `019_add_observacao_colaborador.sql`: observação livre do colaborador (ex.: férias), com quem escreveu e quando — editada no Banco de Dados, sem mudar status nem vaga. **Rode antes de publicar o código**: o modelo lê as colunas novas e, sem elas, toda consulta de colaboradores falha.
+- `020_add_funcao_alocacao_indireto.sql`: função mostrada para o indireto na página Indiretos (uma das que já existem no cadastro), guardada na alocação — o cadastro não muda. **Rode antes de publicar o código**: sem a coluna, a página Indiretos e a aba Indiretos do Resumo falham.
 
 ## Acesso
 

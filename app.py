@@ -1097,6 +1097,9 @@ def exportar_pessoas_resumo():
                 "CHAPA": alocacao.CHAPA,
                 "COLABORADOR": colaborador.NOME if colaborador else "",
                 "FUNÇÃO NO CADASTRO": (colaborador.FUNÇÃO or "") if colaborador else "",
+                # a escolhida na página Indiretos, se houver (migrations/020)
+                "FUNÇÃO NO SETOR": alocacao.FUNCAO
+                or ((colaborador.FUNÇÃO or "") if colaborador else ""),
                 "CHAPA RESPONSÁVEL": alocacao.RESPONSAVEL_CHAPA or "",
                 "RESPONSÁVEL": responsavel.NOME if responsavel else "",
                 "OBSERVAÇÃO": alocacao.OBSERVACAO or "",
@@ -1126,7 +1129,7 @@ def exportar_pessoas_resumo():
             ])),
             ("Indiretos", pd.DataFrame(indiretos, columns=[
                 "SETOR", "BASE", "CHAPA", "COLABORADOR", "FUNÇÃO NO CADASTRO",
-                "CHAPA RESPONSÁVEL", "RESPONSÁVEL", "OBSERVAÇÃO", "ALOCADO POR", "ALOCADO EM",
+                "FUNÇÃO NO SETOR", "CHAPA RESPONSÁVEL", "RESPONSÁVEL", "OBSERVAÇÃO", "ALOCADO POR", "ALOCADO EM",
             ])),
             ("Colaboradores", df_colaboradores),
         ]

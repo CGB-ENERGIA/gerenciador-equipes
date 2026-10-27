@@ -18,24 +18,16 @@
             </div>
           </div>
 
-          <div class="col-auto row q-gutter-sm">
-            <q-btn
-              outline
-              no-caps
-              color="primary"
-              icon="upload_file"
-              label="Planilha de cadastro"
-              @click="abrirPlanilha"
-            />
+          <!-- um botão só: o diálogo baixa a planilha atual e recebe a preenchida -->
+          <div class="col-auto">
             <q-btn
               class="btn-exportar"
               color="positive"
               text-color="white"
               no-caps
-              icon="download"
-              label="Exportar planilha"
-              :loading="baixando"
-              @click="baixarPlanilha"
+              icon="table_view"
+              label="Planilha"
+              @click="abrirPlanilha"
             />
           </div>
         </div>
@@ -152,7 +144,7 @@
                 {{
                   pessoas.some(p => p.alocacao)
                     ? 'Nenhum setor com esses filtros.'
-                    : 'Ninguém alocado ainda. Use "Alocar" na lista ao lado ou a planilha de cadastro.'
+                    : 'Ninguém alocado ainda. Use "Alocar" na lista ao lado ou o botão "Planilha".'
                 }}
               </div>
             </div>
@@ -291,8 +283,15 @@
 
                             <q-item-section side>
                               <div class="row items-center no-wrap">
-                                <span class="funcao-pessoa" :title="pessoa.funcao">
-                                  {{ pessoa.funcao }}
+                                <span
+                                  class="funcao-pessoa"
+                                  :title="
+                                    pessoa.alocacao.funcao
+                                      ? `${pessoa.alocacao.funcao} (no cadastro: ${pessoa.funcao || '—'})`
+                                      : pessoa.funcao
+                                  "
+                                >
+                                  {{ funcaoExibida(pessoa) }}
                                 </span>
                                 <q-chip
                                   v-if="pessoa.afastado"
@@ -317,6 +316,12 @@
                                           <q-icon name="supervisor_account" />
                                         </q-item-section>
                                         <q-item-section>Trocar responsável</q-item-section>
+                                      </q-item>
+                                      <q-item clickable @click="abrirTrocaFuncao(pessoa)">
+                                        <q-item-section avatar>
+                                          <q-icon name="badge" />
+                                        </q-item-section>
+                                        <q-item-section>Alterar função</q-item-section>
                                       </q-item>
                                       <q-item clickable @click="removerDoSetor(pessoa)">
                                         <q-item-section avatar>
@@ -573,6 +578,73 @@
     </q-dialog>
 
     <!-- ================================================== -->
+    <!-- ALTERAR FUNÇÃO (só a mostrada aqui; o cadastro não muda) -->
+    <!-- ================================================== -->
+
+    <q-dialog v-model="trocaFuncao.aberto">
+      <q-card v-if="trocaFuncao.pessoa" style="width: 460px; max-width: 94vw">
+        <q-card-section class="row items-center">
+          <q-icon name="badge" color="primary" size="26px" class="q-mr-sm" />
+          <div class="text-h6">Alterar função</div>
+          <q-space />
+          <q-btn v-close-popup flat round dense icon="close" />
+        </q-card-section>
+
+        <q-separator />
+
+        <q-card-section class="q-gutter-md">
+          <div class="text-body2">
+            <strong>{{ trocaFuncao.pessoa.nome }}</strong>
+            <div class="text-caption text-grey-7">
+              No cadastro: {{ trocaFuncao.pessoa.funcao || 'sem função' }}
+            </div>
+          </div>
+
+          <q-select
+            v-model="trocaFuncao.funcao"
+            outlined
+            dense
+            use-input
+            hide-selected
+            fill-input
+            input-debounce="0"
+            label="Função na página *"
+            placeholder="Comece a digitar..."
+            :options="opcoesFuncao"
+            hint="Só funções que já existem no cadastro. O cadastro do colaborador não muda."
+            @filter="filtrarFuncoes"
+          >
+            <template #prepend><q-icon name="badge" /></template>
+            <template #no-option>
+              <q-item><q-item-section class="text-grey">Nenhuma função encontrada</q-item-section></q-item>
+            </template>
+          </q-select>
+        </q-card-section>
+
+        <q-card-actions align="right">
+          <q-btn
+            v-if="trocaFuncao.pessoa.alocacao?.funcao"
+            flat
+            no-caps
+            color="primary"
+            label="Voltar à do cadastro"
+            :loading="salvando"
+            @click="salvarFuncao('')"
+          />
+          <q-space />
+          <q-btn v-close-popup flat label="Cancelar" />
+          <q-btn
+            color="primary"
+            label="Salvar"
+            :disable="!trocaFuncao.funcao || trocaFuncao.funcao === funcaoExibida(trocaFuncao.pessoa)"
+            :loading="salvando"
+            @click="salvarFuncao()"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- ================================================== -->
     <!-- TROCAR RESPONSÁVEL (de uma pessoa ou de um grupo) -->
     <!-- ================================================== -->
 
@@ -641,14 +713,14 @@
     </q-dialog>
 
     <!-- ================================================== -->
-    <!-- PLANILHA DE CADASTRO -->
+    <!-- PLANILHA (baixar a atual / enviar a preenchida) -->
     <!-- ================================================== -->
 
     <q-dialog v-model="planilha.aberto">
       <q-card style="width: 640px; max-width: 94vw">
         <q-card-section class="row items-center">
-          <q-icon name="upload_file" color="primary" size="26px" class="q-mr-sm" />
-          <div class="text-h6">Planilha de cadastro</div>
+          <q-icon name="table_view" color="primary" size="26px" class="q-mr-sm" />
+          <div class="text-h6">Planilha de indiretos</div>
           <q-space />
           <q-btn v-close-popup flat round dense icon="close" />
         </q-card-section>
@@ -657,8 +729,10 @@
 
         <q-card-section class="q-gutter-md">
           <div class="text-body2">
-            Aloca, move ou troca o responsável de vários indiretos de uma vez. Uma
-            linha por indireto. Quem não estiver na planilha continua onde está.
+            Baixe a planilha atual para consultar ou exportar as alocações. Para
+            alocar, mover ou trocar o responsável de vários indiretos de uma vez,
+            preencha e envie de volta: uma linha por indireto, e quem não estiver
+            na planilha continua onde está.
           </div>
 
           <q-markup-table flat bordered dense class="tabela-modelo">
@@ -820,6 +894,7 @@ const { confirmar } = useConfirmacao()
 const pessoas = ref([])
 const responsaveis = ref([])
 const bases = ref([])
+const funcoes = ref([])
 const carregando = ref(false)
 const primeiraCarga = ref(true)
 const erro = ref('')
@@ -841,6 +916,7 @@ async function carregar() {
     pessoas.value = dados.pessoas || []
     responsaveis.value = dados.responsaveis || []
     bases.value = dados.bases || []
+    funcoes.value = dados.funcoes || []
   } catch (e) {
     if (minhaSequencia === sequenciaCarga) {
       erro.value = e.message || 'Erro ao carregar os indiretos.'
@@ -944,7 +1020,7 @@ const opcoesResponsaveis = computed(() =>
 function casaComBusca(pessoa) {
   const termo = (busca.value || '').trim().toLowerCase()
   if (!termo) return true
-  return [pessoa.nome, pessoa.chapa, pessoa.funcao].some(valor =>
+  return [pessoa.nome, pessoa.chapa, pessoa.funcao, funcaoExibida(pessoa)].some(valor =>
     String(valor || '').toLowerCase().includes(termo)
   )
 }
@@ -990,11 +1066,16 @@ const semSetorFiltrados = computed(() =>
 // o cargo acima na hierarquia.
 const ORDEM_CARGOS = ['COORDENADOR', 'SUPERVISOR', 'ANALISTA', 'ENCARREGADO', 'ASSISTENTE', 'AUXILIAR']
 
-function ordemCargo(funcao) {
-  const texto = String(funcao || '')
+// maiúsculas e sem acento, para comparar textos
+function normalizarTexto(texto) {
+  return String(texto || '')
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()
+}
+
+function ordemCargo(funcao) {
+  const texto = normalizarTexto(funcao)
   const posicao = ORDEM_CARGOS.findIndex(cargo => texto.includes(cargo))
   return posicao === -1 ? ORDEM_CARGOS.length : posicao
 }
@@ -1014,8 +1095,8 @@ const gruposSetor = computed(() => {
   }
 
   const porFuncaoENome = (a, b) =>
-    ordemCargo(a.funcao) - ordemCargo(b.funcao) ||
-    (a.funcao || '').localeCompare(b.funcao || '', 'pt-BR') ||
+    ordemCargo(funcaoExibida(a)) - ordemCargo(funcaoExibida(b)) ||
+    funcaoExibida(a).localeCompare(funcaoExibida(b), 'pt-BR') ||
     a.nome.localeCompare(b.nome, 'pt-BR')
 
   return [...porSetor.entries()]
@@ -1280,6 +1361,78 @@ async function removerDoSetor(pessoa) {
     await carregar()
   } catch (e) {
     erro.value = e.message
+  }
+}
+
+// ============================================================
+// ALTERAR FUNÇÃO (só a mostrada aqui; o cadastro não muda)
+// ============================================================
+
+// A função escolhida na página, se houver; senão, a do cadastro
+function funcaoExibida(pessoa) {
+  return pessoa.alocacao?.funcao || pessoa.funcao || ''
+}
+
+const trocaFuncao = reactive({ aberto: false, pessoa: null, funcao: null })
+const opcoesFuncao = ref([])
+
+function abrirTrocaFuncao(pessoa) {
+  opcoesFuncao.value = funcoes.value
+  Object.assign(trocaFuncao, { aberto: true, pessoa, funcao: funcaoExibida(pessoa) || null })
+}
+
+// Sugere enquanto digita: primeiro as funções que COMEÇAM com o texto, depois
+// as que o contêm; a primeira já fica marcada, e Enter completa com ela.
+function filtrarFuncoes(texto, atualizar) {
+  atualizar(
+    () => {
+      const termo = normalizarTexto(texto)
+      if (!termo) {
+        opcoesFuncao.value = funcoes.value
+        return
+      }
+      const comecam = []
+      const contem = []
+      for (const funcao of funcoes.value) {
+        const nome = normalizarTexto(funcao)
+        if (nome.startsWith(termo)) comecam.push(funcao)
+        else if (nome.includes(termo)) contem.push(funcao)
+      }
+      opcoesFuncao.value = [...comecam, ...contem]
+    },
+    campo => {
+      if (texto && campo.options.length) {
+        campo.setOptionIndex(-1)
+        campo.moveOptionSelection(1, true)
+      }
+    }
+  )
+}
+
+async function salvarFuncao(funcao = trocaFuncao.funcao) {
+  const { pessoa } = trocaFuncao
+  salvando.value = true
+  erro.value = ''
+  sucesso.value = ''
+  try {
+    await chamarApi(
+      '/api/indiretos/funcao',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chapa: pessoa.chapa, funcao: funcao || '' })
+      },
+      'Não foi possível alterar a função.'
+    )
+    sucesso.value = funcao && funcao !== pessoa.funcao
+      ? `${pessoa.nome} agora aparece como ${funcao}.`
+      : `${pessoa.nome} voltou à função do cadastro (${pessoa.funcao}).`
+    trocaFuncao.aberto = false
+    await carregar()
+  } catch (e) {
+    erro.value = e.message
+  } finally {
+    salvando.value = false
   }
 }
 

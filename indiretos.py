@@ -106,10 +106,20 @@ def descrever_pessoa(colaborador, alocacao):
             "base": alocacao.BASE,
             "responsavel_chapa": alocacao.RESPONSAVEL_CHAPA,
             "observacao": alocacao.OBSERVACAO or "",
+            "funcao": alocacao.FUNCAO or "",
             "alocado_por": alocacao.ALOCADO_POR or "",
             "alocado_em": alocacao.ALOCADO_EM.isoformat() if alocacao.ALOCADO_EM else "",
         },
     }
+
+
+def funcoes_do_cadastro(colaboradores):
+    """Funções que já existem no cadastro — as únicas que a página deixa
+    escolher para um indireto, para manter o padrão dos nomes."""
+    return sorted(
+        {(c.FUNÇÃO or "").strip() for c in colaboradores} - {""},
+        key=str.casefold,
+    )
 
 
 @bp.route("/api/indiretos", methods=["GET"])
@@ -135,7 +145,12 @@ def obter_indiretos():
         bases = list(BASES_PADRAO) + sorted(
             {a.BASE for a in alocacoes.values()} - set(BASES_PADRAO)
         )
-        return jsonify({"pessoas": pessoas, "responsaveis": responsaveis, "bases": bases})
+        return jsonify({
+            "pessoas": pessoas,
+            "responsaveis": responsaveis,
+            "bases": bases,
+            "funcoes": funcoes_do_cadastro(colaboradores),
+        })
     except Exception as erro:
         print(f"[ERRO] obter_indiretos: {erro}")
         return jsonify({"erro": "Não foi possível carregar os indiretos."}), 500
@@ -232,6 +247,47 @@ def trocar_responsavel_indiretos():
         session.rollback()
         print(f"[ERRO] trocar_responsavel_indiretos: {erro}")
         return jsonify({"erro": "Não foi possível trocar o responsável."}), 500
+    finally:
+        session.close()
+
+
+@bp.route("/api/indiretos/funcao", methods=["POST"])
+@auth.exige_administrador
+def alterar_funcao_indireto():
+    """Troca a função mostrada para um indireto alocado por outra que já
+    existe no cadastro. Função vazia (ou igual à do cadastro) volta a usar a
+    do cadastro."""
+    dados = _corpo()
+    chapa = chapa_da_celula(dados.get("chapa"))
+    funcao = str(dados.get("funcao") or "").strip()
+    if not chapa:
+        return jsonify({"erro": "Informe o indireto."}), 400
+
+    session = SessionLocal()
+    try:
+        alocacao = session.query(AlocacaoIndireto).filter(AlocacaoIndireto.CHAPA == chapa).first()
+        if not alocacao:
+            return jsonify({"erro": "Este indireto não está alocado."}), 404
+        pessoa = _colaborador(session, chapa)
+        if funcao:
+            existe = (
+                session.query(Colaborador.id)
+                .filter(Colaborador.FUNÇÃO == funcao)
+                .first()
+            )
+            if not existe:
+                return jsonify({"erro": "Escolha uma função que já existe no cadastro."}), 400
+        if funcao == ((pessoa.FUNÇÃO if pessoa else "") or "").strip():
+            funcao = ""  # igual à do cadastro: não precisa guardar
+        alocacao.FUNCAO = funcao or None
+        alocacao.ALOCADO_POR = quem_esta_logado()
+        alocacao.ALOCADO_EM = datetime.now(timezone.utc)
+        session.commit()
+        return jsonify({"sucesso": True, "funcao": funcao})
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] alterar_funcao_indireto: {erro}")
+        return jsonify({"erro": "Não foi possível alterar a função."}), 500
     finally:
         session.close()
 
