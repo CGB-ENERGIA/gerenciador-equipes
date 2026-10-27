@@ -1004,6 +1004,16 @@ const filtroStatus = ref('')
 
 const alocados = computed(() => pessoas.value.filter(p => p.alocacao))
 
+// Quem é responsável por alguém já tem lugar (lidera um setor), mesmo sem
+// alocação própria: conta como alocado e não aparece em "Sem setor".
+const chapasResponsaveis = computed(
+  () => new Set(alocados.value.map(p => p.alocacao.responsavel_chapa).filter(Boolean))
+)
+
+function estaAlocado(pessoa) {
+  return Boolean(pessoa.alocacao) || chapasResponsaveis.value.has(pessoa.chapa)
+}
+
 function opcoesUnicas(valores) {
   return [...new Set(valores.filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'pt-BR'))
@@ -1049,8 +1059,8 @@ function casaComBusca(pessoa, texto = busca.value) {
 
 function casaComStatus(pessoa) {
   if (filtroStatus.value === 'afastados') return Boolean(pessoa.afastado)
-  if (filtroStatus.value === 'alocados') return Boolean(pessoa.alocacao)
-  if (filtroStatus.value === 'semSetor') return !pessoa.alocacao
+  if (filtroStatus.value === 'alocados') return estaAlocado(pessoa)
+  if (filtroStatus.value === 'semSetor') return !estaAlocado(pessoa)
   return true
 }
 
@@ -1072,7 +1082,7 @@ const alocadosFiltrados = computed(() =>
 const semSetorFiltrados = computed(() =>
   pessoas.value.filter(
     pessoa =>
-      !pessoa.alocacao &&
+      !estaAlocado(pessoa) &&
       filtroStatus.value !== 'alocados' &&
       casaComStatus(pessoa) &&
       !setoresAtivos.value.length &&
@@ -1171,13 +1181,13 @@ const indicadores = computed(() => [
     chave: 'alocados',
     rotulo: 'Alocados',
     icone: 'how_to_reg',
-    valor: alocados.value.length
+    valor: pessoas.value.filter(estaAlocado).length
   },
   {
     chave: 'semSetor',
     rotulo: 'Sem setor',
     icone: 'person_search',
-    valor: pessoas.value.length - alocados.value.length
+    valor: pessoas.value.filter(p => !estaAlocado(p)).length
   },
   {
     chave: 'afastados',
