@@ -49,32 +49,54 @@
             <div class="row items-center q-col-gutter-md">
               <div class="col-12 col-sm-6 col-md">
                 <SelectFiltroMultiplo
-                  v-model="filtroBases"
+                  :model-value="filtroBases"
                   :options="opcoesBases"
                   icon="place"
                   label="Base"
+                  @update:model-value="v => (filtroBases = proximaSelecaoMultipla(filtroBases, v, TODOS))"
                 />
               </div>
 
               <div class="col-12 col-sm-6 col-md">
                 <SelectFiltroMultiplo
-                  v-model="filtroSetores"
+                  :model-value="filtroSetores"
                   :options="opcoesSetores"
                   icon="apartment"
                   label="Setor"
+                  @update:model-value="v => (filtroSetores = proximaSelecaoMultipla(filtroSetores, v, TODOS))"
                 />
               </div>
 
               <div class="col-12 col-sm-6 col-md">
                 <SelectFiltroMultiplo
-                  v-model="filtroResponsaveis"
+                  :model-value="filtroResponsaveis"
                   :options="opcoesResponsaveis"
                   icon="supervisor_account"
                   label="Responsável"
+                  @update:model-value="
+                    v => (filtroResponsaveis = proximaSelecaoMultipla(filtroResponsaveis, v, TODOS))
+                  "
                 />
               </div>
 
-              <div class="col-12 col-sm-6 col-md">
+              <div class="col-auto">
+                <q-btn
+                  flat
+                  dense
+                  rounded
+                  no-caps
+                  icon="filter_alt_off"
+                  label="Limpar filtros"
+                  color="grey-8"
+                  @click="limparFiltros"
+                />
+              </div>
+            </div>
+
+            <q-separator class="q-my-md" />
+
+            <div class="row items-center q-col-gutter-md q-mt-none">
+              <div class="col-12 col-md-4">
                 <q-input
                   v-model="busca"
                   outlined
@@ -299,38 +321,16 @@
                                   class="bg-afastado text-afastado"
                                   label="afastado"
                                 />
-                                <q-btn flat round dense icon="more_vert" size="sm">
-                                  <q-menu auto-close>
-                                    <q-list dense style="min-width: 190px">
-                                      <q-item clickable @click="abrirAlocacao(pessoa)">
-                                        <q-item-section avatar>
-                                          <q-icon name="swap_horiz" />
-                                        </q-item-section>
-                                        <q-item-section>Mover / editar</q-item-section>
-                                      </q-item>
-                                      <q-item
-                                        clickable
-                                        @click="abrirTrocaResponsavel({ pessoas: [pessoa], responsavel: responsavelPorChapa(pessoa.alocacao.responsavel_chapa) })"
-                                      >
-                                        <q-item-section avatar>
-                                          <q-icon name="supervisor_account" />
-                                        </q-item-section>
-                                        <q-item-section>Trocar responsável</q-item-section>
-                                      </q-item>
-                                      <q-item clickable @click="abrirTrocaFuncao(pessoa)">
-                                        <q-item-section avatar>
-                                          <q-icon name="badge" />
-                                        </q-item-section>
-                                        <q-item-section>Alterar função</q-item-section>
-                                      </q-item>
-                                      <q-item clickable @click="removerDoSetor(pessoa)">
-                                        <q-item-section avatar>
-                                          <q-icon name="person_remove" color="negative" />
-                                        </q-item-section>
-                                        <q-item-section>Tirar do setor</q-item-section>
-                                      </q-item>
-                                    </q-list>
-                                  </q-menu>
+                                <q-btn
+                                  flat
+                                  round
+                                  dense
+                                  icon="edit"
+                                  size="sm"
+                                  aria-label="Editar colaborador"
+                                  @click="abrirAlocacao(pessoa)"
+                                >
+                                  <q-tooltip>Editar colaborador</q-tooltip>
                                 </q-btn>
                               </div>
                             </q-item-section>
@@ -547,6 +547,34 @@
             </template>
           </q-select>
 
+          <!-- função mostrada na página: só as que já existem no cadastro -->
+          <q-select
+            v-model="alocacao.funcao"
+            outlined
+            dense
+            use-input
+            hide-selected
+            fill-input
+            clearable
+            input-debounce="0"
+            label="Função"
+            placeholder="Comece a digitar..."
+            :options="opcoesFuncao"
+            :hint="
+              pessoaAlocacao
+                ? `No cadastro: ${pessoaAlocacao.funcao || 'sem função'}. Trocar aqui não muda o cadastro.`
+                : 'Vazio = a função do cadastro'
+            "
+            @filter="filtrarFuncoes"
+          >
+            <template #prepend><q-icon name="badge" /></template>
+            <template #no-option>
+              <q-item>
+                <q-item-section class="text-grey-7">Nenhuma função encontrada</q-item-section>
+              </q-item>
+            </template>
+          </q-select>
+
           <q-input
             v-model="alocacao.observacao"
             outlined
@@ -565,80 +593,23 @@
         </q-card-section>
 
         <q-card-actions align="right">
-          <q-btn v-close-popup flat label="Cancelar" />
           <q-btn
-            color="primary"
-            label="Confirmar"
-            :disable="!alocacaoCompleta"
-            :loading="salvando"
-            @click="confirmarAlocacao"
-          />
-        </q-card-actions>
-      </q-card>
-    </q-dialog>
-
-    <!-- ================================================== -->
-    <!-- ALTERAR FUNÇÃO (só a mostrada aqui; o cadastro não muda) -->
-    <!-- ================================================== -->
-
-    <q-dialog v-model="trocaFuncao.aberto">
-      <q-card v-if="trocaFuncao.pessoa" style="width: 460px; max-width: 94vw">
-        <q-card-section class="row items-center">
-          <q-icon name="badge" color="primary" size="26px" class="q-mr-sm" />
-          <div class="text-h6">Alterar função</div>
-          <q-space />
-          <q-btn v-close-popup flat round dense icon="close" />
-        </q-card-section>
-
-        <q-separator />
-
-        <q-card-section class="q-gutter-md">
-          <div class="text-body2">
-            <strong>{{ trocaFuncao.pessoa.nome }}</strong>
-            <div class="text-caption text-grey-7">
-              No cadastro: {{ trocaFuncao.pessoa.funcao || 'sem função' }}
-            </div>
-          </div>
-
-          <q-select
-            v-model="trocaFuncao.funcao"
-            outlined
-            dense
-            use-input
-            hide-selected
-            fill-input
-            input-debounce="0"
-            label="Função na página *"
-            placeholder="Comece a digitar..."
-            :options="opcoesFuncao"
-            hint="Só funções que já existem no cadastro. O cadastro do colaborador não muda."
-            @filter="filtrarFuncoes"
-          >
-            <template #prepend><q-icon name="badge" /></template>
-            <template #no-option>
-              <q-item><q-item-section class="text-grey">Nenhuma função encontrada</q-item-section></q-item>
-            </template>
-          </q-select>
-        </q-card-section>
-
-        <q-card-actions align="right">
-          <q-btn
-            v-if="trocaFuncao.pessoa.alocacao?.funcao"
+            v-if="alocacao.modo === 'pessoa' && pessoaAlocacao?.alocacao"
             flat
             no-caps
-            color="primary"
-            label="Voltar à do cadastro"
-            :loading="salvando"
-            @click="salvarFuncao('')"
+            color="negative"
+            icon="person_remove"
+            label="Tirar do setor"
+            @click="removerDoSetor(pessoaAlocacao)"
           />
           <q-space />
           <q-btn v-close-popup flat label="Cancelar" />
           <q-btn
             color="primary"
             label="Salvar"
-            :disable="!trocaFuncao.funcao || trocaFuncao.funcao === funcaoExibida(trocaFuncao.pessoa)"
+            :disable="!alocacaoCompleta"
             :loading="salvando"
-            @click="salvarFuncao()"
+            @click="confirmarAlocacao"
           />
         </q-card-actions>
       </q-card>
@@ -877,6 +848,7 @@ import MarcaDaguaFundo from '../components/MarcaDaguaFundo.vue'
 import SelectFiltroMultiplo from '../components/SelectFiltroMultiplo.vue'
 import { PODE_VER_EQUIPES } from '../composables/useSessao'
 import { useConfirmacao } from '../composables/useConfirmacao'
+import { proximaSelecaoMultipla } from '../utils/equipes'
 
 // mesmas regras do Banco de Dados; enquanto a página está em liberação
 // gradual, só o Administrador abre (ver router/index.js e indiretos.py)
@@ -989,10 +961,27 @@ async function chamarApi(url, opcoes, mensagemErro) {
 // FILTROS
 // ============================================================
 
-const filtroBases = ref([])
-const filtroSetores = ref([])
-const filtroResponsaveis = ref([])
+// Igual às outras telas: cada filtro começa em "Todos"; escolher um item
+// tira o "Todos", e "Limpar filtros" volta tudo ao início.
+const TODOS = 'TODOS'
+const filtroBases = ref([TODOS])
+const filtroSetores = ref([TODOS])
+const filtroResponsaveis = ref([TODOS])
 const busca = ref('')
+
+// o que está de fato escolhido (vazio = todos)
+const escolhidos = selecao => (selecao.includes(TODOS) ? [] : selecao)
+const basesAtivas = computed(() => escolhidos(filtroBases.value))
+const setoresAtivos = computed(() => escolhidos(filtroSetores.value))
+const responsaveisAtivos = computed(() => escolhidos(filtroResponsaveis.value))
+
+function limparFiltros() {
+  filtroBases.value = [TODOS]
+  filtroSetores.value = [TODOS]
+  filtroResponsaveis.value = [TODOS]
+  busca.value = ''
+  filtroStatus.value = ''
+}
 // clicar num indicador filtra por status; clicar de novo limpa
 const filtroStatus = ref('')
 
@@ -1009,13 +998,20 @@ const nomesSetores = computed(() =>
     a.localeCompare(b, 'pt-BR')
   )
 )
-const opcoesBases = computed(() => opcoesUnicas(alocados.value.map(p => p.alocacao.base)))
-const opcoesSetores = computed(() => opcoesUnicas(nomesSetores.value))
-const opcoesResponsaveis = computed(() =>
-  [...new Set(alocados.value.map(p => p.alocacao.responsavel_chapa).filter(Boolean))]
+const opcoesBases = computed(() => [
+  { label: 'Todas as bases', value: TODOS },
+  ...opcoesUnicas(alocados.value.map(p => p.alocacao.base))
+])
+const opcoesSetores = computed(() => [
+  { label: 'Todos os setores', value: TODOS },
+  ...opcoesUnicas(nomesSetores.value)
+])
+const opcoesResponsaveis = computed(() => [
+  { label: 'Todos os responsáveis', value: TODOS },
+  ...[...new Set(alocados.value.map(p => p.alocacao.responsavel_chapa).filter(Boolean))]
     .map(chapa => ({ label: responsavelPorChapa(chapa)?.nome || chapa, value: chapa }))
     .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
-)
+])
 
 function casaComBusca(pessoa) {
   const termo = (busca.value || '').trim().toLowerCase()
@@ -1035,11 +1031,11 @@ function casaComStatus(pessoa) {
 const alocadosFiltrados = computed(() =>
   alocados.value.filter(pessoa => {
     const a = pessoa.alocacao
-    if (filtroBases.value?.length && !filtroBases.value.includes(a.base)) return false
-    if (filtroSetores.value?.length && !filtroSetores.value.includes(a.setor)) return false
+    if (basesAtivas.value.length && !basesAtivas.value.includes(a.base)) return false
+    if (setoresAtivos.value.length && !setoresAtivos.value.includes(a.setor)) return false
     if (
-      filtroResponsaveis.value?.length &&
-      !filtroResponsaveis.value.includes(a.responsavel_chapa)
+      responsaveisAtivos.value.length &&
+      !responsaveisAtivos.value.includes(a.responsavel_chapa)
     ) {
       return false
     }
@@ -1053,9 +1049,9 @@ const semSetorFiltrados = computed(() =>
       !pessoa.alocacao &&
       filtroStatus.value !== 'alocados' &&
       casaComStatus(pessoa) &&
-      !filtroSetores.value?.length &&
-      !filtroResponsaveis.value?.length &&
-      (!filtroBases.value?.length || filtroBases.value.includes(pessoa.base_cadastro)) &&
+      !setoresAtivos.value.length &&
+      !responsaveisAtivos.value.length &&
+      (!basesAtivas.value.length || basesAtivas.value.includes(pessoa.base_cadastro)) &&
       casaComBusca(pessoa)
   )
 )
@@ -1207,6 +1203,7 @@ const alocacao = reactive({
   setorDigitado: '',
   base: null,
   responsavelChapa: null,
+  funcao: null,
   observacao: ''
 })
 const salvando = ref(false)
@@ -1217,7 +1214,7 @@ const pessoaAlocacao = computed(() => pessoas.value.find(p => p.chapa === alocac
 
 const tituloAlocacao = computed(() => {
   if (alocacao.modo === 'setor') return `Adicionar em ${alocacao.setor}`
-  return pessoaAlocacao.value?.alocacao ? 'Mover / editar alocação' : 'Alocar em um setor'
+  return pessoaAlocacao.value?.alocacao ? 'Editar colaborador' : 'Alocar em um setor'
 })
 
 const opcoesPessoas = computed(() => {
@@ -1282,6 +1279,7 @@ const alocacaoCompleta = computed(() =>
 function abrirAlocacao(pessoa) {
   termoResponsavel.value = ''
   termoSetor.value = ''
+  opcoesFuncao.value = funcoes.value
   const atual = pessoa.alocacao
   Object.assign(alocacao, {
     aberto: true,
@@ -1291,6 +1289,7 @@ function abrirAlocacao(pessoa) {
     setorDigitado: '',
     base: atual?.base || null,
     responsavelChapa: atual?.responsavel_chapa || null,
+    funcao: funcaoExibida(pessoa) || null,
     observacao: atual?.observacao || ''
   })
 }
@@ -1298,6 +1297,7 @@ function abrirAlocacao(pessoa) {
 function abrirAdicionarNoSetor(nomeSetor) {
   termoPessoa.value = ''
   termoResponsavel.value = ''
+  opcoesFuncao.value = funcoes.value
   Object.assign(alocacao, {
     aberto: true,
     modo: 'setor',
@@ -1306,6 +1306,7 @@ function abrirAdicionarNoSetor(nomeSetor) {
     setorDigitado: '',
     base: null,
     responsavelChapa: null,
+    funcao: null,
     observacao: ''
   })
 }
@@ -1325,12 +1326,14 @@ async function confirmarAlocacao() {
           setor: setorEscolhido.value,
           base: alocacao.base,
           responsavel_chapa: alocacao.responsavelChapa,
+          // vazio ou igual à do cadastro: o servidor volta a usar a do cadastro
+          funcao: alocacao.funcao || '',
           observacao: alocacao.observacao
         })
       },
       'Não foi possível alocar.'
     )
-    sucesso.value = `${pessoaAlocacao.value?.nome || 'Indireto'} alocado em ${setorEscolhido.value} · ${alocacao.base}.`
+    sucesso.value = `${pessoaAlocacao.value?.nome || 'Indireto'} salvo em ${setorEscolhido.value} · ${alocacao.base}.`
     alocacao.aberto = false
     await carregar()
   } catch (e) {
@@ -1358,6 +1361,7 @@ async function removerDoSetor(pessoa) {
       'Não foi possível tirar do setor.'
     )
     sucesso.value = `${pessoa.nome} saiu de ${setor} · ${base}.`
+    alocacao.aberto = false
     await carregar()
   } catch (e) {
     erro.value = e.message
@@ -1365,7 +1369,7 @@ async function removerDoSetor(pessoa) {
 }
 
 // ============================================================
-// ALTERAR FUNÇÃO (só a mostrada aqui; o cadastro não muda)
+// FUNÇÃO NA PÁGINA (só a mostrada aqui; o cadastro não muda)
 // ============================================================
 
 // A função escolhida na página, se houver; senão, a do cadastro
@@ -1373,13 +1377,7 @@ function funcaoExibida(pessoa) {
   return pessoa.alocacao?.funcao || pessoa.funcao || ''
 }
 
-const trocaFuncao = reactive({ aberto: false, pessoa: null, funcao: null })
 const opcoesFuncao = ref([])
-
-function abrirTrocaFuncao(pessoa) {
-  opcoesFuncao.value = funcoes.value
-  Object.assign(trocaFuncao, { aberto: true, pessoa, funcao: funcaoExibida(pessoa) || null })
-}
 
 // Sugere enquanto digita: primeiro as funções que COMEÇAM com o texto, depois
 // as que o contêm; a primeira já fica marcada, e Enter completa com ela.
@@ -1407,33 +1405,6 @@ function filtrarFuncoes(texto, atualizar) {
       }
     }
   )
-}
-
-async function salvarFuncao(funcao = trocaFuncao.funcao) {
-  const { pessoa } = trocaFuncao
-  salvando.value = true
-  erro.value = ''
-  sucesso.value = ''
-  try {
-    await chamarApi(
-      '/api/indiretos/funcao',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chapa: pessoa.chapa, funcao: funcao || '' })
-      },
-      'Não foi possível alterar a função.'
-    )
-    sucesso.value = funcao && funcao !== pessoa.funcao
-      ? `${pessoa.nome} agora aparece como ${funcao}.`
-      : `${pessoa.nome} voltou à função do cadastro (${pessoa.funcao}).`
-    trocaFuncao.aberto = false
-    await carregar()
-  } catch (e) {
-    erro.value = e.message
-  } finally {
-    salvando.value = false
-  }
 }
 
 // ============================================================

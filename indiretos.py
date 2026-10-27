@@ -171,10 +171,27 @@ def _colaborador(session, chapa):
     return session.query(Colaborador).filter(Colaborador.CHAPA == chapa).first()
 
 
+class FuncaoInvalida(ValueError):
+    pass
+
+
+def funcao_para_gravar(session, pessoa, funcao):
+    """Valida a função escolhida na página e devolve o que vai para
+    AlocacaoIndireto.FUNCAO: None quando vazia ou igual à do cadastro (não
+    precisa guardar); erro se não existir no cadastro."""
+    funcao = str(funcao or "").strip()
+    if not funcao or funcao == (pessoa.FUNÇÃO or "").strip():
+        return None
+    if not session.query(Colaborador.id).filter(Colaborador.FUNÇÃO == funcao).first():
+        raise FuncaoInvalida("Escolha uma função que já existe no cadastro.")
+    return funcao
+
+
 @bp.route("/api/indiretos/alocar", methods=["POST"])
 @auth.exige_administrador
 def alocar_indireto():
-    """Aloca ou move: grava setor, base e responsável do indireto."""
+    """Aloca, move ou edita: grava setor, base, responsável e — se vierem —
+    observação e função do indireto."""
     dados = _corpo()
     chapa = chapa_da_celula(dados.get("chapa"))
     setor = texto_padrao(dados.get("setor"))
@@ -192,6 +209,13 @@ def alocar_indireto():
             return jsonify({"erro": "Indireto não encontrado no cadastro."}), 404
         if not _colaborador(session, responsavel):
             return jsonify({"erro": "Responsável não encontrado no cadastro."}), 404
+        try:
+            funcao = (
+                funcao_para_gravar(session, pessoa, dados.get("funcao"))
+                if "funcao" in dados else None
+            )
+        except FuncaoInvalida as erro:
+            return jsonify({"erro": str(erro)}), 400
 
         alocacao = session.query(AlocacaoIndireto).filter(AlocacaoIndireto.CHAPA == chapa).first()
         if not alocacao:
@@ -202,6 +226,8 @@ def alocar_indireto():
         alocacao.RESPONSAVEL_CHAPA = responsavel
         if "observacao" in dados:
             alocacao.OBSERVACAO = observacao
+        if "funcao" in dados:
+            alocacao.FUNCAO = funcao
         alocacao.ALOCADO_POR = quem_esta_logado()
         alocacao.ALOCADO_EM = datetime.now(timezone.utc)
         session.commit()
@@ -247,47 +273,6 @@ def trocar_responsavel_indiretos():
         session.rollback()
         print(f"[ERRO] trocar_responsavel_indiretos: {erro}")
         return jsonify({"erro": "Não foi possível trocar o responsável."}), 500
-    finally:
-        session.close()
-
-
-@bp.route("/api/indiretos/funcao", methods=["POST"])
-@auth.exige_administrador
-def alterar_funcao_indireto():
-    """Troca a função mostrada para um indireto alocado por outra que já
-    existe no cadastro. Função vazia (ou igual à do cadastro) volta a usar a
-    do cadastro."""
-    dados = _corpo()
-    chapa = chapa_da_celula(dados.get("chapa"))
-    funcao = str(dados.get("funcao") or "").strip()
-    if not chapa:
-        return jsonify({"erro": "Informe o indireto."}), 400
-
-    session = SessionLocal()
-    try:
-        alocacao = session.query(AlocacaoIndireto).filter(AlocacaoIndireto.CHAPA == chapa).first()
-        if not alocacao:
-            return jsonify({"erro": "Este indireto não está alocado."}), 404
-        pessoa = _colaborador(session, chapa)
-        if funcao:
-            existe = (
-                session.query(Colaborador.id)
-                .filter(Colaborador.FUNÇÃO == funcao)
-                .first()
-            )
-            if not existe:
-                return jsonify({"erro": "Escolha uma função que já existe no cadastro."}), 400
-        if funcao == ((pessoa.FUNÇÃO if pessoa else "") or "").strip():
-            funcao = ""  # igual à do cadastro: não precisa guardar
-        alocacao.FUNCAO = funcao or None
-        alocacao.ALOCADO_POR = quem_esta_logado()
-        alocacao.ALOCADO_EM = datetime.now(timezone.utc)
-        session.commit()
-        return jsonify({"sucesso": True, "funcao": funcao})
-    except Exception as erro:
-        session.rollback()
-        print(f"[ERRO] alterar_funcao_indireto: {erro}")
-        return jsonify({"erro": "Não foi possível alterar a função."}), 500
     finally:
         session.close()
 

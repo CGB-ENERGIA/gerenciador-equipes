@@ -115,3 +115,21 @@ def test_mover_atualizar_e_sem_mudanca(sessao):
 )
 def test_chapa_da_celula(valor, esperado):
     assert indiretos.chapa_da_celula(valor) == esperado
+
+
+def test_funcao_para_gravar(sessao):
+    sessao.add(Colaborador(CHAPA="300", NOME="OUTRO", FUNÇÃO="ENCARREGADO DE FROTA I"))
+    sessao.commit()
+    pessoa = sessao.query(Colaborador).filter(Colaborador.CHAPA == "100").first()
+    pessoa.FUNÇÃO = "AUXILIAR"
+
+    # existe no cadastro: grava
+    assert indiretos.funcao_para_gravar(sessao, pessoa, " ENCARREGADO DE FROTA I ") == (
+        "ENCARREGADO DE FROTA I"
+    )
+    # vazia ou igual à do cadastro: volta a usar a do cadastro
+    assert indiretos.funcao_para_gravar(sessao, pessoa, "") is None
+    assert indiretos.funcao_para_gravar(sessao, pessoa, "AUXILIAR") is None
+    # inventada: recusa
+    with pytest.raises(indiretos.FuncaoInvalida):
+        indiretos.funcao_para_gravar(sessao, pessoa, "FUNÇÃO INVENTADA")
