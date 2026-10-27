@@ -18,7 +18,7 @@ Sistema para administrar equipes, vagas, colaboradores e alocações.
 | Banco de Dados | `frontend/src/pages/banco-dados.vue` | `ver_equipes` |
 | Cadastro de Vagas | `frontend/src/pages/cadastro-vagas.vue` | `gerenciar_vagas` |
 | Usuários | `frontend/src/pages/usuarios.vue` | `gerenciar_usuarios` |
-| Indiretos | `frontend/src/pages/alocacao-indiretos.vue` | só Administrador (em liberação gradual) |
+| Indiretos | `frontend/src/pages/alocacao-indiretos.vue` | todos consultam (`ver_equipes`); editar e "Sem setor" só Administrador |
 
 ## Configuração local
 

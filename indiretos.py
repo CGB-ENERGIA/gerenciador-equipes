@@ -5,9 +5,10 @@ quem aloca escolhe, independente do cadastro) e sob um RESPONSÁVEL — por
 pessoa, então no mesmo setor e base pode haver mais de um. Tabela
 alocacoes_indiretos (migrations/018), uma linha por indireto.
 
-Rotas num Blueprint próprio para não engordar o app.py. Por enquanto só o
-Administrador usa (auth.exige_administrador), enquanto a página está em
-liberação gradual.
+Rotas num Blueprint próprio para não engordar o app.py. Todos que veem
+equipes consultam a página (GET /api/indiretos); alterar — alocar, mover,
+trocar responsável, planilha — continua só com o Administrador
+(auth.exige_administrador).
 
 A planilha segue o padrão das outras (baixar -> preencher -> prévia ->
 aplicar) e, como a de usuários, NUNCA tira ninguém: quem não aparece na
@@ -123,7 +124,7 @@ def funcoes_do_cadastro(colaboradores):
 
 
 @bp.route("/api/indiretos", methods=["GET"])
-@auth.exige_administrador
+@auth.exige_permissao(auth.VER_EQUIPES)
 def obter_indiretos():
     """Tudo que a página precisa: os indiretos (com a alocação de cada um),
     quem pode ser responsável (o cadastro inteiro, para pesquisar por nome ou

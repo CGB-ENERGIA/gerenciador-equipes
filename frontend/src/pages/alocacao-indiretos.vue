@@ -19,7 +19,7 @@
           </div>
 
           <!-- um botão só: o diálogo baixa a planilha atual e recebe a preenchida -->
-          <div class="col-auto">
+          <div v-if="podeEditar" class="col-auto">
             <q-btn
               class="btn-exportar"
               color="positive"
@@ -121,7 +121,7 @@
           <div
             v-for="indicador in indicadores"
             :key="indicador.chave"
-            class="col-6 col-md-3"
+            class="col-6 col-md"
           >
             <q-card
               class="indicador cursor-pointer"
@@ -154,7 +154,7 @@
 
         <div v-else class="row q-col-gutter-md">
           <!-- SETORES -->
-          <div class="col-12 col-lg-8 coluna-setores">
+          <div :class="podeEditar ? 'col-12 col-lg-8 coluna-setores' : 'col-12'">
             <div class="row items-center q-mb-sm">
               <div class="text-h6">Setores</div>
               <q-chip dense class="q-ml-sm">{{ gruposSetor.length }}</q-chip>
@@ -166,7 +166,9 @@
                 {{
                   pessoas.some(p => p.alocacao)
                     ? 'Nenhum setor com esses filtros.'
-                    : 'Ninguém alocado ainda. Use "Alocar" na lista ao lado ou o botão "Planilha".'
+                    : podeEditar
+                      ? 'Ninguém alocado ainda. Use "Alocar" na lista ao lado ou o botão "Planilha".'
+                      : 'Ninguém alocado ainda.'
                 }}
               </div>
             </div>
@@ -205,6 +207,7 @@
                           v-if="grupo.responsavelUnico"
                           type="button"
                           class="responsavel-chip"
+                          :disabled="!podeEditar"
                           @click="abrirTrocaResponsavel(grupo.responsavelUnico)"
                         >
                           <span v-if="grupo.responsavelUnico.responsavel" class="responsavel-chip__texto">
@@ -217,8 +220,13 @@
                             </small>
                           </span>
                           <span v-else class="sem-responsavel">Definir responsável</span>
-                          <q-icon name="edit" size="14px" class="responsavel-chip__editar" />
-                          <q-tooltip>
+                          <q-icon
+                            v-if="podeEditar"
+                            name="edit"
+                            size="14px"
+                            class="responsavel-chip__editar"
+                          />
+                          <q-tooltip v-if="podeEditar">
                             Responsável pelo setor inteiro · clique para trocar
                           </q-tooltip>
                         </button>
@@ -262,6 +270,7 @@
                             v-if="!grupo.responsavelUnico"
                             type="button"
                             class="responsavel-chip"
+                            :disabled="!podeEditar"
                             @click="abrirTrocaResponsavel(time)"
                           >
                             <span v-if="time.responsavel" class="responsavel-chip__texto">
@@ -274,8 +283,13 @@
                               </small>
                             </span>
                             <span v-else class="sem-responsavel">Definir responsável</span>
-                            <q-icon name="edit" size="14px" class="responsavel-chip__editar" />
-                            <q-tooltip>
+                            <q-icon
+                              v-if="podeEditar"
+                              name="edit"
+                              size="14px"
+                              class="responsavel-chip__editar"
+                            />
+                            <q-tooltip v-if="podeEditar">
                               Responsável de {{ time.pessoas.length }}
                               {{ time.pessoas.length === 1 ? 'pessoa' : 'pessoas' }} · clique para trocar
                             </q-tooltip>
@@ -327,6 +341,7 @@
                                   label="afastado"
                                 />
                                 <q-btn
+                                  v-if="podeEditar"
                                   flat
                                   round
                                   dense
@@ -345,7 +360,7 @@
                     </div>
                   </div>
 
-                  <q-card-actions>
+                  <q-card-actions v-if="podeEditar">
                     <q-btn
                       flat
                       no-caps
@@ -360,8 +375,8 @@
             </div>
           </div>
 
-          <!-- SEM SETOR -->
-          <div class="col-12 col-lg-4 coluna-sem-setor">
+          <!-- SEM SETOR (só para quem edita: é a lista de quem falta alocar) -->
+          <div v-if="podeEditar" class="col-12 col-lg-4 coluna-sem-setor">
             <q-card class="cartao-sem-setor">
               <q-card-section>
                 <div class="row items-center no-wrap">
@@ -861,13 +876,18 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import CabecalhoApp from '../components/CabecalhoApp.vue'
 import MarcaDaguaFundo from '../components/MarcaDaguaFundo.vue'
 import SelectFiltroMultiplo from '../components/SelectFiltroMultiplo.vue'
-import { PODE_VER_EQUIPES } from '../composables/useSessao'
+import { PODE_VER_EQUIPES, useSessao } from '../composables/useSessao'
 import { useConfirmacao } from '../composables/useConfirmacao'
 import { proximaSelecaoMultipla } from '../utils/equipes'
 
 // mesmas regras do Banco de Dados; enquanto a página está em liberação
 // gradual, só o Administrador abre (ver router/index.js e indiretos.py)
-definePage({ meta: { permissao: PODE_VER_EQUIPES, somenteAdministrador: true } })
+definePage({ meta: { permissao: PODE_VER_EQUIPES } })
+
+// Todos que veem equipes consultam a página; editar (alocar, mover, trocar
+// responsável, planilha) é só do Administrador — o servidor também barra.
+const { usuario } = useSessao()
+const podeEditar = computed(() => Boolean(usuario.value?.ignora_vinculos))
 
 const { confirmar } = useConfirmacao()
 
@@ -1195,7 +1215,8 @@ const indicadores = computed(() => [
     icone: 'event_busy',
     valor: pessoas.value.filter(p => p.afastado).length
   }
-])
+  // quem só consulta não vê a lista "Sem setor", então nem o indicador dela
+].filter(indicador => podeEditar.value || indicador.chave !== 'semSetor'))
 
 function alternarStatus(chave) {
   filtroStatus.value = filtroStatus.value === chave ? '' : chave
@@ -1631,7 +1652,7 @@ async function aplicarPlanilha() {
   align-items: center;
   justify-content: center;
   background: var(--realce);
-  color: var(--marca-clara);
+  color: var(--marca-texto);
 }
 
 .indicador--alocados .indicador__icone {
@@ -1717,7 +1738,7 @@ async function aplicarPlanilha() {
   font-size: 1.5rem;
   font-weight: 700;
   line-height: 1;
-  color: var(--marca-clara);
+  color: var(--marca-texto);
 }
 
 .cartao-setor__legenda {
@@ -1773,7 +1794,7 @@ async function aplicarPlanilha() {
   font-family: var(--fonte-ui);
   font-size: 0.88rem;
   font-weight: 700;
-  color: var(--marca-clara);
+  color: var(--marca-texto);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1790,7 +1811,7 @@ async function aplicarPlanilha() {
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--marca);
+  color: var(--marca-texto);
   text-transform: uppercase;
 }
 
@@ -1813,11 +1834,17 @@ async function aplicarPlanilha() {
   transition: border-color 0.14s ease, box-shadow 0.14s ease;
 }
 
-.responsavel-chip:hover,
-.responsavel-chip:focus-visible {
+.responsavel-chip:not(:disabled):hover,
+.responsavel-chip:not(:disabled):focus-visible {
   border-color: var(--linha-forte);
   box-shadow: 0 0 0 3px rgba(113, 20, 36, 0.1);
   outline: none;
+}
+
+/* só consulta (quem não é Administrador): o chip é informativo */
+.responsavel-chip:disabled {
+  cursor: default;
+  color: var(--tinta);
 }
 
 .responsavel-chip__texto {
@@ -1896,7 +1923,7 @@ async function aplicarPlanilha() {
 }
 
 .secao-base__responsavel .q-icon {
-  color: var(--marca-clara);
+  color: var(--marca-texto);
 }
 
 .sem-responsavel {
@@ -1907,7 +1934,7 @@ async function aplicarPlanilha() {
 .secao-base__contagem {
   font-family: var(--fonte-ui);
   font-weight: 700;
-  color: var(--marca-clara);
+  color: var(--marca-texto);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1922,7 +1949,7 @@ async function aplicarPlanilha() {
 }
 
 .responsavel .q-icon {
-  color: var(--marca-clara);
+  color: var(--marca-texto);
 }
 
 .responsavel__rotulo {
@@ -1935,7 +1962,7 @@ async function aplicarPlanilha() {
 
 .avatar-pessoa {
   background: var(--realce);
-  color: var(--marca-clara);
+  color: var(--marca-texto);
   font-family: var(--fonte-ui);
   font-weight: 700;
   font-size: 0.8rem;

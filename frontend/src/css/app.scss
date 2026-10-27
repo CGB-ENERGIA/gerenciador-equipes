@@ -96,6 +96,9 @@
 
   --marca: #711424;
   --marca-clara: #8d2136;
+  // vinho usado como COR DE TEXTO (números, chapas, etiquetas): no escuro
+  // clareia, porque o vinho de fundo some sobre o fundo escuro
+  --marca-texto: #8d2136;
   --titulo: #4f1723;
   --fundo: #f2eeef;
   --superficie: #ffffff;
@@ -160,6 +163,7 @@ body.body--dark {
 
   --marca: #7c1a2c;
   --marca-clara: #99283f;
+  --marca-texto: #f0a3b3;
   --titulo: #f2dbe0;
   --fundo: #171314;
   --superficie: #221c1e;
@@ -304,9 +308,13 @@ body {
 // color-mix(in srgb, currentColor N%, transparent). Alguns navegadores nao
 // repintam esse valor quando so a cor herdada do body muda ao trocar de tema,
 // deixando o texto com a cor do tema anterior. Cor explicita evita isso.
-.q-item__label--caption,
-.q-item__label--header,
-.q-item__section--side:not(.q-item__section--avatar) {
+// O seletor precisa vencer tambem as regras do Quasar para listas escuras
+// (.q-list--dark .q-item__label--caption, duas classes): por isso o body e a
+// classe repetida. Sem isso, o modo escuro mostrava legendas, setas e botoes
+// das listas quase pretos sobre fundo escuro.
+body .q-item__label--caption.q-item__label--caption,
+body .q-item__label--header.q-item__label--header,
+body .q-item__section--side.q-item__section--side:not(.q-item__section--avatar) {
   color: var(--tinta-fraca);
 }
 

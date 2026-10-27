@@ -232,9 +232,8 @@ const PAGINAS = [
     rota: '/alocacao-indiretos',
     caminhos: ['/alocacao-indiretos'],
     icone: 'groups',
-    permissao: PODE_VER_EQUIPES,
-    // em liberação gradual: por enquanto só o Administrador vê
-    somenteAdministrador: true
+    // todos consultam; editar é só do Administrador (controlado na página)
+    permissao: PODE_VER_EQUIPES
   },
   {
     titulo: 'Vagas',
