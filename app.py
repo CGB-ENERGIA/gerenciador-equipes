@@ -22,11 +22,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
 import auth
+import planilhas_estilo
 from auth import exige_permissao
 from database.database import SessionLocal
 from database.depara import DE_PARA_SECAO, secao_tratada, tipos_ccusto_dos_rateios
 from database.importacao.importar_colaboradores import (
     COLUNAS_OBRIGATORIAS as COLUNAS_OBRIGATORIAS_COLABORADORES,
+    TIPOS_FUNCAO_VALIDOS as TIPOS_FUNCAO_PLANILHA,
     codigo_grupo_ccusto,
     processar_planilha_colaboradores,
 )
@@ -1012,8 +1014,20 @@ def exportar_pessoas_resumo():
 
                 df = pd.DataFrame(registros, columns=[c[0] for c in colunas])
                 df.to_excel(writer, index=False, sheet_name=nome_aba)
-                _ajustar_larguras_planilha(writer.sheets[nome_aba], maximo=48)
-                writer.sheets[nome_aba].freeze_panes = "A2"
+                planilhas_estilo.estilizar_aba(writer.sheets[nome_aba], consulta=True)
+                planilhas_estilo.destacar_valor(writer.sheets[nome_aba], "AFASTADO", "SIM")
+
+            planilhas_estilo.adicionar_instrucoes(
+                writer.book,
+                "Pessoas alocadas e não alocadas",
+                [
+                    ("O que é", "Exportação do Resumo com os filtros que estavam na tela no momento do download. É só consulta: o sistema não lê este arquivo de volta."),
+                    ("Alocadas", "Quem ocupa uma vaga, com a equipe e a vaga ocupada."),
+                    ("Não alocadas", "Quem está no quadro e não ocupa nenhuma vaga, com a justificativa quando está afastado."),
+                    ("AFASTADO", "Linhas marcadas com SIM aparecem destacadas em amarelo."),
+                ],
+                legenda=False,
+            )
 
         buffer.seek(0)
         return send_file(
@@ -2263,16 +2277,26 @@ def baixar_planilha_equipes():
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
             df.to_excel(writer, index=False, sheet_name="Equipes")
-            planilha = writer.sheets["Equipes"]
-            for coluna in planilha.columns:
-                largura = max(
-                    len(str(celula.value)) if celula.value is not None else 0
-                    for celula in coluna
-                )
-                planilha.column_dimensions[coluna[0].column_letter].width = max(
-                    12, largura + 3
-                )
-            planilha.freeze_panes = "A2"
+            planilhas_estilo.estilizar_aba(
+                writer.sheets["Equipes"],
+                editaveis=list(df.columns),
+                validacoes={"AÇÃO": list(ACOES_PLANILHA)},
+                largura_minima=10,
+            )
+            planilhas_estilo.adicionar_instrucoes(
+                writer.book,
+                "Planilha de equipes e vagas",
+                [
+                    ("Para que serve", "Criar, editar ou excluir equipes e a quantidade de vagas de cada função, de uma vez. Uma linha por equipe e disciplina (TIPO EQUIPE)."),
+                    ("AÇÃO", "criar = equipe nova · editar = muda uma equipe que já existe · excluir = apaga a equipe. As linhas já vêm com \"editar\": se nada mudar nelas, são ignoradas. Linha com AÇÃO em branco também é ignorada."),
+                    ("BASE e PREFIXO", "Identificam a equipe. Para editar ou excluir, mantenha exatamente como vieram no arquivo."),
+                    ("TIPO EQUIPE", "A disciplina da linha (CONSTRUÇÃO, PODA...). A mesma equipe pode ter várias linhas, uma por disciplina; cada linha só pode aparecer uma vez."),
+                    ("SETOR, SUPERVISOR, COORDENADOR", "Responsáveis daquela disciplina na equipe. Valem para todas as vagas dela."),
+                    ("Colunas de função", "Cada coluna depois de AÇÃO é uma função (ELETRICISTA, ENCARREGADO...) com a QUANTIDADE de vagas, em número inteiro. Para uma função nova, acrescente uma coluna com o nome dela em maiúsculas."),
+                    ("Vagas ocupadas", "Diminuir a quantidade nunca apaga uma vaga que tem alguém alocado: a prévia avisa e pede para liberar antes."),
+                    ("Antes de aplicar", "Envie o arquivo na tela de Vagas: o sistema mostra uma prévia do que muda e só grava quando você confirmar."),
+                ],
+            )
 
         buffer.seek(0)
         return send_file(
@@ -2825,7 +2849,7 @@ def marcar_duplicados_alocacoes(planilha, df_alocacoes):
         return
 
     vermelho = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
-    fonte_vermelha = Font(color="9C0006", bold=True)
+    fonte_vermelha = Font(name="Arial", size=10, color="9C0006", bold=True)
 
     colunas = list(df_alocacoes.columns)
     for nome_coluna in ("NOME_ATUAL", COLUNA_ALOC_CHAPA):
@@ -2859,18 +2883,29 @@ def baixar_planilha_alocacoes():
             for nome_aba, df in (("Alocações", df_alocacoes), ("Ativos", df_ativos)):
                 df.to_excel(writer, index=False, sheet_name=nome_aba)
                 planilha = writer.sheets[nome_aba]
-                for coluna in planilha.columns:
-                    largura = max(
-                        len(str(celula.value)) if celula.value is not None else 0
-                        for celula in coluna
-                    )
-                    planilha.column_dimensions[coluna[0].column_letter].width = max(
-                        12, largura + 3
-                    )
-                planilha.freeze_panes = "A2"
 
                 if nome_aba == "Alocações":
+                    # a marcação de duplicados entra ANTES do estilo: a
+                    # formatação condicional adicionada primeiro tem
+                    # prioridade sobre o amarelo das linhas extras
                     marcar_duplicados_alocacoes(planilha, df_alocacoes)
+                    planilhas_estilo.estilizar_aba(planilha, editaveis=[COLUNA_ALOC_CHAPA])
+                else:
+                    planilhas_estilo.estilizar_aba(planilha, consulta=True)
+
+            planilhas_estilo.adicionar_instrucoes(
+                writer.book,
+                "Planilha de alocações",
+                [
+                    ("Para que serve", "Alocar, trocar ou tirar colaboradores das vagas de uma vez. Uma linha por vaga."),
+                    ("O que editar", "Só a coluna CHAPA (amarela). As demais identificam a vaga e servem de referência."),
+                    ("Como funciona", "CHAPA preenchida em vaga livre = alocar · CHAPA diferente de quem ocupa = trocar · CHAPA em branco em vaga ocupada = tirar a pessoa · igual ao que já está = nada muda."),
+                    ("Não mexa", "Na coluna COMPOSICAO_ID: é o código da vaga, e o sistema usa ele para saber qual vaga é cada linha. Também não acrescente linhas: vaga nova é criada na tela de Vagas."),
+                    ("Repetidos", "Uma chapa em duas linhas aparece em vermelho, porque a mesma pessoa não pode ocupar duas vagas. NOME_ATUAL em vermelho mostra quem já ocupa duas vagas hoje."),
+                    ("Aba Ativos", "Lista de quem está no quadro (ativo ou de férias), para achar a chapa. Não é lida pelo sistema."),
+                    ("Antes de aplicar", "Envie o arquivo no Banco de Dados: o sistema mostra uma prévia e pede confirmação nas transferências."),
+                ],
+            )
 
         buffer.seek(0)
         return send_file(
@@ -3257,18 +3292,6 @@ def obter_colaboradores():
 # upsert dentro de uma transação e dá rollback no final, em vez de manter um
 # segundo caminho de código só para simular o resultado.
 
-def _ajustar_larguras_planilha(planilha, minimo=14, maximo=None):
-    for coluna in planilha.columns:
-        largura = max(
-            len(str(celula.value)) if celula.value is not None else 0
-            for celula in coluna
-        )
-        largura = max(minimo, largura + 3)
-        if maximo is not None:
-            largura = min(largura, maximo)
-        planilha.column_dimensions[coluna[0].column_letter].width = largura
-
-
 def montar_consulta_colaboradores(session, colaboradores):
     """Aba de consulta com TODOS os colaboradores cadastrados (DIRETO e
     INDIRETO, qualquer SITUAÇÃO) — só pra leitura, não é lida de volta na
@@ -3353,13 +3376,33 @@ def baixar_modelo_planilha_colaboradores():
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
             df.to_excel(writer, index=False, sheet_name="Colaboradores")
-            _ajustar_larguras_planilha(writer.sheets["Colaboradores"])
-            writer.sheets["Colaboradores"].freeze_panes = "A2"
+            planilhas_estilo.estilizar_aba(
+                writer.sheets["Colaboradores"],
+                editaveis=colunas,
+                validacoes={"TIPO_FUNÇÃO": list(TIPOS_FUNCAO_PLANILHA)},
+                linhas_exemplo=(2,),
+                largura_minima=14,
+            )
 
             df_consulta.to_excel(writer, index=False, sheet_name="Consulta Colaboradores")
-            planilha_consulta = writer.sheets["Consulta Colaboradores"]
-            _ajustar_larguras_planilha(planilha_consulta, maximo=48)
-            planilha_consulta.freeze_panes = "A2"
+            planilhas_estilo.estilizar_aba(
+                writer.sheets["Consulta Colaboradores"], consulta=True
+            )
+
+            planilhas_estilo.adicionar_instrucoes(
+                writer.book,
+                "Cadastro de colaboradores",
+                [
+                    ("Para que serve", "Cadastrar colaboradores novos e atualizar os que já existem, de uma vez. Uma linha por CHAPA e rateio (quem tem mais de um rateio aparece em mais de uma linha, com a mesma CHAPA)."),
+                    ("Linha de exemplo", "A linha 2 (cinza, em itálico) é só um exemplo do formato: APAGUE antes de enviar, ou o FULANO DE TAL será cadastrado."),
+                    ("Obrigatórias", "CHAPA, NOME, FUNÇÃO, ADMISSÃO, SEÇÃO, SITUAÇÃO e TIPO_FUNÇÃO."),
+                    ("TIPO_FUNÇÃO", "DIRETO (entra nas equipes e vagas) ou INDIRETO (fica fora delas)."),
+                    ("ADMISSÃO", "Data no formato dia/mês/ano (01/01/2024)."),
+                    ("RATEIO e GRPCCUSTO", "Código do rateio (ex.: 2.170.05) e do grupo de centro de custo (ex.: 2.170). O sistema completa o zero final se o Excel tiver cortado (2.17 vira 2.170)."),
+                    ("Aba Consulta Colaboradores", "Todo o cadastro de hoje, para consulta. Não é lida pelo sistema."),
+                    ("Antes de aplicar", "Envie o arquivo na tela de Colaboradores: o sistema mostra uma prévia de quem será criado ou atualizado antes de gravar."),
+                ],
+            )
 
         buffer.seek(0)
         return send_file(
@@ -5264,18 +5307,36 @@ def baixar_planilha_usuarios():
 
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            for nome_aba, df in (("Usuários", df_usuarios), ("Opções", df_opcoes)):
-                df.to_excel(writer, index=False, sheet_name=nome_aba)
-                planilha = writer.sheets[nome_aba]
-                for coluna in planilha.columns:
-                    largura = max(
-                        len(str(celula.value)) if celula.value is not None else 0
-                        for celula in coluna
-                    )
-                    planilha.column_dimensions[coluna[0].column_letter].width = max(
-                        14, min(largura + 3, 52)
-                    )
-                planilha.freeze_panes = "A2"
+            df_usuarios.to_excel(writer, index=False, sheet_name="Usuários")
+            planilhas_estilo.estilizar_aba(
+                writer.sheets["Usuários"],
+                editaveis=list(COLUNAS_PLANILHA_USUARIOS),
+                validacoes={
+                    "NIVEL": [dados["rotulo"] for dados in auth.NIVEIS.values()],
+                    "ATIVO": ["SIM", "NAO"],
+                },
+                largura_minima=14,
+                largura_maxima=52,
+            )
+
+            df_opcoes.to_excel(writer, index=False, sheet_name="Opções")
+            planilhas_estilo.estilizar_aba(
+                writer.sheets["Opções"], consulta=True, largura_maxima=60
+            )
+
+            planilhas_estilo.adicionar_instrucoes(
+                writer.book,
+                "Planilha de usuários",
+                [
+                    ("Para que serve", "Editar os usuários de hoje e cadastrar novos, de uma vez. Uma linha por usuário."),
+                    ("Editar", "Mude a linha de quem já existe. Coluna em branco limpa aquele campo (por exemplo, um vínculo); SENHA em branco mantém a senha atual."),
+                    ("Cadastrar", "Acrescente uma linha no fim com USUARIO, NOME, NIVEL e SENHA (obrigatória para usuário novo, mínimo de 6 caracteres)."),
+                    ("Nunca apaga", "Quem sumir da planilha continua como está. Para tirar o acesso, escreva NAO em ATIVO; para excluir de vez, use o botão na tela de Usuários."),
+                    ("NIVEL e RESPONSAVEL", "Escolha o nível na lista. RESPONSAVEL é o login do superior direto (Supervisor responde a Coordenador, Coordenador a Gerente)."),
+                    ("Vínculos", "BASE, TIPO_EQUIPE, SETOR e EQUIPE dizem o que a pessoa enxerga. Vários valores na mesma célula separados por \" / \". A aba Opções lista tudo que pode ser usado."),
+                    ("Antes de aplicar", "Envie o arquivo na tela de Usuários: o sistema mostra uma prévia e só grava quando você confirmar."),
+                ],
+            )
 
         buffer.seek(0)
         return send_file(
