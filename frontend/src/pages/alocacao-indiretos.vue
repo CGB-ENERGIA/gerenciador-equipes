@@ -364,15 +364,25 @@
           <div class="col-12 col-lg-4 coluna-sem-setor">
             <q-card class="cartao-sem-setor">
               <q-card-section>
-                <div class="row items-center">
+                <div class="row items-center no-wrap">
                   <div class="text-h6">Sem setor</div>
                   <q-chip dense class="q-ml-sm bg-orange-1">
                     {{ semSetorFiltrados.length }}
                   </q-chip>
+                  <!-- busca só desta lista (soma com a busca geral do topo) -->
+                  <q-input
+                    v-model="buscaSemSetor"
+                    dense
+                    outlined
+                    clearable
+                    placeholder="Pesquisar..."
+                    class="col q-ml-sm"
+                  >
+                    <template #prepend><q-icon name="search" size="18px" /></template>
+                  </q-input>
                 </div>
-                <div class="text-caption">
-                  Indiretos ainda não alocados. Clique para escolher setor, base e
-                  responsável.
+                <div class="text-caption ellipsis q-mt-xs">
+                  Ainda não alocados. Clique para alocar.
                 </div>
               </q-card-section>
 
@@ -973,6 +983,7 @@ const filtroBases = ref([TODOS])
 const filtroSetores = ref([TODOS])
 const filtroResponsaveis = ref([TODOS])
 const busca = ref('')
+const buscaSemSetor = ref('')
 
 // o que está de fato escolhido (vazio = todos)
 const escolhidos = selecao => (selecao.includes(TODOS) ? [] : selecao)
@@ -985,6 +996,7 @@ function limparFiltros() {
   filtroSetores.value = [TODOS]
   filtroResponsaveis.value = [TODOS]
   busca.value = ''
+  buscaSemSetor.value = ''
   filtroStatus.value = ''
 }
 // clicar num indicador filtra por status; clicar de novo limpa
@@ -1027,8 +1039,8 @@ const opcoesResponsaveis = computed(() => {
   ]
 })
 
-function casaComBusca(pessoa) {
-  const termo = (busca.value || '').trim().toLowerCase()
+function casaComBusca(pessoa, texto = busca.value) {
+  const termo = (texto || '').trim().toLowerCase()
   if (!termo) return true
   return [pessoa.nome, pessoa.chapa, pessoa.funcao, funcaoExibida(pessoa)].some(valor =>
     String(valor || '').toLowerCase().includes(termo)
@@ -1066,7 +1078,8 @@ const semSetorFiltrados = computed(() =>
       !setoresAtivos.value.length &&
       !responsaveisAtivos.value.length &&
       (!basesAtivas.value.length || basesAtivas.value.includes(pessoa.base_cadastro)) &&
-      casaComBusca(pessoa)
+      casaComBusca(pessoa) &&
+      casaComBusca(pessoa, buscaSemSetor.value)
   )
 )
 
