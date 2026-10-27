@@ -228,6 +228,15 @@ const PAGINAS = [
     permissao: PODE_VER_EQUIPES
   },
   {
+    titulo: 'Indiretos',
+    rota: '/alocacao-indiretos',
+    caminhos: ['/alocacao-indiretos'],
+    icone: 'groups',
+    permissao: PODE_VER_EQUIPES,
+    // em liberação gradual: por enquanto só o Administrador vê
+    somenteAdministrador: true
+  },
+  {
     titulo: 'Vagas',
     rota: '/cadastro-vagas',
     caminhos: ['/cadastro-vagas'],
@@ -252,7 +261,11 @@ const PAGINAS = [
 
 // o menu mostra só o que o nível da pessoa alcança
 const paginasPermitidas = computed(() =>
-  PAGINAS.filter(pagina => temPermissao(pagina.permissao))
+  PAGINAS.filter(
+    pagina =>
+      temPermissao(pagina.permissao) &&
+      (!pagina.somenteAdministrador || Boolean(usuario.value?.ignora_vinculos))
+  )
 )
 
 function ehPaginaAtual(pagina) {

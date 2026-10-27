@@ -63,6 +63,12 @@ export default defineRouter((/* { store, ssrContext } */) => {
       return { path: '/' }
     }
 
+    // página ainda em liberação gradual: só o Administrador (nível que ignora
+    // vínculos) abre, independente das permissões do nível
+    if (destino.meta?.somenteAdministrador && !usuario.ignora_vinculos) {
+      return { path: '/' }
+    }
+
     return true
   })
 
