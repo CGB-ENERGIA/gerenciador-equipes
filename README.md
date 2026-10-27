@@ -72,6 +72,7 @@ nada. Cada arquivo traz no cabeçalho o que conferir antes de rodar.
 - `016_padronizar_funcao_vaga.sql`: deixa a função das vagas em maiúsculas e unifica "Munqueiro/Motorista" em "MOTORISTA". O app grava sempre nesse formato (`funcao_da_vaga` no `app.py`).
 - `017_corrigir_grpccusto_zero_final.sql`: devolve o zero final do GRPCCUSTO ("2.17" → "2.170"), perdido quando o Excel guardava o código como número. O app grava sempre com 3 casas (`codigo_grupo_ccusto` em `database/importacao/importar_colaboradores.py`).
 - `018_add_alocacoes_indiretos.sql`: tabela da página Indiretos (setor, base e responsável de cada indireto). **Rode antes de usar a página**; sem ela a página mostra erro e a aba Indiretos da exportação do Resumo sai vazia.
+- `019_add_observacao_colaborador.sql`: observação livre do colaborador (ex.: férias), com quem escreveu e quando — editada no Banco de Dados, sem mudar status nem vaga. **Rode antes de publicar o código**: o modelo lê as colunas novas e, sem elas, toda consulta de colaboradores falha.
 
 ## Acesso
 

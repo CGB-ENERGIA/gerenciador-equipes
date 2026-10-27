@@ -307,6 +307,16 @@
 
                         <div class="col-12 col-sm-3">
                           {{ vaga.colaborador?.nome || 'Vaga livre' }}
+                          <div
+                            v-if="vaga.colaborador?.observacao"
+                            class="observacao-colaborador"
+                          >
+                            <q-icon name="sticky_note_2" size="14px" />
+                            {{ vaga.colaborador.observacao }}
+                            <q-tooltip v-if="descreverObservacaoPor(vaga.colaborador)">
+                              Observação de {{ descreverObservacaoPor(vaga.colaborador) }}
+                            </q-tooltip>
+                          </div>
                         </div>
 
                         <div class="col-12 col-sm-2 text-caption">
@@ -353,6 +363,21 @@
                           </q-chip>
 
                           <template v-if="vaga.colaborador">
+                            <q-btn
+                              flat
+                              round
+                              dense
+                              :color="vaga.colaborador.observacao ? 'amber-9' : 'grey-7'"
+                              icon="edit_note"
+                              class="q-ml-sm"
+                              aria-label="Observação do colaborador"
+                              @click="abrirObservacao(vaga.colaborador)"
+                            >
+                              <q-tooltip>
+                                {{ vaga.colaborador.observacao ? 'Editar observação' : 'Adicionar observação' }}
+                              </q-tooltip>
+                            </q-btn>
+
                             <q-btn
                               flat
                               round
@@ -537,6 +562,16 @@
                       <q-item-label v-if="colaborador.afastado" caption>
                         Afastado por: {{ descreverAfastadoPor(colaborador) }}
                       </q-item-label>
+
+                      <q-item-label v-if="colaborador.observacao" caption>
+                        <span class="observacao-colaborador">
+                          <q-icon name="sticky_note_2" size="14px" />
+                          {{ colaborador.observacao }}
+                          <q-tooltip v-if="descreverObservacaoPor(colaborador)">
+                            Observação de {{ descreverObservacaoPor(colaborador) }}
+                          </q-tooltip>
+                        </span>
+                      </q-item-label>
                     </q-item-section>
 
                     <q-item-section side class="text-center">
@@ -675,6 +710,30 @@
             Alterado por: {{ descreverTipoFuncaoAlteradoPor(colaboradorSelecionado) }}
           </div>
 
+          <div v-if="colaboradorSelecionado" class="caixa-observacao q-mb-md">
+            <q-icon name="sticky_note_2" size="18px" class="q-mr-sm" />
+            <div class="col">
+              <div v-if="colaboradorSelecionado.observacao">
+                {{ colaboradorSelecionado.observacao }}
+                <div
+                  v-if="descreverObservacaoPor(colaboradorSelecionado)"
+                  class="text-caption text-grey-7"
+                >
+                  por {{ descreverObservacaoPor(colaboradorSelecionado) }}
+                </div>
+              </div>
+              <div v-else class="text-grey-7">Sem observação</div>
+            </div>
+            <q-btn
+              flat
+              dense
+              no-caps
+              color="primary"
+              :label="colaboradorSelecionado.observacao ? 'Editar' : 'Adicionar observação'"
+              @click="abrirObservacao(colaboradorSelecionado)"
+            />
+          </div>
+
           <template v-if="tipoFuncaoOriginal === 'DIRETO'">
             <q-checkbox
               v-model="afastadoAlocacao"
@@ -774,6 +833,49 @@
             color="primary"
             label="Alocar"
             disable
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- ================================================== -->
+    <!-- OBSERVAÇÃO DO COLABORADOR -->
+    <!-- ================================================== -->
+
+    <q-dialog v-model="dialogObservacao.aberto">
+      <q-card style="min-width: 420px; max-width: 90vw">
+        <q-card-section>
+          <div class="text-h6">Observação do colaborador</div>
+          <div class="text-subtitle2 text-grey-7 q-mt-sm">
+            {{ dialogObservacao.chapa }} - {{ dialogObservacao.nome }}
+          </div>
+        </q-card-section>
+
+        <q-separator />
+
+        <q-card-section>
+          <q-input
+            v-model="dialogObservacao.texto"
+            type="textarea"
+            outlined
+            dense
+            autogrow
+            autofocus
+            :maxlength="LIMITE_OBSERVACAO"
+            counter
+            label="Observação"
+            hint="Ex.: férias de 01/11 a 30/11. Não muda o status nem a vaga. Deixe vazio para apagar."
+          />
+        </q-card-section>
+
+        <q-card-actions align="right">
+          <q-btn flat label="Cancelar" v-close-popup />
+          <q-btn
+            color="primary"
+            :label="dialogObservacao.texto.trim() || !dialogObservacao.original ? 'Salvar' : 'Apagar observação'"
+            :loading="salvandoObservacao"
+            :disable="dialogObservacao.texto.trim() === dialogObservacao.original"
+            @click="salvarObservacao"
           />
         </q-card-actions>
       </q-card>
@@ -1249,6 +1351,7 @@ import {
 import { useConfirmacao } from '../composables/useConfirmacao'
 import {
   descreverAfastadoPor,
+  descreverObservacaoPor,
   descreverTipoFuncaoAlteradoPor,
   ehEquipeFolguista,
   equipeCombinaComResponsavel,
@@ -1418,6 +1521,11 @@ const colaboradorEraAfastado = ref(false)
 const tipoFuncaoSelecionada = ref('DIRETO')
 const tipoFuncaoOriginal = ref('DIRETO')
 const salvandoTipoFuncao = ref(false)
+
+// Observação livre do colaborador (ex.: férias) — não muda status nem vaga
+const LIMITE_OBSERVACAO = 500
+const dialogObservacao = ref({ aberto: false, chapa: '', nome: '', texto: '', original: '' })
+const salvandoObservacao = ref(false)
 
 // Editar alocação (trocar colaborador de uma vaga ocupada)
 const dialogEdicaoAlocacao = ref(false)
@@ -2515,6 +2623,51 @@ async function salvarTipoFuncao() {
   }
 }
 
+function abrirObservacao(colaborador) {
+  if (!colaborador) {
+    return
+  }
+  dialogObservacao.value = {
+    aberto: true,
+    chapa: colaborador.chapa,
+    nome: colaborador.nome,
+    texto: colaborador.observacao || '',
+    original: colaborador.observacao || ''
+  }
+}
+
+async function salvarObservacao() {
+  const { chapa, texto } = dialogObservacao.value
+  salvandoObservacao.value = true
+
+  try {
+    const resposta = await fetch('/api/colaboradores/observacao', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ chapa, observacao: (texto || '').trim() })
+    })
+
+    const dados = await resposta.json()
+
+    if (!resposta.ok || dados.erro) {
+      throw new Error(dados.erro || 'Erro ao salvar a observação.')
+    }
+
+    dialogObservacao.value.aberto = false
+    if (colaboradorSelecionado.value?.chapa === chapa) {
+      colaboradorSelecionado.value = { ...colaboradorSelecionado.value, ...dados.colaborador }
+    }
+
+    await carregarDados()
+  } catch (e) {
+    erro.value = e.message || 'Erro ao salvar a observação.'
+  } finally {
+    salvandoObservacao.value = false
+  }
+}
+
 async function afastarColaborador() {
   if (!colaboradorSelecionado.value || !justificativaAfastamento.value.trim()) {
     return
@@ -2781,6 +2934,36 @@ watch(
 </script>
 
 <style scoped>
+/* observação livre do colaborador (ex.: férias) — tom de "lembrete" */
+.observacao-colaborador {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px dashed var(--linha-forte);
+  background: var(--superficie-2);
+  color: var(--tinta);
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: normal;
+}
+
+.caixa-observacao {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px dashed var(--linha-forte);
+  background: var(--superficie-2);
+  color: var(--tinta);
+}
+
+.observacao-colaborador .q-icon,
+.caixa-observacao > .q-icon {
+  color: var(--marca-clara);
+}
 .tabela-detalhe :deep(th) {
   font-family: var(--fonte-ui);
   letter-spacing: 0.04em;

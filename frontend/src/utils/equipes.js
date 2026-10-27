@@ -270,6 +270,19 @@ export function descreverAfastadoPor(pessoa) {
   return `${pessoa.afastado_por} em ${data.toLocaleDateString('pt-BR')}`
 }
 
+// "FULANO em 25/09/2026" (login): quem escreveu a observação do colaborador
+// e quando (ver migrations/019).
+export function descreverObservacaoPor(pessoa) {
+  if (!pessoa?.observacao_por) {
+    return ''
+  }
+  const data = pessoa.observacao_em ? new Date(pessoa.observacao_em) : null
+  if (!data || Number.isNaN(data.getTime())) {
+    return pessoa.observacao_por
+  }
+  return `${pessoa.observacao_por} em ${data.toLocaleDateString('pt-BR')}`
+}
+
 // "FULANO em 25/09/2026" (login): quem trocou DIRETO/INDIRETO na tela e
 // quando (ver migrations/015). Quem só veio da planilha fica vazio.
 export function descreverTipoFuncaoAlteradoPor(pessoa) {

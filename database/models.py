@@ -60,6 +60,12 @@ class Colaborador(Base):
     AFASTADO_POR = Column(String)
     AFASTADO_EM = Column(DateTime(timezone=True))
 
+    # Observacao livre (ex.: ferias de X a Y), sem mudar status nem vaga;
+    # quem escreveu (login) e quando — migrations/019
+    OBSERVACAO = Column(String)
+    OBSERVACAO_POR = Column(String)
+    OBSERVACAO_EM = Column(DateTime(timezone=True))
+
     rateios = relationship(
         "Rateio",
         back_populates="colaborador",

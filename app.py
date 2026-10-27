@@ -1032,6 +1032,7 @@ def exportar_pessoas_resumo():
                 "GRPCCUSTO": rateio_de(colaborador.CHAPA, "grupos"),
                 "SITUAÇÃO": colaborador.SITUAÇÃO or "",
                 "ADMISSÃO": data_br(colaborador.ADMISSÃO),
+                "OBSERVAÇÃO": colaborador.OBSERVACAO or "",
             }
 
         # ---------- Pessoas alocadas
@@ -1108,10 +1109,11 @@ def exportar_pessoas_resumo():
         df_colaboradores = montar_consulta_colaboradores(session, colaboradores)
         df_colaboradores["AFASTADO"] = ["SIM" if c.AFASTADO else "" for c in colaboradores]
         df_colaboradores["ADMISSÃO"] = [data_br(c.ADMISSÃO) for c in colaboradores]
+        df_colaboradores["OBSERVAÇÃO"] = [c.OBSERVACAO or "" for c in colaboradores]
 
         colunas_cadastro = [
             "FUNÇÃO NO CADASTRO", "SEÇÃO", "TIPO CCUSTO", "RATEIO_FUNCIONARIO",
-            "GRPCCUSTO", "SITUAÇÃO", "ADMISSÃO",
+            "GRPCCUSTO", "SITUAÇÃO", "ADMISSÃO", "OBSERVAÇÃO",
         ]
         abas = [
             ("Pessoas alocadas", pd.DataFrame(alocadas, columns=[
@@ -1145,6 +1147,7 @@ def exportar_pessoas_resumo():
                     ("Pessoas não alocadas", "Quem está no quadro e não ocupa vaga (com os mesmos filtros), com o afastamento: justificativa, quem justificou e a data."),
                     ("Indiretos", "Todos os indiretos alocados na página Indiretos: setor, base e responsável."),
                     ("Colaboradores", "O cadastro inteiro, sem filtro."),
+                    ("OBSERVAÇÃO", "Nas abas de pessoas e Colaboradores, a observação do colaborador escrita no Banco de Dados (ex.: férias). Na aba Indiretos, a observação da alocação no setor."),
                     ("AFASTADO", "Linhas com SIM aparecem destacadas em amarelo."),
                 ],
                 legenda=False,
@@ -1270,6 +1273,7 @@ def obter_equipes():
                         "chapa": str(colaborador.CHAPA),
                         "nome": colaborador.NOME or "",
                         "funcao": colaborador.FUNÇÃO or "",
+                        **dados_observacao(colaborador),
                     } if colaborador else None,
                 })
 
@@ -1903,6 +1907,17 @@ def dados_afastamento(colaborador):
         "afastado_por": colaborador.AFASTADO_POR or "",
         "afastado_em": (
             colaborador.AFASTADO_EM.isoformat() if colaborador.AFASTADO_EM else ""
+        ),
+    }
+
+
+def dados_observacao(colaborador):
+    """Observação livre do colaborador, quem escreveu e quando."""
+    return {
+        "observacao": colaborador.OBSERVACAO or "",
+        "observacao_por": colaborador.OBSERVACAO_POR or "",
+        "observacao_em": (
+            colaborador.OBSERVACAO_EM.isoformat() if colaborador.OBSERVACAO_EM else ""
         ),
     }
 
@@ -3411,6 +3426,7 @@ def obter_colaboradores():
                 "justificativa_afastamento": colaborador.JUSTIFICATIVA_AFASTAMENTO or "",
                 **dados_afastamento(colaborador),
                 **dados_tipo_funcao(colaborador),
+                **dados_observacao(colaborador),
             })
 
         return jsonify(resultado)
@@ -4291,6 +4307,68 @@ def afastar_colaborador():
         session.rollback()
         print(f"[ERRO] afastar_colaborador: {erro}")
         return jsonify({"erro": "Não foi possível marcar o colaborador como afastado."}), 500
+    finally:
+        session.close()
+
+
+# ============================================================
+# OBSERVAÇÃO DO COLABORADOR
+# ============================================================
+#
+# Texto livre (ex.: "férias de 01/11 a 30/11") que NÃO muda status nem vaga —
+# para quando a pessoa segue alocada mas há algo a registrar. Texto vazio
+# apaga a observação.
+
+LIMITE_OBSERVACAO = 500
+
+
+@app.route("/api/colaboradores/observacao", methods=["POST"])
+@exige_permissao(auth.VER_EQUIPES)
+def salvar_observacao_colaborador():
+    dados = corpo_json()
+    if not dados:
+        return jsonify({"erro": "Dados não enviados."}), 400
+
+    chapa = str(dados.get("chapa", "")).strip()
+    observacao = str(dados.get("observacao") or "").strip()
+
+    if not chapa:
+        return jsonify({"erro": "CHAPA não informada."}), 400
+    if len(observacao) > LIMITE_OBSERVACAO:
+        return jsonify({
+            "erro": f"A observação pode ter no máximo {LIMITE_OBSERVACAO} caracteres."
+        }), 400
+
+    session = SessionLocal()
+    try:
+        with session.begin():
+            colaborador = (
+                session.query(Colaborador)
+                .filter(Colaborador.CHAPA == chapa)
+                .first()
+            )
+            if not colaborador:
+                return jsonify({"erro": "Colaborador não encontrado."}), 404
+
+            if observacao:
+                colaborador.OBSERVACAO = observacao
+                colaborador.OBSERVACAO_POR = (auth.usuario_logado() or {}).get("usuario")
+                colaborador.OBSERVACAO_EM = datetime.now(timezone.utc)
+            else:
+                colaborador.OBSERVACAO = None
+                colaborador.OBSERVACAO_POR = None
+                colaborador.OBSERVACAO_EM = None
+            resposta = {"chapa": chapa, **dados_observacao(colaborador)}
+
+        return jsonify({
+            "sucesso": True,
+            "mensagem": "Observação salva." if observacao else "Observação removida.",
+            "colaborador": resposta,
+        })
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] salvar_observacao_colaborador: {erro}")
+        return jsonify({"erro": "Não foi possível salvar a observação."}), 500
     finally:
         session.close()
 

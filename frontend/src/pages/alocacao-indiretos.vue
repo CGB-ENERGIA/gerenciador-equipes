@@ -140,7 +140,7 @@
 
         <div v-else class="row q-col-gutter-md">
           <!-- SETORES -->
-          <div class="col-12 col-lg-8">
+          <div class="col-12 col-lg-8 coluna-setores">
             <div class="row items-center q-mb-sm">
               <div class="text-h6">Setores</div>
               <q-chip dense class="q-ml-sm">{{ gruposSetor.length }}</q-chip>
@@ -189,7 +189,7 @@
                           @click="abrirTrocaResponsavel(grupo.responsavelUnico)"
                         >
                           <span v-if="grupo.responsavelUnico.responsavel" class="responsavel-chip__texto">
-                            <strong>{{ grupo.responsavelUnico.responsavel.nome }}</strong>
+                            <strong>{{ nomeCurto(grupo.responsavelUnico.responsavel.nome) }}</strong>
                             <small>
                               {{ grupo.responsavelUnico.responsavel.chapa }}
                               <template v-if="grupo.responsavelUnico.responsavel.funcao">
@@ -246,7 +246,7 @@
                             @click="abrirTrocaResponsavel(time)"
                           >
                             <span v-if="time.responsavel" class="responsavel-chip__texto">
-                              <strong>{{ time.responsavel.nome }}</strong>
+                              <strong>{{ nomeCurto(time.responsavel.nome) }}</strong>
                               <small>
                                 {{ time.responsavel.chapa }}
                                 <template v-if="time.responsavel.funcao">
@@ -347,7 +347,7 @@
           </div>
 
           <!-- SEM SETOR -->
-          <div class="col-12 col-lg-4">
+          <div class="col-12 col-lg-4 coluna-sem-setor">
             <q-card class="cartao-sem-setor">
               <q-card-section>
                 <div class="row items-center">
@@ -372,11 +372,6 @@
                   :class="{ 'linha-afastado': pessoa.afastado }"
                   @click="abrirAlocacao(pessoa)"
                 >
-                  <q-item-section avatar>
-                    <q-avatar size="30px" class="avatar-pessoa">
-                      {{ iniciais(pessoa.nome) }}
-                    </q-avatar>
-                  </q-item-section>
 
                   <q-item-section>
                     <q-item-label class="text-weight-medium">{{ pessoa.nome }}</q-item-label>
@@ -432,9 +427,6 @@
 
         <q-card-section class="q-gutter-md">
           <div v-if="alocacao.modo === 'pessoa' && pessoaAlocacao" class="pessoa-fixa">
-            <q-avatar size="38px" class="avatar-pessoa">
-              {{ iniciais(pessoaAlocacao.nome) }}
-            </q-avatar>
             <div class="q-ml-sm">
               <div class="text-weight-medium">{{ pessoaAlocacao.nome }}</div>
               <div class="text-caption">
@@ -462,11 +454,6 @@
             <template #prepend><q-icon name="person" /></template>
             <template #option="scope">
               <q-item v-bind="scope.itemProps">
-                <q-item-section avatar>
-                  <q-avatar size="28px" class="avatar-pessoa">
-                    {{ iniciais(scope.opt.nome) }}
-                  </q-avatar>
-                </q-item-section>
                 <q-item-section>
                   <q-item-label>{{ scope.opt.nome }}</q-item-label>
                   <q-item-label caption>
@@ -534,11 +521,6 @@
             <template #prepend><q-icon name="supervisor_account" /></template>
             <template #option="scope">
               <q-item v-bind="scope.itemProps">
-                <q-item-section avatar>
-                  <q-avatar size="28px" class="avatar-responsavel">
-                    {{ iniciais(scope.opt.nome) }}
-                  </q-avatar>
-                </q-item-section>
                 <q-item-section>
                   <q-item-label>{{ scope.opt.nome }}</q-item-label>
                   <q-item-label caption>
@@ -630,11 +612,6 @@
             <template #prepend><q-icon name="supervisor_account" /></template>
             <template #option="scope">
               <q-item v-bind="scope.itemProps">
-                <q-item-section avatar>
-                  <q-avatar size="28px" class="avatar-responsavel">
-                    {{ iniciais(scope.opt.nome) }}
-                  </q-avatar>
-                </q-item-section>
                 <q-item-section>
                   <q-item-label>{{ scope.opt.nome }}</q-item-label>
                   <q-item-label caption>
@@ -882,9 +859,9 @@ function responsavelPorChapa(chapa) {
   return responsaveisPorChapa.value.get(chapa) || null
 }
 
-function iniciais(nome) {
-  const partes = String(nome || '').trim().split(/\s+/)
-  return ((partes[0]?.[0] || '') + (partes.at(-1)?.[0] || '')).toUpperCase()
+// Primeiro e segundo nome ("CAMILA CORREA ARAUJO" -> "CAMILA CORREA")
+function nomeCurto(nome) {
+  return String(nome || '').trim().split(/\s+/).slice(0, 2).join(' ')
 }
 
 async function chamarApi(url, opcoes, mensagemErro) {
@@ -971,6 +948,21 @@ const semSetorFiltrados = computed(() =>
   )
 )
 
+// Ordem das pessoas dentro de cada base: primeiro pelo cargo (a função que
+// contém o termo, ex. "AUXILIAR DE ALMOXARIFADO" -> AUXILIAR), as demais
+// depois, em ordem alfabética. COORDENADOR vem antes de SUPERVISOR por ser
+// o cargo acima na hierarquia.
+const ORDEM_CARGOS = ['COORDENADOR', 'SUPERVISOR', 'ANALISTA', 'ENCARREGADO', 'ASSISTENTE', 'AUXILIAR']
+
+function ordemCargo(funcao) {
+  const texto = String(funcao || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+  const posicao = ORDEM_CARGOS.findIndex(cargo => texto.includes(cargo))
+  return posicao === -1 ? ORDEM_CARGOS.length : posicao
+}
+
 // setor -> base -> responsável -> pessoas
 const gruposSetor = computed(() => {
   const porSetor = new Map()
@@ -986,6 +978,7 @@ const gruposSetor = computed(() => {
   }
 
   const porFuncaoENome = (a, b) =>
+    ordemCargo(a.funcao) - ordemCargo(b.funcao) ||
     (a.funcao || '').localeCompare(b.funcao || '', 'pt-BR') ||
     a.nome.localeCompare(b.nome, 'pt-BR')
 
@@ -1620,6 +1613,24 @@ async function aplicarPlanilha() {
   flex-direction: column;
   line-height: 1.1;
   text-align: left;
+  font-size: 0.85rem;
+}
+
+/* nomes um pouco menores que o padrão da lista, para harmonizar com as etiquetas */
+.lista-pessoas .text-weight-medium,
+.lista-sem-setor .text-weight-medium {
+  font-size: 0.82rem;
+}
+
+/* "Sem setor" estreita em telas largas: o espaço vai para os setores */
+@media (min-width: 1440px) {
+  .coluna-setores {
+    width: 80%;
+  }
+
+  .coluna-sem-setor {
+    width: 20%;
+  }
 }
 
 .responsavel-chip__texto small {
