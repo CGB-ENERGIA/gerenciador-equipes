@@ -171,7 +171,12 @@
               </div>
             </div>
 
-            <div class="row q-col-gutter-md">
+            <!--
+              Mural: duas colunas que empilham os cartões sem deixar buraco
+              (cada cartão tem a altura do próprio conteúdo). A ordem segue
+              coluna a coluna.
+            -->
+            <div class="mural-setores">
               <!--
                 Um cartão por SETOR; dentro, uma seção por BASE; dentro da base,
                 as pessoas agrupadas por RESPONSÁVEL (o responsável é por
@@ -180,7 +185,7 @@
               <div
                 v-for="grupo in gruposSetor"
                 :key="grupo.nome"
-                class="col-12 col-md-6"
+                class="mural-setores__item"
               >
                 <q-card class="cartao-setor">
                   <div class="cartao-setor__faixa" />
@@ -1006,12 +1011,21 @@ const opcoesSetores = computed(() => [
   { label: 'Todos os setores', value: TODOS },
   ...opcoesUnicas(nomesSetores.value)
 ])
-const opcoesResponsaveis = computed(() => [
-  { label: 'Todos os responsáveis', value: TODOS },
-  ...[...new Set(alocados.value.map(p => p.alocacao.responsavel_chapa).filter(Boolean))]
-    .map(chapa => ({ label: responsavelPorChapa(chapa)?.nome || chapa, value: chapa }))
-    .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
-])
+// só os dois primeiros nomes, como no chip; se dois ficarem iguais, a chapa
+// desempata
+const opcoesResponsaveis = computed(() => {
+  const opcoes = [...new Set(alocados.value.map(p => p.alocacao.responsavel_chapa).filter(Boolean))]
+    .map(chapa => ({ label: nomeCurto(responsavelPorChapa(chapa)?.nome) || chapa, value: chapa }))
+  const repetidos = new Set(
+    opcoes.map(o => o.label).filter((label, i, todos) => todos.indexOf(label) !== i)
+  )
+  return [
+    { label: 'Todos os responsáveis', value: TODOS },
+    ...opcoes
+      .map(o => (repetidos.has(o.label) ? { ...o, label: `${o.label} (${o.value})` } : o))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
+  ]
+})
 
 function casaComBusca(pessoa) {
   const termo = (busca.value || '').trim().toLowerCase()
@@ -1631,10 +1645,25 @@ async function aplicarPlanilha() {
 }
 
 /* ---------- cartão do setor ---------- */
+.mural-setores {
+  column-count: 1;
+  column-gap: 16px;
+}
+
+@media (min-width: 1024px) {
+  .mural-setores {
+    column-count: 2;
+  }
+}
+
+.mural-setores__item {
+  break-inside: avoid;
+  margin-bottom: 16px;
+}
+
 .cartao-setor {
   position: relative;
   overflow: hidden;
-  height: 100%;
   display: flex;
   flex-direction: column;
 }

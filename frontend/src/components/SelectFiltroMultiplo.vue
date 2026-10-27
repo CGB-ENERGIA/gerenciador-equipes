@@ -39,10 +39,13 @@
       </div>
     </template>
 
+    <!-- linhas compactas: listas longas (responsáveis, setores) cabem mais na tela -->
     <template #option="scope">
-      <q-item v-bind="scope.itemProps">
-        <q-item-section side>
+      <q-item v-bind="scope.itemProps" dense class="opcao-filtro">
+        <q-item-section side class="q-pr-sm">
           <q-checkbox
+            dense
+            size="sm"
             :model-value="scope.selected"
             @update:model-value="scope.toggleOption(scope.opt)"
           />
@@ -157,5 +160,11 @@ watch(() => props.options, recalcular)
   overflow: hidden;
   flex: 1;
   min-width: 0;
+}
+
+.opcao-filtro {
+  min-height: 32px;
+  padding-top: 2px;
+  padding-bottom: 2px;
 }
 </style>
