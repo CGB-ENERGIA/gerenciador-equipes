@@ -84,7 +84,10 @@
     <div
       v-if="no.assessores.length"
       class="org-assessoria"
-      :class="{ 'org-assessoria--uniforme': no.apoioDosDoisLados }"
+      :class="{
+        'org-assessoria--uniforme': no.apoioDosDoisLados,
+        'org-assessoria--sem-filhos': !no.filhos.length && !no.apoioDosDoisLados
+      }"
     >
       <div class="org-assessoria__lista org-assessoria__lista--esquerda">
         <div v-for="assessor in assessoresDaEsquerda" :key="assessor.id" class="org-assessoria__item">
@@ -632,14 +635,42 @@ function soltarAqui(evento) {
   padding-left: 0;
 }
 
+/* O traço vai até o meio do item, por trás do cartão: quem tem assessoria ou
+   equipe própria ocupa mais largura que o cartão, que fica centralizado nela,
+   e um traço de tamanho fixo não chegaria até ele. */
 .org-assessoria__item::before {
   content: '';
   position: absolute;
   top: 24px;
   left: 0;
-  width: 18px;
+  width: calc(50% + 9px);
   height: 2px;
   background: var(--org-linha);
+}
+
+.org-assessoria__item > .org-no > .org-cartao--externo {
+  background: var(--superficie);
+}
+
+/* Sem ninguém abaixo, a linha para no último traço em vez de seguir até o fim
+   da lista: cada item desenha o seu trecho, e o último, só até o traço. */
+.org-assessoria--sem-filhos > .org-assessoria__linha {
+  background: none;
+}
+
+.org-assessoria--sem-filhos > .org-assessoria__lista > .org-assessoria__item::after {
+  content: '';
+  position: absolute;
+  top: -12px;
+  bottom: 0;
+  left: -2px;
+  width: 2px;
+  background: var(--org-linha);
+}
+
+.org-assessoria--sem-filhos > .org-assessoria__lista > .org-assessoria__item:last-child::after {
+  bottom: auto;
+  height: 38px;
 }
 
 .org-assessoria__lista--esquerda .org-assessoria__item::before {
