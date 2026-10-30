@@ -292,6 +292,21 @@ class TentativaLogin(Base):
     CRIADO_EM = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
+class SetorGerencia(Base):
+    """Setor ligado a um gerente no organograma geral dos Indiretos: abaixo
+    dele ou, com APOIO, ao lado da linha. RESPONSAVEL_CHAPA vazio = o setor
+    inteiro; preenchido = só esse responsável e sua equipe — ver migrations/022."""
+
+    __tablename__ = "setores_gerencia"
+
+    SETOR = Column(String, primary_key=True)
+    RESPONSAVEL_CHAPA = Column(String, primary_key=True, default="", server_default="")
+    GERENTE_CHAPA = Column(String, nullable=False)
+    APOIO = Column(Boolean, nullable=False, default=False, server_default="false")
+    ALOCADO_POR = Column(String, nullable=True)
+    ALOCADO_EM = Column(DateTime(timezone=True), nullable=True)
+
+
 class AlocacaoIndireto(Base):
     """Onde um colaborador INDIRETO trabalha: setor, base e responsável.
 

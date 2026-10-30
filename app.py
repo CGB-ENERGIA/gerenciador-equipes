@@ -39,6 +39,7 @@ from database.models import (
     MembroEquipe,
     AlocacaoIndireto,
     Rateio,
+    SetorGerencia,
     TentativaLogin,
     Usuario,
 )
@@ -277,10 +278,12 @@ def corpo_json():
 # tentativas_login, migration 013) e nao em memoria: na Vercel cada requisicao
 # pode cair numa instancia diferente, e um contador local nao limitaria nada.
 # Dois limites: por login digitado (quem insiste numa conta) e por IP (quem
-# testa muitas contas, uma senha de cada vez).
+# testa muitas contas, uma senha de cada vez). O limite por IP barra até quem
+# acerta a senha e o escritório sai para a internet com um IP só, então ele
+# precisa folga para os erros de todos somados.
 JANELA_TENTATIVAS_LOGIN = timedelta(minutes=15)
 MAX_FALHAS_POR_USUARIO = 5
-MAX_FALHAS_POR_IP = 30
+MAX_FALHAS_POR_IP = 100
 MENSAGEM_MUITAS_TENTATIVAS = (
     "Acesso bloqueado por muitas tentativas com a senha errada. Fale com o "
     "Administrador do sistema para liberar, ou aguarde 15 minutos."
@@ -428,7 +431,7 @@ def entrar():
             return jsonify({"erro": "Este usuário está desativado."}), 403
 
         usuario.ULTIMO_ACESSO = datetime.now(timezone.utc)
-        dados_usuario = auth.descrever_usuario(usuario, session=session)
+        dados_usuario = auth.descrever_sessao(usuario, session)
         session.commit()
 
         auth.registrar_login(usuario)
@@ -491,7 +494,7 @@ def niveis_para_tela(session=None):
 
 
 @app.route("/api/niveis/<nivel>/permissoes", methods=["PUT"])
-@exige_permissao(auth.GERENCIAR_USUARIOS)
+@auth.exige_administrador
 def atualizar_permissoes_nivel(nivel):
     dados = corpo_json()
     if not dados:
@@ -1699,6 +1702,9 @@ def remover_membros_equipe(equipe_id):
             )
         ]
 
+        if not membros and any(composicao.membro for composicao in equipe.composicoes):
+            return jsonify({"erro": "Seu acesso não cobre esta equipe."}), 403
+
         for membro in membros:
             session.delete(membro)
 
@@ -2678,6 +2684,9 @@ def remover_vaga(vaga_id):
         if auth.GERENCIAR_VAGAS not in (usuario.get("permissoes") or ()) and not eh_extra(vaga):
             return jsonify({"erro": "Seu nível de acesso não permite esta ação."}), 403
 
+        if not vaga_no_escopo(usuario, vaga.equipe, vaga):
+            return jsonify({"erro": "Seu acesso não cobre a base ou o tipo de equipe desta vaga."}), 403
+
         if vaga.membro:
             return jsonify({"erro": "Não é possível excluir uma vaga ocupada. Remova o colaborador antes."}), 400
 
@@ -2956,6 +2965,10 @@ def analisar_planilha_alocacoes(arquivo, session):
             registrar_erro(numero, rotulo, f"Colaborador de CHAPA {chapa_planilha} não encontrado.")
             continue
 
+        if (colaborador.TIPO_FUNÇÃO or "").strip().upper() != "DIRETO":
+            registrar_erro(numero, rotulo, f"A CHAPA {chapa_planilha} está marcada como indireto e não pode ser alocada.")
+            continue
+
         if chapa_planilha in chapas_ja_planejadas:
             registrar_erro(numero, rotulo, f"A CHAPA {chapa_planilha} já aparece em outra linha de alocação.")
             continue
@@ -2975,6 +2988,7 @@ def analisar_planilha_alocacoes(arquivo, session):
             "nome": colaborador.NOME or "",
             "conflito": False,
             "chapa_antiga": chapa_atual or None,
+            "afastado": bool(colaborador.AFASTADO),
         }
         if alocacao_existente:
             comp_atual = alocacao_existente.composicao
@@ -3167,6 +3181,9 @@ def aplicar_planilha_alocacoes():
             session.add(MembroEquipe(
                 composicao_id=item["composicao_id"], CHAPA=item["chapa"]
             ))
+            retirar_afastamento(
+                session.query(Colaborador).filter(Colaborador.CHAPA == item["chapa"]).first()
+            )
 
         session.commit()
 
@@ -3242,9 +3259,14 @@ def adicionar_folguista_extra(equipe_id):
             if not colaborador:
                 return jsonify({"erro": "Colaborador não encontrado."}), 404
 
+            if (colaborador.TIPO_FUNÇÃO or "").strip().upper() != "DIRETO":
+                return jsonify({
+                    "erro": "Este colaborador está marcado como indireto e não pode ser alocado."
+                }), 400
+
             if not auth.pode_realizar_operacao(
                 auth.usuario_logado(), auth.OPERACAO_ALOCAR, equipe.BASE,
-                TIPO_EQUIPE_PADRAO, equipe_id=equipe.id, setor=setor,
+                tipo, equipe_id=equipe.id, setor=setor,
             ):
                 return jsonify({
                     "erro": "Seu acesso não cobre a base ou o setor desta equipe."
@@ -3307,6 +3329,7 @@ def adicionar_folguista_extra(equipe_id):
 
             membro = MembroEquipe(composicao_id=composicao.id, CHAPA=chapa)
             session.add(membro)
+            retirar_afastamento(colaborador)
 
         return jsonify({
             "sucesso": True,
@@ -3858,9 +3881,19 @@ def editar_colaborador_cadastro(chapa):
             if session.query(Colaborador).filter(Colaborador.CHAPA == nova_chapa).first():
                 return jsonify({"erro": f"Já existe um colaborador com a CHAPA {nova_chapa}."}), 409
 
-            # Membro e rateio apontam para Colaborador.CHAPA sem ON UPDATE
-            # CASCADE, então a chapa não pode ser trocada no lugar: cria o
-            # registro novo com os mesmos dados, move as referências e só
+            # Trocar a matrícula mantém os vínculos porque é a mesma pessoa.
+            # Com o nome trocado junto, poderia ser outra pessoa herdando a
+            # equipe, o setor e os subordinados da anterior.
+            if normalizar(campos["NOME"]) != normalizar(colaborador.NOME or ""):
+                return jsonify({
+                    "erro": "Não é possível trocar a CHAPA e o NOME ao mesmo tempo. "
+                            "Se for a mesma pessoa, troque um de cada vez; "
+                            "se for outra pessoa, faça um novo cadastro."
+                }), 409
+
+            # Membro, rateio e indiretos apontam para Colaborador.CHAPA sem ON
+            # UPDATE CASCADE, então a chapa não pode ser trocada no lugar: cria
+            # o registro novo com os mesmos dados, move as referências e só
             # então apaga o antigo.
             novo = Colaborador(CHAPA=nova_chapa, **{
                 coluna.key: getattr(colaborador, coluna.key)
@@ -3875,6 +3908,15 @@ def editar_colaborador_cadastro(chapa):
             session.query(Rateio).filter(Rateio.CHAPA == chapa).update(
                 {Rateio.CHAPA: nova_chapa}, synchronize_session=False
             )
+            for coluna in (
+                AlocacaoIndireto.CHAPA,
+                AlocacaoIndireto.RESPONSAVEL_CHAPA,
+                SetorGerencia.RESPONSAVEL_CHAPA,
+                SetorGerencia.GERENTE_CHAPA,
+            ):
+                session.query(coluna.class_).filter(coluna == chapa).update(
+                    {coluna: nova_chapa}, synchronize_session=False
+                )
             session.expire(colaborador, ["rateios"])
             session.delete(colaborador)
             colaborador = novo
@@ -3904,11 +3946,48 @@ def editar_colaborador_cadastro(chapa):
         session.close()
 
 
+def dependentes_nos_indiretos(session, chapas):
+    """Quantas pessoas (fora as próprias chapas) respondem a estas chapas na
+    página Indiretos, e quantas ligações de setor no organograma geral elas têm."""
+    subordinados = (
+        session.query(AlocacaoIndireto)
+        .filter(
+            AlocacaoIndireto.RESPONSAVEL_CHAPA.in_(chapas),
+            AlocacaoIndireto.CHAPA.notin_(chapas),
+        )
+        .count()
+    )
+    setores = (
+        session.query(SetorGerencia)
+        .filter(
+            SetorGerencia.GERENTE_CHAPA.in_(chapas)
+            | SetorGerencia.RESPONSAVEL_CHAPA.in_(chapas)
+        )
+        .count()
+    )
+    return subordinados, setores
+
+
+def desligar_dos_indiretos(session, chapas):
+    """Quem some do cadastro não pode continuar como chefe de ninguém: os
+    subordinados ficam sem responsável, em vez de apontar para chapa inexistente."""
+    session.query(AlocacaoIndireto).filter(
+        AlocacaoIndireto.RESPONSAVEL_CHAPA.in_(chapas),
+        AlocacaoIndireto.CHAPA.notin_(chapas),
+    ).update({AlocacaoIndireto.RESPONSAVEL_CHAPA: None}, synchronize_session=False)
+    session.query(SetorGerencia).filter(
+        SetorGerencia.GERENTE_CHAPA.in_(chapas)
+        | SetorGerencia.RESPONSAVEL_CHAPA.in_(chapas)
+    ).delete(synchronize_session=False)
+
+
 @app.route("/api/colaboradores/cadastro/<chapa>", methods=["DELETE"])
 @exige_permissao(auth.GERENCIAR_COLABORADORES)
 def remover_colaborador_cadastro(chapa):
     # ?desalocar=1: confirma que a vaga ocupada por ele deve ser liberada
     desalocar = request.args.get("desalocar") == "1"
+    # ?confirmar_subordinados=1: confirma que quem responde a ele fica sem chefe
+    confirmar_subordinados = request.args.get("confirmar_subordinados") == "1"
 
     session = SessionLocal()
     try:
@@ -3923,9 +4002,19 @@ def remover_colaborador_cadastro(chapa):
                 "alocado": True,
             }), 409
 
+        subordinados, setores = dependentes_nos_indiretos(session, [chapa])
+        if (subordinados or setores) and not confirmar_subordinados:
+            return jsonify({
+                "erro": "Este colaborador tem pessoas ou setores ligados a ele na página Indiretos.",
+                "subordinados": subordinados,
+                "setores": setores,
+            }), 409
+
         if alocacao:
             session.delete(alocacao)
             session.flush()
+
+        desligar_dos_indiretos(session, [chapa])
 
         # os rateios saem junto (cascade em Colaborador.rateios)
         session.delete(colaborador)
@@ -4111,10 +4200,20 @@ def excluir_colaboradores_massa():
                 "alocados": len(alocadas),
             }), 409
 
+        subordinados, setores = dependentes_nos_indiretos(session, chapas)
+        if (subordinados or setores) and dados.get("confirmar_subordinados") is not True:
+            return jsonify({
+                "erro": "Os colaboradores selecionados têm pessoas ou setores ligados a eles na página Indiretos.",
+                "subordinados": subordinados,
+                "setores": setores,
+            }), 409
+
         if alocadas:
             session.query(MembroEquipe).filter(MembroEquipe.CHAPA.in_(alocadas)).delete(
                 synchronize_session=False
             )
+
+        desligar_dos_indiretos(session, chapas)
 
         session.query(Rateio).filter(Rateio.CHAPA.in_(chapas)).delete(synchronize_session=False)
         removidos = session.query(Colaborador).filter(Colaborador.CHAPA.in_(chapas)).delete(
@@ -4138,6 +4237,53 @@ def excluir_colaboradores_massa():
 # ============================================================
 # ALOCAR COLABORADOR
 # ============================================================
+
+def retirar_afastamento(colaborador):
+    """Quem ocupa uma vaga volta a estar ativo: vale para qualquer caminho que
+    coloque alguém numa vaga (alocar, trocar, folguista extra, planilha)."""
+    colaborador.AFASTADO = False
+    colaborador.JUSTIFICATIVA_AFASTAMENTO = None
+    colaborador.AFASTADO_POR = None
+    colaborador.AFASTADO_EM = None
+
+
+def erro_de_acesso_ao_colaborador(session, chapa, operacao):
+    """Confere se quem está logado pode mudar afastamento, observação ou tipo
+    de função deste colaborador. Devolve a mensagem de erro, ou None se pode.
+
+    Alocado: a permissão e o vínculo valem para a vaga dele (operacao diz qual
+    permissão). Livre ou afastado: ver auth.pode_alterar_colaborador_sem_vaga.
+    """
+    usuario = auth.usuario_logado()
+    membro = (
+        session.query(MembroEquipe)
+        .options(joinedload(MembroEquipe.composicao).joinedload(ComposicaoEquipe.equipe))
+        .filter(MembroEquipe.CHAPA == chapa)
+        .first()
+    )
+
+    if not membro:
+        if auth.pode_alterar_colaborador_sem_vaga(usuario):
+            return None
+        return "Seu acesso não permite alterar este colaborador."
+
+    composicao = membro.composicao
+    equipe = composicao.equipe
+    if auth.pode_realizar_operacao(
+        usuario,
+        operacao,
+        equipe.BASE,
+        tipo_equipe_da_vaga(composicao),
+        equipe_id=equipe.id,
+        setor=composicao.SETOR,
+    ):
+        return None
+
+    return (
+        f"Seu acesso não permite alterar este colaborador, "
+        f"que está na equipe {equipe.PREFIXO} ({equipe.BASE})."
+    )
+
 
 @app.route("/api/equipes/alocar", methods=["POST"])
 @exige_permissao(auth.VER_EQUIPES)
@@ -4231,11 +4377,7 @@ def alocar_colaborador():
             membro = MembroEquipe(composicao_id=composicao_id, CHAPA=chapa)
             session.add(membro)
 
-            # sendo alocado numa vaga, o colaborador volta a estar ativo
-            colaborador.AFASTADO = False
-            colaborador.JUSTIFICATIVA_AFASTAMENTO = None
-            colaborador.AFASTADO_POR = None
-            colaborador.AFASTADO_EM = None
+            retirar_afastamento(colaborador)
 
         return jsonify({
             "sucesso": True,
@@ -4292,6 +4434,11 @@ def afastar_colaborador():
             )
             if not colaborador:
                 return jsonify({"erro": "Colaborador não encontrado."}), 404
+
+            # afastar tira a pessoa da vaga, então exige o mesmo que remover
+            erro_acesso = erro_de_acesso_ao_colaborador(session, chapa, auth.OPERACAO_REMOVER)
+            if erro_acesso:
+                return jsonify({"erro": erro_acesso}), 403
 
             alocacao_existente = (
                 session.query(MembroEquipe)
@@ -4366,6 +4513,10 @@ def salvar_observacao_colaborador():
             if not colaborador:
                 return jsonify({"erro": "Colaborador não encontrado."}), 404
 
+            erro_acesso = erro_de_acesso_ao_colaborador(session, chapa, auth.OPERACAO_EDITAR)
+            if erro_acesso:
+                return jsonify({"erro": erro_acesso}), 403
+
             if observacao:
                 colaborador.OBSERVACAO = observacao
                 colaborador.OBSERVACAO_POR = (auth.usuario_logado() or {}).get("usuario")
@@ -4415,10 +4566,11 @@ def reativar_colaborador():
             if not colaborador:
                 return jsonify({"erro": "Colaborador não encontrado."}), 404
 
-            colaborador.AFASTADO = False
-            colaborador.JUSTIFICATIVA_AFASTAMENTO = None
-            colaborador.AFASTADO_POR = None
-            colaborador.AFASTADO_EM = None
+            erro_acesso = erro_de_acesso_ao_colaborador(session, chapa, auth.OPERACAO_EDITAR)
+            if erro_acesso:
+                return jsonify({"erro": erro_acesso}), 403
+
+            retirar_afastamento(colaborador)
 
         return jsonify({
             "sucesso": True,
@@ -4476,6 +4628,10 @@ def alterar_tipo_funcao_colaborador():
             )
             if not colaborador:
                 return jsonify({"erro": "Colaborador não encontrado."}), 404
+
+            erro_acesso = erro_de_acesso_ao_colaborador(session, chapa, auth.OPERACAO_EDITAR)
+            if erro_acesso:
+                return jsonify({"erro": erro_acesso}), 403
 
             if (colaborador.TIPO_FUNÇÃO or "").strip().upper() != tipo_funcao:
                 if tipo_funcao == "INDIRETO":
@@ -4549,18 +4705,24 @@ def remover_colaborador():
 
         composicao = membro.composicao
         equipe_da_vaga = composicao.equipe if composicao else None
+        usuario = auth.usuario_logado()
 
         # Folguista Extra e a unica remocao liberada para quem nao tem a
-        # permissao REMOVER_ALOCACAO (ex.: usuarios nao administradores).
-        # Qualquer outra vaga continua exigindo a checagem normal.
-        if not (composicao and eh_extra(composicao)) and not auth.pode_realizar_operacao(
-            auth.usuario_logado(),
-            auth.OPERACAO_REMOVER,
-            equipe_da_vaga.BASE if equipe_da_vaga else None,
-            tipo_equipe_da_vaga(composicao) if composicao else None,
-            equipe_id=equipe_da_vaga.id if equipe_da_vaga else None,
-            setor=composicao.SETOR if composicao else None,
-        ):
+        # permissao REMOVER_ALOCACAO (ex.: usuarios nao administradores), mas
+        # ainda precisa do vinculo. Qualquer outra vaga exige a checagem normal.
+        if composicao and eh_extra(composicao):
+            permitido = vaga_no_escopo(usuario, equipe_da_vaga, composicao)
+        else:
+            permitido = auth.pode_realizar_operacao(
+                usuario,
+                auth.OPERACAO_REMOVER,
+                equipe_da_vaga.BASE if equipe_da_vaga else None,
+                tipo_equipe_da_vaga(composicao) if composicao else None,
+                equipe_id=equipe_da_vaga.id if equipe_da_vaga else None,
+                setor=composicao.SETOR if composicao else None,
+            )
+
+        if not permitido:
             return jsonify({
                 "erro": "Seu acesso não cobre a base ou o tipo de equipe desta vaga."
             }), 403
@@ -4661,6 +4823,11 @@ def editar_alocacao():
             if not colaborador:
                 return jsonify({"erro": "Colaborador não encontrado."}), 404
 
+            if (colaborador.TIPO_FUNÇÃO or "").strip().upper() != "DIRETO":
+                return jsonify({
+                    "erro": "Este colaborador está marcado como indireto e não pode ser alocado."
+                }), 400
+
             alocacao_existente = (
                 session.query(MembroEquipe)
                 .options(
@@ -4685,6 +4852,8 @@ def editar_alocacao():
                         "funcao_er": comp_atual.FUNÇÃO_ER if comp_atual else "",
                     },
                 }), 409
+
+            retirar_afastamento(colaborador)
 
             chapa_antiga = str(membro_atual.CHAPA).strip()
             session.delete(membro_atual)
@@ -4926,6 +5095,13 @@ def atualizar_usuario(usuario_id):
 
         eu = auth.usuario_logado()
 
+        # conta de Administrador (senha inclusive) só outro Administrador
+        # altera: GERENCIAR_USUARIOS sozinho permitiria tomar a conta dele
+        if usuario.NIVEL == auth.NIVEL_ADMINISTRADOR and not (eu or {}).get("ignora_vinculos"):
+            return jsonify({
+                "erro": "Só um Administrador pode alterar outro Administrador."
+            }), 403
+
         # mesma trava de criar_usuario: promover alguem a Administrador so
         # pode quem ja ignora vinculos
         if (
@@ -4970,6 +5146,10 @@ def atualizar_usuario(usuario_id):
         auth.substituir_vinculos(session, usuario, campos["vinculos"])
         session.commit()
 
+        # trocar a senha derruba as sessões abertas, menos a de quem trocou a própria
+        if senha and usuario.id == eu["id"]:
+            auth.registrar_login(usuario)
+
         return jsonify({
             "sucesso": True,
             "usuario": auth.descrever_usuario(carregar_usuario(session, usuario_id), session=session),
@@ -5013,6 +5193,11 @@ def desbloquear_usuario(usuario_id):
         if not usuario:
             return jsonify({"erro": "Usuário não encontrado."}), 404
 
+        if usuario.NIVEL == auth.NIVEL_ADMINISTRADOR and not auth.usuario_logado().get("ignora_vinculos"):
+            return jsonify({
+                "erro": "Só um Administrador pode liberar outro Administrador."
+            }), 403
+
         session.query(TentativaLogin).filter(
             TentativaLogin.USUARIO.in_(
                 [usuario.USUARIO.upper(), chave_troca_senha(usuario.id)]
@@ -5040,6 +5225,11 @@ def remover_usuario(usuario_id):
 
         if usuario.id == auth.usuario_logado()["id"]:
             return jsonify({"erro": "Você não pode excluir o seu próprio usuário."}), 400
+
+        if usuario.NIVEL == auth.NIVEL_ADMINISTRADOR and not auth.usuario_logado().get("ignora_vinculos"):
+            return jsonify({
+                "erro": "Só um Administrador pode excluir outro Administrador."
+            }), 403
 
         if (
             usuario.NIVEL == auth.NIVEL_ADMINISTRADOR
@@ -5467,6 +5657,10 @@ def analisar_planilha_usuarios(arquivo, session):
             plano["ignoradas"] += 1
             continue
 
+        if atual.NIVEL == auth.NIVEL_ADMINISTRADOR and not sou_administrador:
+            registrar_erro(numero, login, "Só um Administrador pode alterar outro Administrador.")
+            continue
+
         item["mudancas"] = mudancas
         plano["atualizar"].append(item)
 
@@ -5678,6 +5872,12 @@ def aplicar_planilha_usuarios():
 
         session.commit()
 
+        # trocar a senha derruba as sessões abertas, menos a de quem trocou a própria
+        eu = auth.usuario_logado()
+        for item in plano["atualizar"]:
+            if item["senha"] and item["id"] == eu["id"]:
+                auth.registrar_login(por_login[item["usuario"].upper()])
+
         return jsonify({
             "sucesso": True,
             "criados": len(plano["criar"]),
@@ -5738,6 +5938,9 @@ def trocar_propria_senha():
         usuario.SENHA_HASH = auth.gerar_hash_senha(senha_nova)
         session.commit()
         limpar_falhas_login(chave_senha)
+
+        # as outras sessões desta conta caem; esta continua aberta
+        auth.registrar_login(usuario)
 
         return jsonify({"sucesso": True, "mensagem": "Senha alterada."})
     except Exception as erro:

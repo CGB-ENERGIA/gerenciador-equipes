@@ -50,6 +50,16 @@ BORDA = Border(left=LINHA, right=LINHA, top=LINHA, bottom=LINHA)
 LINHAS_EXTRAS = 500
 
 
+def gravar_formulas_como_texto(planilha, colunas_com_formula=()):
+    """Texto que começa com "=" (nome, observação...) vira fórmula ao ser
+    gravado, e o Excel a executaria em quem abre o arquivo. Marcado como texto,
+    aparece e volta na importação exatamente como foi digitado."""
+    for linha in planilha.iter_rows():
+        for celula in linha:
+            if celula.data_type == "f" and celula.column not in colunas_com_formula:
+                celula.data_type = "s"
+
+
 def estilizar_aba(
     planilha,
     *,
@@ -59,8 +69,13 @@ def estilizar_aba(
     linhas_exemplo=(),
     largura_minima=12,
     largura_maxima=48,
+    colunas_com_formula=(),
 ):
     """Aplica a identidade da CGB numa aba já preenchida (cabeçalho na linha 1).
+
+    Todo conteúdo fica como texto (ver gravar_formulas_como_texto), menos o das
+    colunas_com_formula, nomes das colunas que o próprio sistema escreve com
+    fórmula.
 
     editaveis: nomes das colunas que a pessoa preenche (fundo amarelo). Numa
         aba de importação, as demais ficam cinza (só referência).
@@ -75,6 +90,9 @@ def estilizar_aba(
         planilha.cell(row=1, column=c).value: c for c in range(1, ultima_coluna + 1)
     }
     colunas_editaveis = {cabecalhos[n] for n in editaveis if n in cabecalhos}
+    gravar_formulas_como_texto(
+        planilha, {cabecalhos[n] for n in colunas_com_formula if n in cabecalhos}
+    )
 
     # ---------- cabeçalho
     for c in range(1, ultima_coluna + 1):

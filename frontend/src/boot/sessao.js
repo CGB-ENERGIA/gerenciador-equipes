@@ -11,16 +11,27 @@ import { useSessao } from '../composables/useSessao'
  * Em vez de tratar isso em cada uma das chamadas espalhadas pelas páginas, o
  * fetch é envelopado uma única vez aqui: qualquer 401 vindo da API manda a
  * pessoa para o login, guardando a tela em que ela estava.
+ *
+ * Sem rede, o navegador rejeita com "Failed to fetch", em inglês, e as telas
+ * mostram a mensagem do erro: ela é traduzida aqui pelo mesmo motivo.
  */
 export default defineBoot(({ router }) => {
   const { marcarSessaoExpirada } = useSessao()
   const fetchOriginal = window.fetch.bind(window)
 
   window.fetch = async (recurso, opcoes) => {
-    const resposta = await fetchOriginal(recurso, opcoes)
-
     const url = typeof recurso === 'string' ? recurso : recurso?.url || ''
     const ehChamadaDaApi = url.includes('/api/')
+
+    let resposta
+    try {
+      resposta = await fetchOriginal(recurso, opcoes)
+    } catch (e) {
+      if (ehChamadaDaApi && e instanceof TypeError) {
+        throw new Error('Sem conexão com o servidor. Verifique a internet e tente novamente.')
+      }
+      throw e
+    }
 
     // /api/sessao responde 200 mesmo deslogado: não é sinal de expiração
     const ehConsultaDeSessao = url.includes('/api/sessao')

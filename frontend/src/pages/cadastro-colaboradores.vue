@@ -721,8 +721,28 @@ async function salvar() {
 // Remover
 // ------------------------------------------------------------
 
-async function remover(colaborador) {
+// O servidor é quem sabe quem responde a quem: responde 409 com as contagens,
+// e só aqui a pessoa confirma que eles ficam sem chefe.
+function confirmarDependentes(dados, titulo, textoConfirmar) {
+  const partes = []
+  if (dados.subordinados) {
+    partes.push(`${dados.subordinados} pessoa(s) ficam sem responsável`)
+  }
+  if (dados.setores) {
+    partes.push(`${dados.setores} ligação(ões) de setor saem do organograma geral`)
+  }
+  return confirmar(
+    `Na página Indiretos, ${partes.join(' e ')}. Deseja continuar?`,
+    { titulo, textoConfirmar }
+  )
+}
+
+async function remover(colaborador, confirmarSubordinados = false) {
   limparAvisos()
+
+  if (confirmarSubordinados) {
+    return removerNoServidor(colaborador, true)
+  }
 
   const mensagem = colaborador.alocado
     ? `${colaborador.nome} está alocado em uma equipe. Remover o colaborador também libera a vaga dele. Deseja continuar?`
@@ -732,14 +752,32 @@ async function remover(colaborador) {
     return
   }
 
+  return removerNoServidor(colaborador, false)
+}
+
+async function removerNoServidor(colaborador, confirmarSubordinados) {
+  const parametros = new URLSearchParams()
+  if (colaborador.alocado) {
+    parametros.set('desalocar', '1')
+  }
+  if (confirmarSubordinados) {
+    parametros.set('confirmar_subordinados', '1')
+  }
+
   try {
     const resposta = await fetch(
-      `/api/colaboradores/cadastro/${encodeURIComponent(colaborador.chapa)}` +
-        (colaborador.alocado ? '?desalocar=1' : ''),
+      `/api/colaboradores/cadastro/${encodeURIComponent(colaborador.chapa)}?${parametros}`,
       { method: 'DELETE' }
     )
 
     const dados = await resposta.json()
+
+    if (resposta.status === 409 && (dados.subordinados || dados.setores)) {
+      if (await confirmarDependentes(dados, 'Remover colaborador', 'Remover')) {
+        await remover(colaborador, true)
+      }
+      return
+    }
 
     if (!resposta.ok || dados.erro) {
       throw new Error(dados.erro || 'Não foi possível remover o colaborador.')
@@ -890,14 +928,29 @@ async function removerSelecionados() {
     return
   }
 
+  await excluirSelecionadosNoServidor(chapas, alocados, false)
+}
+
+async function excluirSelecionadosNoServidor(chapas, alocados, confirmarSubordinados) {
   try {
     const resposta = await fetch('/api/colaboradores/cadastro/excluir-massa', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chapas, desalocar: alocados > 0 })
+      body: JSON.stringify({
+        chapas,
+        desalocar: alocados > 0,
+        confirmar_subordinados: confirmarSubordinados
+      })
     })
 
     const dados = await resposta.json()
+
+    if (resposta.status === 409 && (dados.subordinados || dados.setores)) {
+      if (await confirmarDependentes(dados, 'Excluir selecionados', 'Excluir')) {
+        await excluirSelecionadosNoServidor(chapas, alocados, true)
+      }
+      return
+    }
 
     if (!resposta.ok || dados.erro) {
       throw new Error(dados.erro || 'Não foi possível remover os colaboradores.')

@@ -159,7 +159,7 @@
 
               <div class="col-auto">
                 <q-chip color="positive" text-color="white">
-                  {{ colaboradoresAlocados }} alocados
+                  {{ textoChipAlocados }}
                 </q-chip>
               </div>
 
@@ -199,7 +199,7 @@
                     <div class="text-h6"> Equipes </div>
                   </div>
 
-                  <div class="col-auto">
+                  <div v-if="usuario?.ignora_vinculos" class="col-auto">
                     <q-btn
                       outline
                       dense
@@ -679,6 +679,16 @@
                     {{ descricaoAlocacaoAtual(scope.opt.chapa) }}
                   </q-chip>
 
+                  <q-chip
+                    v-else-if="scope.opt.afastado"
+                    color="deep-orange-7"
+                    text-color="white"
+                    size="sm"
+                    dense
+                  >
+                    Afastado
+                  </q-chip>
+
                   <q-chip v-else color="positive" text-color="white" size="sm" dense>
                     Livre
                   </q-chip>
@@ -948,6 +958,16 @@
                     {{ descricaoAlocacaoAtual(scope.opt.chapa) }}
                   </q-chip>
 
+                  <q-chip
+                    v-else-if="scope.opt.afastado"
+                    color="deep-orange-7"
+                    text-color="white"
+                    size="sm"
+                    dense
+                  >
+                    Afastado
+                  </q-chip>
+
                   <q-chip v-else color="positive" text-color="white" size="sm" dense>
                     Livre
                   </q-chip>
@@ -955,6 +975,20 @@
               </q-item>
             </template>
           </q-select>
+
+          <q-banner
+            v-if="colaboradorNovoEdicao?.afastado"
+            dense
+            rounded
+            class="bg-amber-1 text-amber-10 q-mt-md"
+          >
+            <template #avatar>
+              <q-icon name="warning" color="amber-10" />
+            </template>
+            Este colaborador está afastado
+            ({{ colaboradorNovoEdicao.justificativa_afastamento || 'sem justificativa' }}).
+            Ao confirmar a troca, o afastamento será retirado.
+          </q-banner>
         </q-card-section>
 
         <q-card-actions align="right">
@@ -1024,6 +1058,16 @@
                     {{ descricaoAlocacaoAtual(scope.opt.chapa) }}
                   </q-chip>
 
+                  <q-chip
+                    v-else-if="scope.opt.afastado"
+                    color="deep-orange-7"
+                    text-color="white"
+                    size="sm"
+                    dense
+                  >
+                    Afastado
+                  </q-chip>
+
                   <q-chip v-else color="positive" text-color="white" size="sm" dense>
                     Livre
                   </q-chip>
@@ -1031,6 +1075,20 @@
               </q-item>
             </template>
           </q-select>
+
+          <q-banner
+            v-if="colaboradorExtra?.afastado"
+            dense
+            rounded
+            class="bg-amber-1 text-amber-10 q-mb-md"
+          >
+            <template #avatar>
+              <q-icon name="warning" color="amber-10" />
+            </template>
+            Este colaborador está afastado
+            ({{ colaboradorExtra.justificativa_afastamento || 'sem justificativa' }}).
+            Ao adicionar, o afastamento será retirado.
+          </q-banner>
 
           <q-select
             v-model="funcaoExtra"
@@ -1275,6 +1333,19 @@
               </q-markup-table>
             </div>
 
+            <q-banner
+              v-if="planoAlocacoes.alocar?.some(item => item.afastado)"
+              dense
+              rounded
+              class="bg-amber-1 text-amber-10 q-mb-sm"
+            >
+              <template #avatar>
+                <q-icon name="warning" color="amber-10" />
+              </template>
+              Ao aplicar, será retirado o afastamento de:
+              {{ planoAlocacoes.alocar.filter(item => item.afastado).map(item => item.nome).join(', ') }}.
+            </q-banner>
+
             <div v-if="conflitosPendentes.length" class="q-mb-sm">
               <div class="text-subtitle2 text-orange-9 q-mb-xs">
                 Colaborador já alocado em outra equipe — confirme a transferência
@@ -1389,6 +1460,7 @@ import { criarOrdenacaoTabela, ordenarLista } from '../utils/ordenacaoTabela'
 definePage({ meta: { permissao: PODE_VER_EQUIPES } })
 
 const {
+  usuario,
   temPermissao,
   lerBasesSelecionadas,
   gravarBasesSelecionadas,
@@ -1977,6 +2049,18 @@ const colaboradoresAlocados = computed(() => {
   return colaboradoresDoTipo.value.filter(estaAlocado).length
 })
 
+// ao lado de "N equipes": quem tem vínculo vê as vagas ocupadas nas equipes
+// dele, não o total da empresa, que é o que vem na lista de colaboradores
+const textoChipAlocados = computed(() => {
+  if (usuario.value?.ignora_vinculos) {
+    return `${colaboradoresAlocados.value} alocados`
+  }
+  const ocupadas = equipesFiltradas.value
+    .flatMap(equipe => equipe.vagas || [])
+    .filter(vaga => vaga.colaborador).length
+  return `${ocupadas} alocados nas suas equipes`
+})
+
 const colaboradoresLivres = computed(() => {
   return colaboradoresDoTipo.value.filter(
     colaborador => !estaAlocado(colaborador) && !colaborador.afastado
@@ -2111,10 +2195,17 @@ async function carregarDados() {
 }
 
 // Lista as opções do combo de colaborador dos 3 diálogos (Alocar, Trocar,
-// Folguista Extra): livres primeiro, depois os já alocados (identificados
-// no item pelo "Alocado em ..." — ver mapaEquipeAtualPorChapa), e sem a
-// CHAPA marcada em chapaExcluidaAlocacao (o proprio ocupante da vaga, so
-// no diálogo de trocar).
+// Folguista Extra): livres primeiro, depois os afastados e os já alocados
+// (identificados no item pelo "Alocado em ..." — ver mapaEquipeAtualPorChapa),
+// e sem a CHAPA marcada em chapaExcluidaAlocacao (o proprio ocupante da vaga,
+// so no diálogo de trocar).
+function ordemNasOpcoes(colaborador) {
+  if (colaborador.alocado) {
+    return 2
+  }
+  return colaborador.afastado ? 1 : 0
+}
+
 function opcoesColaboradoresParaFiltro(filtro = '') {
   const termo = String(filtro || '').trim().toLowerCase()
   const excluir = String(chapaExcluidaAlocacao.value || '')
@@ -2136,7 +2227,7 @@ function opcoesColaboradoresParaFiltro(filtro = '') {
       )
     })
     .slice()
-    .sort((a, b) => Number(a.alocado) - Number(b.alocado))
+    .sort((a, b) => ordemNasOpcoes(a) - ordemNasOpcoes(b))
 }
 
 function selecionarColaborador(colaborador) {

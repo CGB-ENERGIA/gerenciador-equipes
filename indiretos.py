@@ -30,11 +30,17 @@ from openpyxl.worksheet.datavalidation import DataValidation
 import auth
 import planilhas_estilo as estilo
 from database.database import SessionLocal
-from database.models import AlocacaoIndireto, Colaborador
+from database.models import AlocacaoIndireto, Colaborador, SetorGerencia
 
 bp = Blueprint("indiretos", __name__)
 
 TIPO_INDIRETO = "INDIRETO"
+# os gerentes: as bases deles dizem quais setores aparecem abaixo de cada um
+# no organograma geral, sem mudar o responsável de ninguém
+SETOR_GERENCIA = "GERÊNCIA"
+# gerente sem base definida: a coluna BASE é obrigatória, e esta não é uma
+# base de verdade (não aparece entre as opções)
+BASE_GERENCIA = "GERAL"
 BASES_PADRAO = ("BCB", "BDC", "ITM", "PDS", "PDT", "STI", "SPOT STI")
 
 ABA_ALOCACAO = "Alocação"
@@ -175,13 +181,22 @@ def obter_indiretos():
             for c in colaboradores
         ]
         bases = list(BASES_PADRAO) + sorted(
-            {a.BASE for a in alocacoes.values()} - set(BASES_PADRAO)
+            {a.BASE for a in alocacoes.values()} - set(BASES_PADRAO) - {BASE_GERENCIA}
         )
         return jsonify({
             "pessoas": pessoas,
             "responsaveis": responsaveis,
             "bases": bases,
             "funcoes": funcoes_do_cadastro(colaboradores),
+            "setores_gerencia": [
+                {
+                    "setor": v.SETOR,
+                    "responsavel_chapa": v.RESPONSAVEL_CHAPA or "",
+                    "gerente_chapa": v.GERENTE_CHAPA,
+                    "apoio": bool(v.APOIO),
+                }
+                for v in session.query(SetorGerencia).all()
+            ],
         })
     except Exception as erro:
         print(f"[ERRO] obter_indiretos: {erro}")
@@ -231,6 +246,11 @@ def alocar_indireto():
     responsavel = chapa_da_celula(dados.get("responsavel_chapa"))
     observacao = texto_livre(dados.get("observacao"))
 
+    # gerente: sem base e sem responsável, fica acima de todos
+    if setor == SETOR_GERENCIA:
+        base = base or BASE_GERENCIA
+        responsavel = responsavel or chapa
+
     if not (chapa and setor and base and responsavel):
         return jsonify({"erro": "Informe indireto, setor, base e responsável."}), 400
 
@@ -247,6 +267,10 @@ def alocar_indireto():
                 if "funcao" in dados else None
             )
         except FuncaoInvalida as erro:
+            return jsonify({"erro": str(erro)}), 400
+        try:
+            validar_cadeia(responsaveis_de_hoje(session), {chapa: responsavel}, aceita_topo=True)
+        except OrganogramaInvalido as erro:
             return jsonify({"erro": str(erro)}), 400
 
         alocacao = session.query(AlocacaoIndireto).filter(AlocacaoIndireto.CHAPA == chapa).first()
@@ -297,6 +321,12 @@ def trocar_responsavel_indiretos():
     try:
         if not _colaborador(session, responsavel):
             return jsonify({"erro": "Responsável não encontrado no cadastro."}), 404
+        try:
+            validar_cadeia(
+                responsaveis_de_hoje(session), {c: responsavel for c in chapas}, aceita_topo=True
+            )
+        except OrganogramaInvalido as erro:
+            return jsonify({"erro": str(erro)}), 400
         alteradas = (
             session.query(AlocacaoIndireto)
             .filter(AlocacaoIndireto.CHAPA.in_(chapas))
@@ -329,14 +359,22 @@ class OrganogramaInvalido(ValueError):
     pass
 
 
-def validar_cadeia(responsavel_de, mudancas):
+def responsaveis_de_hoje(session):
+    return dict(session.query(AlocacaoIndireto.CHAPA, AlocacaoIndireto.RESPONSAVEL_CHAPA).all())
+
+
+def validar_cadeia(responsavel_de, mudancas, aceita_topo=False):
     """responsavel_de: {chapa: responsavel_chapa} de hoje. Aplica as
-    mudanças {chapa: novo_responsavel} e recusa se alguém passar a responder
-    a si mesmo ou se a cadeia fechar um ciclo (A responde a B que, subindo,
-    responde a A)."""
+    mudanças {chapa: novo_responsavel} e recusa se a cadeia fechar um ciclo
+    (A responde a B que, subindo, responde a A).
+
+    Responder a si mesmo é como o topo de um setor fica gravado: o formulário
+    e a planilha aceitam (aceita_topo). Arrastar alguém para si mesmo, não."""
     final = {**responsavel_de, **mudancas}
     for chapa in mudancas:
         if final.get(chapa) == chapa:
+            if aceita_topo:
+                continue
             raise OrganogramaInvalido("Ninguém pode responder a si mesmo.")
         vistos = {chapa}
         acima = final.get(chapa)
@@ -425,12 +463,14 @@ def plano_bases_responsavel(alocacoes, chapa, bases):
         for c in anteriores:
             restantes = [b for b in bases_da_coluna(alocacoes[c].BASES_RESPONSAVEL) if b != base]
             bases_por_chapa[c] = restantes
+        if setor == SETOR_GERENCIA:
+            continue
         para_mim = {chefe} | anteriores if chefe else anteriores
         for a in do_setor:
             if a.BASE == base and a.CHAPA not in (chapa, chefe) and a.RESPONSAVEL_CHAPA in para_mim:
                 responsaveis[a.CHAPA] = chapa
     for base in antigas - novas:
-        if not chefe:
+        if not chefe or setor == SETOR_GERENCIA:
             continue
         for a in do_setor:
             if a.BASE == base and a.RESPONSAVEL_CHAPA == chapa:
@@ -476,6 +516,49 @@ def salvar_responsavel_base():
         session.rollback()
         print(f"[ERRO] salvar_responsavel_base: {erro}")
         return jsonify({"erro": "Não foi possível salvar o responsável pela base."}), 500
+    finally:
+        session.close()
+
+
+@bp.route("/api/indiretos/setor-gerente", methods=["POST"])
+@auth.exige_administrador
+def ligar_setor_ao_gerente():
+    """Arrastar um setor no organograma geral: o setor inteiro (todas as bases)
+    fica abaixo do gerente ou, com apoio, ao lado da linha. Com "responsaveis",
+    vale só para esses responsáveis do setor e quem está abaixo deles. Sem
+    gerente: desfaz a ligação, e volta a seguir o resto do setor."""
+    dados = _corpo()
+    setor = texto_padrao(dados.get("setor"))
+    gerente = chapa_da_celula(dados.get("gerente_chapa"))
+    responsaveis = [chapa_da_celula(c) for c in (dados.get("responsaveis") or [])] or [""]
+    if not setor:
+        return jsonify({"erro": "Informe o setor."}), 400
+
+    session = SessionLocal()
+    try:
+        if gerente:
+            alocacao = session.query(AlocacaoIndireto).filter(AlocacaoIndireto.CHAPA == gerente).first()
+            if not alocacao or alocacao.SETOR != SETOR_GERENCIA:
+                return jsonify({"erro": "Essa pessoa não está na Gerência."}), 404
+        for responsavel in responsaveis:
+            ligacao = session.get(SetorGerencia, (setor, responsavel))
+            if not gerente:
+                if ligacao:
+                    session.delete(ligacao)
+                continue
+            if not ligacao:
+                ligacao = SetorGerencia(SETOR=setor, RESPONSAVEL_CHAPA=responsavel)
+                session.add(ligacao)
+            ligacao.GERENTE_CHAPA = gerente
+            ligacao.APOIO = bool(dados.get("apoio"))
+            ligacao.ALOCADO_POR = quem_esta_logado()
+            ligacao.ALOCADO_EM = datetime.now(timezone.utc)
+        session.commit()
+        return jsonify({"sucesso": True})
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] ligar_setor_ao_gerente: {erro}")
+        return jsonify({"erro": "Não foi possível ligar o setor ao gerente."}), 500
     finally:
         session.close()
 
@@ -542,6 +625,8 @@ def montar_planilha_indiretos(session):
         aba.cell(row=n, column=5, value=alocacao.CHAPA)
         aba.cell(row=n, column=8, value=alocacao.OBSERVACAO or "")
         aba.cell(row=n, column=9, value=alocacao.SUBSETOR or "")
+    # só o que veio do banco: as colunas de busca logo abaixo são fórmula de verdade
+    estilo.gravar_formulas_como_texto(aba)
 
     for n in range(2, ultima + 1):
         for c in range(1, len(COLUNAS_PLANILHA) + 1):
@@ -602,7 +687,7 @@ def montar_planilha_indiretos(session):
         for i, v in enumerate(valores, start=1):
             aba_ind.cell(row=n, column=i, value=v)
         aba_ind.cell(row=n, column=6, value=f'=IF(COUNTIF({ABA_ALOCACAO}!$E$2:$E${ultima},A{n}&"")>0,"SIM","FALTA")')
-    estilo.estilizar_aba(aba_ind, consulta=True)
+    estilo.estilizar_aba(aba_ind, consulta=True, colunas_com_formula=("JÁ NA PLANILHA?",))
     fim = len(indiretos) + 1
     aba_ind.conditional_formatting.add(f"F2:F{fim}", FormulaRule(
         formula=['F2="FALTA"'], fill=estilo.fundo_condicional("FDF0CD"), font=estilo.FONTE_ALERTA))
@@ -782,6 +867,19 @@ def analisar_planilha_indiretos(arquivo, session):
             plano["atualizar"].append(item)
         else:
             plano["sem_mudanca"] += 1
+
+    # a cadeia só dá para conferir com todas as linhas aplicadas: A -> B numa
+    # linha e B -> A em outra só formam ciclo juntas
+    mudancas = plano["alocar"] + plano["mover"] + plano["atualizar"]
+    cadeia_final = {
+        **{c: a.RESPONSAVEL_CHAPA for c, a in atuais.items()},
+        **{item["chapa"]: item["responsavel_chapa"] for item in mudancas},
+    }
+    for item in mudancas:
+        try:
+            validar_cadeia(cadeia_final, {item["chapa"]: item["responsavel_chapa"]}, aceita_topo=True)
+        except OrganogramaInvalido as erro:
+            plano["erros"].append({"linha": item["linha"], "chapa": item["chapa"], "erro": str(erro)})
 
     return plano
 

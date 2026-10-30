@@ -77,7 +77,7 @@
                     class="text-center"
                   >
                     <q-checkbox
-                      v-if="nivel.personalizavel"
+                      v-if="nivel.personalizavel && souAdministrador"
                       :model-value="(permissoesEditaveis[nivel.valor] || []).includes(permissao.valor)"
                       @update:model-value="alternarPermissaoNivel(nivel.valor, permissao.valor)"
                     />
@@ -95,7 +95,7 @@
 
                   <td class="text-center">
                     <q-btn
-                      v-if="nivel.personalizavel"
+                      v-if="nivel.personalizavel && souAdministrador"
                       flat
                       dense
                       size="sm"
@@ -285,112 +285,130 @@
             <q-spinner color="primary" size="40px" />
           </div>
 
-          <q-list v-else separator>
-            <q-item v-if="!usuarios.length">
-              <q-item-section class="text-grey-7">
-                Nenhum usuário cadastrado.
-              </q-item-section>
-            </q-item>
+          <div v-else class="q-pa-md">
+            <div v-if="!usuarios.length" class="text-grey-7">
+              Nenhum usuário cadastrado.
+            </div>
 
-            <q-item v-else-if="!usuariosFiltrados.length">
-              <q-item-section class="text-grey-7">
-                Nenhum usuário encontrado para "{{ filtroUsuario }}".
-              </q-item-section>
-            </q-item>
+            <div v-else-if="!usuariosFiltrados.length" class="text-grey-7">
+              Nenhum usuário encontrado para "{{ filtroUsuario }}".
+            </div>
 
-            <q-item v-for="pessoa in usuariosFiltrados" :key="pessoa.id">
-              <q-item-section>
-                <q-item-label class="text-weight-medium">
-                  {{ pessoa.nome }}
-                  <q-badge
-                    v-if="pessoa.id === usuario?.id"
-                    color="primary"
-                    class="q-ml-sm"
-                    label="você"
-                  />
-                  <q-badge
-                    v-if="!pessoa.ativo"
-                    color="grey-7"
-                    class="q-ml-sm"
-                    label="desativado"
-                  />
-                  <q-badge
-                    v-if="pessoa.bloqueado"
-                    color="negative"
-                    class="q-ml-sm"
-                    label="bloqueado"
-                  >
-                    <q-tooltip>
-                      Muitas senhas erradas seguidas. Libera sozinho em até
-                      15 minutos, ou use o cadeado ao lado.
-                    </q-tooltip>
-                  </q-badge>
-                </q-item-label>
+            <!-- uma caixa por nível; a pesquisa de cima vale para todas -->
+            <div v-else class="row q-col-gutter-md items-start">
+              <div v-for="grupo in gruposDeUsuarios" :key="grupo.valor" class="col-12 col-lg-6">
+                <div class="caixa-nivel">
+                  <div class="caixa-nivel__cabecalho">
+                    <span class="caixa-nivel__titulo">{{ grupo.rotulo }}</span>
+                    <span class="caixa-nivel__contagem">
+                      {{ grupo.pessoas.length === grupo.total ? grupo.total : `${grupo.pessoas.length} de ${grupo.total}` }}
+                    </span>
+                  </div>
 
-                <q-item-label caption>
-                  {{ pessoa.usuario }} · {{ pessoa.nivel_rotulo }}
-                  <template v-if="pessoa.responsavel_nome">
-                    · responde a {{ pessoa.responsavel_nome }}
-                  </template>
-                </q-item-label>
+                  <div v-if="!grupo.pessoas.length" class="caixa-nivel__vazio">
+                    Nenhum usuário neste nível.
+                  </div>
 
-                <q-item-label v-if="resumoVinculos(pessoa)" caption class="q-mt-xs">
-                  <q-icon name="link" size="14px" />
-                  {{ resumoVinculos(pessoa) }}
-                </q-item-label>
+                  <q-list v-else separator class="caixa-nivel__lista">
+                    <q-item v-for="pessoa in grupo.pessoas" :key="pessoa.id">
+                      <q-item-section>
+                        <q-item-label class="text-weight-medium">
+                          {{ pessoa.nome }}
+                          <q-badge
+                            v-if="pessoa.id === usuario?.id"
+                            color="primary"
+                            class="q-ml-sm"
+                            label="você"
+                          />
+                          <q-badge
+                            v-if="!pessoa.ativo"
+                            color="grey-7"
+                            class="q-ml-sm"
+                            label="desativado"
+                          />
+                          <q-badge
+                            v-if="pessoa.bloqueado"
+                            color="negative"
+                            class="q-ml-sm"
+                            label="bloqueado"
+                          >
+                            <q-tooltip>
+                              Muitas senhas erradas seguidas. Libera sozinho em até
+                              15 minutos, ou use o cadeado ao lado.
+                            </q-tooltip>
+                          </q-badge>
+                        </q-item-label>
 
-                <q-item-label v-else-if="pessoa.ignora_vinculos" caption class="q-mt-xs">
-                  <q-icon name="public" size="14px" /> Enxerga todas as equipes
-                </q-item-label>
-              </q-item-section>
+                        <q-item-label caption>
+                          {{ pessoa.usuario }} · {{ pessoa.nivel_rotulo }}
+                          <template v-if="pessoa.responsavel_nome">
+                            · responde a {{ pessoa.responsavel_nome }}
+                          </template>
+                        </q-item-label>
 
-              <q-item-section side>
-                <div class="row q-gutter-xs">
-                  <q-btn
-                    v-if="pessoa.bloqueado"
-                    flat
-                    dense
-                    round
-                    icon="lock_open"
-                    color="warning"
-                    :loading="desbloqueandoId === pessoa.id"
-                    @click="desbloquearUsuario(pessoa)"
-                  >
-                    <q-tooltip>Liberar acesso</q-tooltip>
-                  </q-btn>
+                        <q-item-label v-if="resumoVinculos(pessoa)" caption class="q-mt-xs">
+                          <q-icon name="link" size="14px" />
+                          {{ resumoVinculos(pessoa) }}
+                        </q-item-label>
 
-                  <q-btn
-                    flat
-                    dense
-                    round
-                    icon="edit"
-                    color="primary"
-                    @click="abrirEdicao(pessoa)"
-                  >
-                    <q-tooltip>Editar</q-tooltip>
-                  </q-btn>
+                        <q-item-label v-else-if="pessoa.ignora_vinculos" caption class="q-mt-xs">
+                          <q-icon name="public" size="14px" /> Enxerga todas as equipes
+                        </q-item-label>
+                      </q-item-section>
 
-                  <q-btn
-                    flat
-                    dense
-                    round
-                    icon="delete"
-                    color="negative"
-                    :disable="pessoa.id === usuario?.id"
-                    @click="removerUsuario(pessoa)"
-                  >
-                    <q-tooltip>
-                      {{
-                        pessoa.id === usuario?.id
-                          ? 'Você não pode excluir o seu próprio usuário'
-                          : 'Excluir'
-                      }}
-                    </q-tooltip>
-                  </q-btn>
+                      <q-item-section side>
+                        <div class="row q-gutter-xs">
+                          <q-btn
+                            v-if="pessoa.bloqueado && podeAlterarConta(pessoa)"
+                            flat
+                            dense
+                            round
+                            icon="lock_open"
+                            color="warning"
+                            :loading="desbloqueandoId === pessoa.id"
+                            @click="desbloquearUsuario(pessoa)"
+                          >
+                            <q-tooltip>Liberar acesso</q-tooltip>
+                          </q-btn>
+
+                          <q-btn
+                            v-if="podeAlterarConta(pessoa)"
+                            flat
+                            dense
+                            round
+                            icon="edit"
+                            color="primary"
+                            @click="abrirEdicao(pessoa)"
+                          >
+                            <q-tooltip>Editar</q-tooltip>
+                          </q-btn>
+
+                          <q-btn
+                            v-if="podeAlterarConta(pessoa)"
+                            flat
+                            dense
+                            round
+                            icon="delete"
+                            color="negative"
+                            :disable="pessoa.id === usuario?.id"
+                            @click="removerUsuario(pessoa)"
+                          >
+                            <q-tooltip>
+                              {{
+                                pessoa.id === usuario?.id
+                                  ? 'Você não pode excluir o seu próprio usuário'
+                                  : 'Excluir'
+                              }}
+                            </q-tooltip>
+                          </q-btn>
+                        </div>
+                      </q-item-section>
+                    </q-item>
+                  </q-list>
                 </div>
-              </q-item-section>
-            </q-item>
-          </q-list>
+              </div>
+            </div>
+          </div>
         </q-card>
 
         <!-- ================================================== -->
@@ -709,6 +727,13 @@ const {
   buscarSessao
 } = useSessao()
 const { confirmar } = useConfirmacao()
+
+// níveis de acesso e contas de Administrador: só Administrador altera
+const souAdministrador = computed(() => Boolean(usuario.value?.ignora_vinculos))
+
+function podeAlterarConta(pessoa) {
+  return souAdministrador.value || !pessoa.ignora_vinculos
+}
 
 // planilha de usuários em lote (exportar -> editar -> conferir -> aplicar)
 const arquivoUsuarios = ref(null)
@@ -1125,6 +1150,28 @@ const usuariosFiltrados = computed(() => {
   )
 })
 
+// Uma caixa por nível, na ordem dos níveis. Pesquisando, some a caixa sem
+// resultado; sem pesquisa, todas aparecem. Nível que não está mais na lista
+// (ex.: descontinuado) ganha caixa própria, para ninguém sumir da tela.
+const gruposDeUsuarios = computed(() => {
+  const conhecidos = niveis.value.map(nivel => ({ valor: nivel.valor, rotulo: nivel.rotulo }))
+  const outros = usuarios.value
+    .filter(pessoa => !niveis.value.some(nivel => nivel.valor === pessoa.nivel))
+    .map(pessoa => ({ valor: pessoa.nivel, rotulo: pessoa.nivel_rotulo || pessoa.nivel }))
+    .filter((grupo, i, lista) => lista.findIndex(g => g.valor === grupo.valor) === i)
+  const pesquisando = Boolean((filtroUsuario.value || '').trim())
+
+  return [...conhecidos, ...outros]
+    .map(grupo => ({
+      ...grupo,
+      total: usuarios.value.filter(pessoa => pessoa.nivel === grupo.valor).length,
+      pessoas: usuariosFiltrados.value
+        .filter(pessoa => pessoa.nivel === grupo.valor)
+        .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+    }))
+    .filter(grupo => !pesquisando || grupo.pessoas.length)
+})
+
 function limparAvisos() {
   erro.value = ''
   sucesso.value = ''
@@ -1370,9 +1417,16 @@ async function desbloquearUsuario(pessoa) {
 }
 
 async function removerUsuario(pessoa) {
+  const subordinados = usuarios.value.filter(u => u.responsavel_id === pessoa.id).length
+  const avisoSubordinados = subordinados
+    ? `\n\n${subordinados} usuário(s) respondem a ele e ficam sem responsável. ` +
+      'Quem está acima dele deixa de enxergar as equipes deles.'
+    : ''
+
   const confirmado = await confirmar(
     `Excluir o usuário "${pessoa.nome}" (${pessoa.usuario})?\n\n` +
-      'Ele perde o acesso imediatamente. Isso não pode ser desfeito.'
+      'Ele perde o acesso imediatamente. Isso não pode ser desfeito.' +
+      avisoSubordinados
   )
 
   if (!confirmado) {
@@ -1428,6 +1482,54 @@ onMounted(carregarTudo)
    cabeçalho e botões sempre à vista */
 .corpo-formulario {
   max-height: 68vh;
+  overflow-y: auto;
+}
+
+/* caixas de usuários por nível */
+.caixa-nivel {
+  overflow: hidden;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+}
+
+.caixa-nivel__cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--gradiente-marca);
+  color: #fff;
+}
+
+.caixa-nivel__titulo {
+  font-family: var(--fonte-ui);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.caixa-nivel__contagem {
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.caixa-nivel__vazio {
+  padding: 14px 16px;
+  color: var(--tinta-fraca);
+  font-size: 0.85rem;
+}
+
+/* caixa muito cheia rola por dentro, sem empurrar as outras */
+.caixa-nivel__lista {
+  max-height: 460px;
   overflow-y: auto;
 }
 

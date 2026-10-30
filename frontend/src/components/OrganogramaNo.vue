@@ -33,11 +33,11 @@
       @dragover="sobreAlvo"
       @dragleave="posicaoAlvo = null"
       @drop="soltarAqui"
-      @click="clicavel && arraste.abrirBases(no.chapa)"
+      @click="clicar"
     >
       <template v-if="no.tipo === 'base'">
         <div class="org-base">
-          <q-icon name="place" size="16px" />
+          <q-icon :name="no.icone || 'place'" size="16px" />
           {{ no.titulo }}
         </div>
         <div class="org-cartao__rodape org-cartao__rodape--base">{{ no.subtitulo }}</div>
@@ -70,21 +70,30 @@
       <template v-else>
         <!-- responsável por UMA base: a caixa da base e a dele viram uma só -->
         <div v-if="no.baseTitulo" class="org-base org-base--faixa">
-          <q-icon name="place" size="14px" />
+          <q-icon :name="no.iconeFaixa || 'place'" size="14px" />
           {{ no.baseTitulo }}
         </div>
         <div class="org-cartao__cargo">{{ no.cargo || 'Sem função' }}</div>
         <div class="org-cartao__nome">{{ no.nome }}</div>
         <div v-if="no.externo" class="org-cartao__rodape">{{ no.externo }}</div>
+        <div v-else-if="no.detalhe" class="org-cartao__rodape org-cartao__rodape--detalhe">{{ no.detalhe }}</div>
       </template>
     </div>
 
     <!-- assessoria: ao lado da linha que desce -->
-    <div v-if="no.assessores.length" class="org-assessoria">
-      <div class="org-assessoria__vazio" />
+    <div
+      v-if="no.assessores.length"
+      class="org-assessoria"
+      :class="{ 'org-assessoria--uniforme': no.apoioDosDoisLados }"
+    >
+      <div class="org-assessoria__lista org-assessoria__lista--esquerda">
+        <div v-for="assessor in assessoresDaEsquerda" :key="assessor.id" class="org-assessoria__item">
+          <OrganogramaNo :no="assessor" />
+        </div>
+      </div>
       <div class="org-assessoria__linha" />
       <div class="org-assessoria__lista">
-        <div v-for="assessor in no.assessores" :key="assessor.id" class="org-assessoria__item">
+        <div v-for="assessor in assessoresDaDireita" :key="assessor.id" class="org-assessoria__item">
           <OrganogramaNo :no="assessor" />
         </div>
       </div>
@@ -113,6 +122,10 @@ const props = defineProps({
   // grupo:  { id, tipo: 'grupo', cargo, chefe, chefeNome, pessoas: [{ chapa, nome }], filhos: [] }
   // cor:    { fundo, borda, fundoEscuro, bordaEscura } do subsetor, ou null (Geral)
   // externo: false, ou o motivo ("fora do setor" / "fora do filtro")
+  // visão geral: arrastarComo (o que vai no arraste), aoClicar, naoRecebe, icone,
+  //              iconeFaixa, detalhe (linha discreta no pé do cartão),
+  //              apoioDosDoisLados (assessoria alternando esquerda e direita da linha),
+  //              semGerente e acimaDeTodos (para a página saber onde soltaram)
   no: { type: Object, required: true }
 })
 
@@ -133,10 +146,28 @@ const nomeAlvo = ref(null)
 const arrastavel = computed(
   () =>
     podeEditar.value &&
-    (ehGrupo.value || (ehPessoa.value && !props.no.externo && !props.no.semAlocacao))
+    (Boolean(props.no.arrastarComo) ||
+      ehGrupo.value ||
+      (ehPessoa.value && !props.no.externo && !props.no.semAlocacao))
 )
-// clicar na pessoa: escolher as bases pelas quais ela responde
-const clicavel = computed(() => arrastavel.value && ehPessoa.value)
+// clicar na pessoa: escolher as bases pelas quais ela responde. Na visão
+// geral, setor e responsável abrem o organograma (também para quem só consulta)
+const clicavel = computed(
+  () => Boolean(props.no.aoClicar) || (arrastavel.value && ehPessoa.value)
+)
+
+// dos dois lados, a lista não empurra os níveis abaixo
+const assessoresDaEsquerda = computed(() =>
+  props.no.apoioDosDoisLados ? props.no.assessores.filter((_, i) => i % 2) : []
+)
+const assessoresDaDireita = computed(() =>
+  props.no.assessores.filter((_, i) => !props.no.apoioDosDoisLados || !(i % 2))
+)
+
+function clicar() {
+  if (props.no.aoClicar) props.no.aoClicar()
+  else if (clicavel.value) arraste.abrirBases(props.no.chapa)
+}
 
 // cor discreta do subsetor (a página gera a paleta: ver coresDosSubsetores)
 const estiloSubsetor = computed(() =>
@@ -163,6 +194,9 @@ watch(
 
 function podeReceber() {
   const origem = arraste?.emArraste.value
+  if (props.no.naoRecebe) return false
+  // "Sem gerente": só recebe o que veio de um setor
+  if (props.no.semGerente) return Boolean(origem?.setor && podeEditar.value)
   // grupo sobre ele mesmo não faz sentido
   if (ehGrupo.value) return Boolean(origem && podeEditar.value && origem.grupo !== props.no.id)
   // caixa da base: volta a responder a quem está acima da base
@@ -183,14 +217,17 @@ function posicaoDoPonteiro(evento) {
 function iniciarArraste(evento) {
   if (!arrastavel.value) return
   arrastando.value = true
-  arraste.emArraste.value = ehGrupo.value
-    ? {
-        grupo: props.no.id,
-        chapas: props.no.pessoas.map(p => p.chapa),
-        nome: `${props.no.pessoas.length} ${props.no.cargo}`,
-        cargo: props.no.cargo
-      }
-    : { chapa: props.no.chapa, nome: props.no.nome, cargo: props.no.cargo }
+  if (props.no.arrastarComo) arraste.emArraste.value = props.no.arrastarComo
+  else if (ehGrupo.value) {
+    arraste.emArraste.value = {
+      grupo: props.no.id,
+      chapas: props.no.pessoas.map(p => p.chapa),
+      nome: `${props.no.pessoas.length} ${props.no.cargo}`,
+      cargo: props.no.cargo
+    }
+  } else {
+    arraste.emArraste.value = { chapa: props.no.chapa, nome: props.no.nome, cargo: props.no.cargo }
+  }
   evento.dataTransfer.effectAllowed = 'move'
   evento.dataTransfer.setData('text/plain', props.no.nome || props.no.cargo)
 }
@@ -237,6 +274,10 @@ function soltarAqui(evento) {
   evento.preventDefault()
   const posicao = posicaoDoPonteiro(evento)
   posicaoAlvo.value = null
+  if (props.no.semGerente) {
+    arraste.soltar(arraste.emArraste.value, { semGerente: true, nome: props.no.titulo }, 'abaixo')
+    return
+  }
   // soltar na caixa da base: responde a quem está acima dela (ex.: tirar
   // alguém de baixo de um colega e devolver ao nível da base)
   if (props.no.tipo === 'base') {
@@ -263,7 +304,12 @@ function soltarAqui(evento) {
   }
   arraste.soltar(
     arraste.emArraste.value,
-    { chapa: props.no.chapa, nome: props.no.nome, externo: props.no.externo },
+    {
+      chapa: props.no.chapa,
+      nome: props.no.nome,
+      externo: props.no.externo,
+      acimaDeTodos: props.no.acimaDeTodos
+    },
     posicao
   )
 }
@@ -361,6 +407,12 @@ function soltarAqui(evento) {
   font-size: 0.68rem;
   font-style: italic;
   color: var(--tinta-fraca);
+}
+
+/* cabe numa linha; só uma lista grande de bases quebra */
+.org-cartao__rodape--detalhe {
+  max-width: 230px;
+  font-style: normal;
 }
 
 .org-cartao--externo {
@@ -566,9 +618,18 @@ function soltarAqui(evento) {
   padding: 12px 0;
 }
 
+.org-assessoria__lista--esquerda {
+  align-items: flex-end;
+}
+
 .org-assessoria__item {
   position: relative;
   padding-left: 18px;
+}
+
+.org-assessoria__lista--esquerda .org-assessoria__item {
+  padding-right: 18px;
+  padding-left: 0;
 }
 
 .org-assessoria__item::before {
@@ -579,5 +640,30 @@ function soltarAqui(evento) {
   width: 18px;
   height: 2px;
   background: var(--org-linha);
+}
+
+.org-assessoria__lista--esquerda .org-assessoria__item::before {
+  right: 0;
+  left: auto;
+}
+
+/* pílula de setor no apoio: da largura do item, para o traço da linha chegar nela */
+.org-assessoria__item > .org-no > .org-cartao--base {
+  width: 100%;
+}
+
+/* apoios da visão geral: todos da largura do maior texto (não a do desenho
+   todo), alinhados dos dois lados */
+.org-assessoria--uniforme {
+  width: max-content;
+}
+
+.org-assessoria--uniforme > .org-assessoria__lista {
+  align-items: stretch;
+  gap: 12px;
+}
+
+.org-assessoria--uniforme > .org-assessoria__lista > .org-assessoria__item > .org-no > .org-cartao {
+  width: 100%;
 }
 </style>

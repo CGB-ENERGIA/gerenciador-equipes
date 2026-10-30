@@ -14,6 +14,7 @@ COMO FUNCIONA
 - ADMINISTRADOR ignora vinculos: enxerga tudo.
 """
 
+import hashlib
 from functools import wraps
 
 from flask import g, jsonify, session
@@ -196,11 +197,19 @@ def validar_senha(senha):
 # ============================================================
 
 CHAVE_SESSAO = "usuario_id"
+CHAVE_MARCA_SENHA = "marca_senha"
+
+
+def marca_da_senha(senha_hash):
+    """Resumo da senha atual, guardado no cookie ao entrar. Trocar a senha muda
+    o hash e, com ele, a marca: toda sessão aberta antes deixa de valer."""
+    return hashlib.sha256((senha_hash or "").encode()).hexdigest()[:16]
 
 
 def registrar_login(usuario):
     session.clear()
     session[CHAVE_SESSAO] = usuario.id
+    session[CHAVE_MARCA_SENHA] = marca_da_senha(usuario.SENHA_HASH)
     session.permanent = True
 
 
@@ -224,9 +233,14 @@ def usuario_logado():
                 .filter(Usuario.id == usuario_id)
                 .first()
             )
-            # usuario apagado ou desativado depois de entrar perde o acesso
-            if usuario and usuario.ATIVO:
-                g.usuario_atual = descrever_usuario(usuario, session=sessao_banco)
+            # usuario apagado, desativado ou com a senha trocada depois de
+            # entrar perde o acesso
+            if (
+                usuario
+                and usuario.ATIVO
+                and session.get(CHAVE_MARCA_SENHA) == marca_da_senha(usuario.SENHA_HASH)
+            ):
+                g.usuario_atual = descrever_sessao(usuario, sessao_banco)
         finally:
             sessao_banco.close()
 
@@ -384,6 +398,23 @@ def descrever_usuario(usuario, incluir_vinculos=True, session=None):
     return dados
 
 
+def descrever_sessao(usuario, session):
+    """A conta logada, com o que ela pode de fato nesta sessao.
+
+    Sem nenhum vinculo a conta nao acessa dado de equipe nem de colaborador,
+    em nenhuma rota: das permissoes do nivel so sobra gerenciar usuarios, que
+    nao depende de equipe. Cortar aqui vale para todo exige_permissao e para a
+    tela, que le a mesma lista. O vinculo pode ser herdado (ver escopos_efetivos).
+    """
+    dados = descrever_usuario(usuario, session=session)
+    dados["sem_vinculo"] = not tem_algum_vinculo(dados)
+
+    if dados["sem_vinculo"]:
+        dados["permissoes"] = [p for p in dados["permissoes"] if p == GERENCIAR_USUARIOS]
+
+    return dados
+
+
 def tem_permissao(permissao, usuario=None):
     usuario = usuario or usuario_logado()
     return bool(usuario) and permissao in usuario["permissoes"]
@@ -482,25 +513,17 @@ def equipe_visivel(usuario, base, tipos_e_setores, equipe_id=None):
 def pode_realizar_operacao(
     usuario, operacao, base, tipo_equipe, equipe_id=None, setor=None
 ):
-    """Diz se o usuario pode ALOCAR/EDITAR/REMOVER numa vaga/equipe dada.
+    """Diz se o usuario pode ALOCAR/EDITAR/REMOVER numa vaga/equipe dada: o
+    nivel precisa ter a PERMISSAO (ver PERMISSAO_POR_OPERACAO — editavel na
+    tela de Usuarios > Niveis de acesso) e o VINCULO precisa cobrir a vaga
+    onde a acao acontece.
 
-    So depende da PERMISSAO do nivel (ver PERMISSAO_POR_OPERACAO — editavel
-    na tela de Usuarios > Niveis de acesso). O vinculo (BASE/TIPO_EQUIPE/
-    SETOR/EQUIPE) NAO entra mais nesta checagem — ele continua decidindo o
-    que o usuario VE (equipe_visivel, nas telas de Resumo/Banco de
-    Dados/Cadastro de Vagas), so nao trava mais a AÇÃO em si.
-
-    Motivo: um Supervisor vinculado a um tipo de equipe (ex.: LIGAÇÃO NOVA) as
-    vezes precisa alocar um colaborador que ja esta numa vaga de outra
-    disciplina (ex.: CONSTRUÇÃO), invisivel pra ele. A trava antiga barrava
-    essa troca legitima com "Seu acesso não cobre a base ou o tipo de
-    equipe desta vaga" — em vez disso, quem chama esta funcao (alocar,
-    editar-alocacao, remover, planilha de alocacoes) ja mostra de onde o
-    colaborador esta saindo (prefixo + tipo de equipe, em "alocacao_atual")
-    e pede confirmacao antes de mover.
-
-    base/tipo_equipe/equipe_id/setor ficam no parametro por compatibilidade
-    de chamada (nao usados mais aqui).
+    O vinculo vale so para a vaga de destino. Um Supervisor de LIGAÇÃO NOVA
+    pode trazer para a equipe dele um colaborador que esta numa vaga de outra
+    disciplina ou base, invisivel pra ele: quem chama esta funcao (alocar,
+    editar-alocacao, planilha de alocacoes) checa so a vaga de destino, mostra
+    de onde o colaborador esta saindo ("alocacao_atual") e pede confirmacao
+    antes de mover. O que ele nao pode e mexer direto numa vaga fora do vinculo.
     """
     if not usuario:
         return False
@@ -509,7 +532,32 @@ def pode_realizar_operacao(
     if permissao_necessaria and permissao_necessaria not in (usuario.get("permissoes") or ()):
         return False
 
-    return True
+    return pode_atuar_na_base_e_tipo(
+        usuario, base, tipo_equipe, setor=setor, equipe_id=equipe_id
+    )
+
+
+def tem_algum_vinculo(usuario):
+    """Diz se a conta tem escopo sobre alguma equipe: vinculo proprio ou, para
+    Gerente/Coordenador, herdado dos subordinados. Administrador sempre tem."""
+    if not usuario:
+        return False
+    if usuario.get("ignora_vinculos"):
+        return True
+
+    escopos = usuario.get("escopos")
+    if escopos is None:
+        escopos = [usuario.get("vinculos") or {}]
+    return any(any(escopo.values()) for escopo in escopos)
+
+
+def pode_alterar_colaborador_sem_vaga(usuario):
+    """Colaborador livre ou afastado nao tem vaga para o vinculo conferir: basta
+    a conta poder operar (nao ser so de consulta) e ter algum vinculo."""
+    if not tem_algum_vinculo(usuario):
+        return False
+    permissoes = usuario.get("permissoes") or ()
+    return any(p in permissoes for p in PERMISSAO_POR_OPERACAO.values())
 
 
 # ============================================================

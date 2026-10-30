@@ -10,6 +10,7 @@ import {
 import { useSessao } from '../composables/useSessao'
 
 export const ROTA_LOGIN = '/login'
+export const ROTA_SEM_ACESSO = '/sem-acesso'
 
 /*
  * If not building with SSR mode, you can
@@ -60,7 +61,8 @@ export default defineRouter((/* { store, ssrContext } */) => {
     const exigida = destino.meta?.permissao
 
     if (exigida && !temPermissao(exigida)) {
-      return { path: '/' }
+      // o início também exige permissão: mandar para ele de novo não teria fim
+      return { path: destino.path === '/' ? ROTA_SEM_ACESSO : '/' }
     }
 
     // página ainda em liberação gradual: só o Administrador (nível que ignora

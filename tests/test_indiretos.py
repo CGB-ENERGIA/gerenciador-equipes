@@ -216,3 +216,81 @@ def test_subsetor_efetivo_herda_do_bloco_pendurado():
     assert indiretos.subsetor_efetivo(alocacoes, "A") == "MEDIDORES"
     assert indiretos.subsetor_efetivo(alocacoes, "B") == "MEDIDORES"
     assert indiretos.subsetor_efetivo(alocacoes, "C") == ""
+
+
+def test_plano_bases_gerencia_nao_move_ninguem():
+    def a(chapa, resp, base="BCB", bases=None):
+        return AlocacaoIndireto(CHAPA=chapa, SETOR=indiretos.SETOR_GERENCIA, BASE=base,
+                                RESPONSAVEL_CHAPA=resp, BASES_RESPONSAVEL=bases)
+    # G (geral) <- A e B, todos na mesma base "física"
+    alocacoes = {x.CHAPA: x for x in [a("G", "G"), a("A", "G"), a("B", "G", bases="ITM")]}
+    resp, bases = indiretos.plano_bases_responsavel(alocacoes, "A", ["BCB", "ITM"])
+    assert resp == {}
+    assert bases == {"A": ["BCB", "ITM"], "B": []}  # a base sai de quem cuidava dela
+    resp, bases = indiretos.plano_bases_responsavel(alocacoes, "B", [])
+    assert resp == {}
+    assert bases == {"B": []}
+
+
+def test_gerente_sem_base_e_responsavel_fica_acima_de_todos(sessao, monkeypatch):
+    from flask import Flask
+
+    import auth
+    sessao.add(Colaborador(CHAPA="G", NOME="GERENTE", FUNÇÃO="GERENTE", TIPO_FUNÇÃO="INDIRETO"))
+    sessao.commit()
+    monkeypatch.setattr(indiretos, "SessionLocal", lambda: sessao)
+    monkeypatch.setattr(sessao, "close", lambda: None)
+    monkeypatch.setattr(auth, "usuario_logado", lambda: {"ignora_vinculos": True, "nome": "T"})
+    monkeypatch.setattr(indiretos, "quem_esta_logado", lambda: "T")
+    app = Flask(__name__)
+    app.register_blueprint(indiretos.bp)
+    cliente = app.test_client()
+
+    corpo = {"chapa": "G", "setor": "gerência"}
+    assert cliente.post("/api/indiretos/alocar", json=corpo).status_code == 200
+    alocacao = sessao.query(AlocacaoIndireto).filter_by(CHAPA="G").one()
+    assert (alocacao.BASE, alocacao.RESPONSAVEL_CHAPA) == (indiretos.BASE_GERENCIA, "G")
+    # em outro setor, base e responsável continuam obrigatórios
+    corpo = {"chapa": "G", "setor": "ALMOX"}
+    assert cliente.post("/api/indiretos/alocar", json=corpo).status_code == 400
+
+
+def test_setor_inteiro_ligado_ao_gerente(sessao, monkeypatch):
+    from flask import Flask
+
+    import auth
+    from database.models import SetorGerencia
+    sessao.add(AlocacaoIndireto(CHAPA="900", SETOR=indiretos.SETOR_GERENCIA, BASE="GERAL",
+                                RESPONSAVEL_CHAPA="900"))
+    sessao.add(AlocacaoIndireto(CHAPA="100", SETOR="FROTA", BASE="BCB", RESPONSAVEL_CHAPA="100"))
+    sessao.commit()
+    monkeypatch.setattr(indiretos, "SessionLocal", lambda: sessao)
+    monkeypatch.setattr(sessao, "close", lambda: None)
+    monkeypatch.setattr(auth, "usuario_logado", lambda: {"ignora_vinculos": True, "nome": "T"})
+    monkeypatch.setattr(indiretos, "quem_esta_logado", lambda: "T")
+    app = Flask(__name__)
+    app.register_blueprint(indiretos.bp)
+    cliente = app.test_client()
+    url = "/api/indiretos/setor-gerente"
+
+    assert cliente.post(url, json={"setor": "frota", "gerente_chapa": "900", "apoio": True}).status_code == 200
+    ligacao = sessao.get(SetorGerencia, ("FROTA", ""))
+    assert (ligacao.GERENTE_CHAPA, ligacao.APOIO) == ("900", True)
+    # arrastar de novo troca a posição, sem criar outra linha
+    assert cliente.post(url, json={"setor": "FROTA", "gerente_chapa": "900"}).status_code == 200
+    assert sessao.query(SetorGerencia).count() == 1
+    assert sessao.get(SetorGerencia, ("FROTA", "")).APOIO is False
+    # só o nome de um responsável: outra linha, ao lado da do setor todo
+    corpo = {"setor": "FROTA", "responsaveis": ["101"], "gerente_chapa": "900"}
+    assert cliente.post(url, json=corpo).status_code == 200
+    assert sessao.get(SetorGerencia, ("FROTA", "101")).GERENTE_CHAPA == "900"
+    assert sessao.query(SetorGerencia).count() == 2
+    # desfazer o nome não mexe no setor todo
+    corpo = {"setor": "FROTA", "responsaveis": ["101"], "gerente_chapa": ""}
+    assert cliente.post(url, json=corpo).status_code == 200
+    assert sessao.query(SetorGerencia).count() == 1
+    # só quem está na Gerência recebe setor
+    assert cliente.post(url, json={"setor": "FROTA", "gerente_chapa": "100"}).status_code == 404
+    # sem gerente: desfaz
+    assert cliente.post(url, json={"setor": "FROTA", "gerente_chapa": ""}).status_code == 200
+    assert sessao.query(SetorGerencia).count() == 0
