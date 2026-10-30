@@ -316,5 +316,15 @@ class AlocacaoIndireto(Base):
     # função mostrada na página (uma das do cadastro); NULL = a do cadastro
     # — migrations/020
     FUNCAO = Column(String, nullable=True)
+    # organograma: assessoria do responsável (ao lado da linha dele, fora da
+    # cadeia principal) — migrations/021
+    ASSESSORIA = Column(Boolean, nullable=False, default=False, server_default="false")
+    # subdivisão opcional do setor (maiúsculas) — migrations/021
+    SUBSETOR = Column(String, nullable=True)
+    # bases pelas quais responde no organograma ("BCB,BDC") — migrations/021
+    BASES_RESPONSAVEL = Column(String, nullable=True)
+    # no organograma, abaixo do bloco desta função (mesmo chefe) — migrations/021
+    ABAIXO_DE_FUNCAO = Column(String, nullable=True)
     ALOCADO_POR = Column(String, nullable=True)
     ALOCADO_EM = Column(DateTime(timezone=True), server_default=func.now())
+

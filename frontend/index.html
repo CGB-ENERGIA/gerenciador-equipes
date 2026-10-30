@@ -17,9 +17,11 @@
          veu acinzentado cobrindo a tela inteira, mesmo com as cores certas
          por baixo. Aqui a pagina avisa que os dois esquemas sao suportados. -->
     <meta name="color-scheme" content="light dark" />
+    <!-- img-src data:/blob:: imagens geradas no próprio navegador (exportar o
+         organograma da página Indiretos como PNG). Nada externo é liberado. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';<% if (ctx.dev) { %> connect-src 'self' ws://localhost:*; worker-src 'self' blob:;<% } %>"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;<% if (ctx.dev) { %> connect-src 'self' ws://localhost:*; worker-src 'self' blob:;<% } %>"
     />
 
     <link

@@ -42,8 +42,8 @@
   src: url('/fonts/ibm-plex-sans-400.woff2') format('woff2');
 }
 
-// Inter: usada so na tela de login (visual proprio, pedido a parte pelo
-// Igor). E uma fonte variavel: um arquivo so cobre todos os pesos abaixo.
+// Inter: fonte do texto em todo o app (e do visual proprio do login).
+// E uma fonte variavel: um arquivo so cobre todos os pesos abaixo.
 @font-face {
   font-family: 'Inter';
   font-style: normal;
@@ -117,7 +117,12 @@
   --realce: #f7e9d7;
   --afastado: #8a5a00;
   --afastado-fundo: #fdf0cd;
-  --sombra: 0 10px 28px rgba(65, 32, 38, 0.09);
+  --sombra: 0 1px 3px rgba(65, 32, 38, 0.1), 0 6px 14px rgba(65, 32, 38, 0.1), 0 16px 36px rgba(65, 32, 38, 0.12);
+  --sombra-elevada: 0 3px 8px rgba(65, 32, 38, 0.12), 0 12px 28px rgba(65, 32, 38, 0.16), 0 28px 60px rgba(65, 32, 38, 0.2);
+  --raio: 14px;
+  // gradiente da marca (cabeçalho do sistema e das tabelas): do vinho
+  // escuro ao vinho vivo, para o degradê aparecer de fato
+  --gradiente-marca: linear-gradient(100deg, #4e0b17 0%, #711424 45%, #a8304a 100%);
 
   // disciplinas com cor propria: construcao usa a cor da marca e folguista o
   // laranja, por serem os dois conceitos fixos do sistema
@@ -146,7 +151,7 @@
   --tipo-tinta: #ffffff;
 
   --fonte-ui: 'Barlow Semi Condensed', 'Segoe UI', sans-serif;
-  --fonte-texto: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  --fonte-texto: 'Inter', 'Segoe UI', sans-serif;
 }
 
 body.body--dark {
@@ -182,7 +187,9 @@ body.body--dark {
   --realce: #382a1c;
   --afastado: #e0b84c;
   --afastado-fundo: #3d3218;
-  --sombra: 0 10px 28px rgba(0, 0, 0, 0.32);
+  --sombra: 0 1px 3px rgba(0, 0, 0, 0.4), 0 6px 14px rgba(0, 0, 0, 0.35), 0 16px 36px rgba(0, 0, 0, 0.4);
+  --sombra-elevada: 0 3px 8px rgba(0, 0, 0, 0.45), 0 12px 28px rgba(0, 0, 0, 0.45), 0 28px 60px rgba(0, 0, 0, 0.55);
+  --gradiente-marca: linear-gradient(100deg, #3f0912 0%, #6a1626 45%, #9c2c45 100%);
 
   // no escuro as cores de disciplina precisam clarear para continuarem legiveis
   --tipo-construcao: #e08a9c;
@@ -219,9 +226,21 @@ html {
 }
 
 body {
-  background: var(--fundo);
+  background:
+    radial-gradient(1100px 520px at 100% -8%, rgba(113, 20, 36, 0.07), transparent 70%),
+    radial-gradient(900px 480px at -10% 0%, rgba(201, 116, 27, 0.05), transparent 70%),
+    var(--fundo);
+  background-attachment: fixed;
   color: var(--tinta);
   font-family: var(--fonte-texto);
+}
+
+body.body--dark {
+  background:
+    radial-gradient(1100px 520px at 100% -8%, rgba(153, 40, 63, 0.18), transparent 70%),
+    radial-gradient(900px 480px at -10% 0%, rgba(224, 162, 89, 0.06), transparent 70%),
+    var(--fundo);
+  background-attachment: fixed;
 }
 
 .q-page {
@@ -233,7 +252,8 @@ body {
 // ============================================================
 
 .site-header {
-  background: var(--marca) !important;
+  background: var(--gradiente-marca) !important;
+  box-shadow: 0 4px 18px rgba(65, 20, 30, 0.22);
 }
 
 .q-header .q-toolbar {
@@ -329,7 +349,7 @@ body .q-item__section--side.q-item__section--side:not(.q-item__section--avatar) 
 .q-card {
   background: var(--superficie);
   color: var(--tinta);
-  border-radius: 8px;
+  border-radius: var(--raio);
   border: 1px solid var(--linha);
   box-shadow: var(--sombra);
 }
@@ -356,10 +376,10 @@ body .q-item__section--side.q-item__section--side:not(.q-item__section--avatar) 
 }
 
 .q-btn {
-  border-radius: 10px;
-  font-family: var(--fonte-ui);
+  border-radius: 12px;
+  font-family: var(--fonte-texto);
   font-weight: 600;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.01em;
   transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
 }
 
@@ -369,13 +389,13 @@ body .q-item__section--side.q-item__section--side:not(.q-item__section--avatar) 
 // app. Os segmentos de um q-btn-toggle ficam de fora: ali o efeito de
 // "grupo" quebraria com botoes individuais subindo.
 .q-btn:not(.q-btn--flat):not(.q-btn--outline):not(.q-btn-toggle .q-btn) {
-  box-shadow: 0 3px 10px rgba(45, 37, 39, 0.14);
+  box-shadow: 0 2px 4px rgba(45, 37, 39, 0.12), 0 6px 16px rgba(45, 37, 39, 0.18);
 }
 
 .q-btn:not(.q-btn--flat):not(.q-btn--outline):not(.q-btn-toggle .q-btn):not(.q-btn--round):hover {
   transform: translateY(-1px);
   filter: brightness(1.03);
-  box-shadow: 0 6px 16px rgba(45, 37, 39, 0.2);
+  box-shadow: 0 4px 8px rgba(45, 37, 39, 0.14), 0 10px 24px rgba(45, 37, 39, 0.24);
 }
 
 .q-btn:not(.q-btn--flat):not(.q-btn--outline):not(.q-btn-toggle .q-btn):active {
@@ -518,7 +538,21 @@ body.body--dark .filtros-campos .q-field--outlined.q-field--focused .q-field__co
 // ============================================================
 
 .q-table thead tr {
-  background: var(--marca);
+  background: var(--gradiente-marca);
+}
+
+// cantos arredondados do bloco da tabela (o cabeçalho acompanha)
+.q-table__container {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.q-table tbody tr {
+  transition: background-color 0.12s ease;
+}
+
+.q-table tbody tr:hover > td {
+  background: var(--superficie-2);
 }
 
 .q-table thead th {
@@ -647,3 +681,130 @@ body.body--dark .btn-exportar:hover {
     transform: none;
   }
 }
+
+// ============================================================
+// ACABAMENTO GERAL (campos, diálogos, menus, avisos, rolagem)
+// ============================================================
+// Mesma estrutura de sempre; só cantos, sombras e foco mais atuais, em
+// qualquer tela — não só nas barras de filtro.
+
+.q-field--outlined .q-field__control {
+  border-radius: 10px;
+}
+
+.q-field--outlined .q-field__control:before {
+  border-color: var(--linha);
+}
+
+.q-field--outlined.q-field--focused .q-field__control {
+  box-shadow: 0 0 0 3px rgba(113, 20, 36, 0.1);
+}
+
+body.body--dark .q-field--outlined.q-field--focused .q-field__control {
+  box-shadow: 0 0 0 3px rgba(224, 138, 156, 0.14);
+}
+
+// janelas: cantos maiores, sombra elevada e fundo um pouco mais escuro
+// atrás (sem desfoque: pesa em telas grandes e falhava ao desenhar)
+.q-dialog .q-card {
+  border-radius: 16px;
+  box-shadow: var(--sombra-elevada);
+}
+
+.q-dialog__backdrop.fixed-full {
+  background: rgba(30, 14, 18, 0.45);
+}
+
+// menus suspensos e listas de opções
+.q-menu {
+  border-radius: 12px;
+  border: 1px solid var(--linha);
+  box-shadow: var(--sombra-elevada);
+}
+
+// avisos (q-banner) e dicas (q-tooltip)
+.q-banner {
+  border-radius: 12px;
+}
+
+.q-tooltip {
+  border-radius: 8px;
+  font-family: var(--fonte-texto);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+
+// barras de rolagem finas, na cor do tema
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--linha-forte) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--linha-forte);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+// ============================================================
+// BOTOES E CHIPS REFINADOS
+// ============================================================
+
+// numeros alinhados em coluna nas tabelas e contadores (Inter tem digitos
+// de largura fixa)
+.q-table td,
+.q-badge,
+.q-chip {
+  font-variant-numeric: tabular-nums;
+}
+
+// botao principal (cor da marca): gradiente da marca no lugar da cor chapada
+.q-btn.bg-primary:not(.q-btn--flat):not(.q-btn--outline) {
+  background: var(--gradiente-marca) !important;
+}
+
+// botao contornado: borda mais fina e fundo leve ao passar o mouse
+.q-btn--outline:before {
+  border-width: 1.5px;
+}
+
+.q-btn--outline:hover,
+.q-btn--flat:not(.q-btn--round):hover {
+  background: rgba(113, 20, 36, 0.06);
+}
+
+body.body--dark .q-btn--outline:hover,
+body.body--dark .q-btn--flat:not(.q-btn--round):hover {
+  background: rgba(224, 138, 156, 0.1);
+}
+
+// chips em formato de pilula, texto mais leve e uma borda sutil que da
+// acabamento tanto no claro quanto no escuro
+.q-chip {
+  border-radius: 999px;
+  font-family: var(--fonte-texto);
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+body.body--dark .q-chip {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.q-badge {
+  border-radius: 999px;
+  font-family: var(--fonte-texto);
+  font-weight: 600;
+  padding: 3px 8px;
+}
+

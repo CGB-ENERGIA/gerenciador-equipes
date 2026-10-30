@@ -43,10 +43,11 @@ COL_BASE = "BASE"
 COL_RESPONSAVEL = "CHAPA RESPONSÁVEL"
 COL_INDIRETO = "CHAPA INDIRETO"
 COL_OBSERVACAO = "OBSERVAÇÃO"
+COL_SUBSETOR = "SUBSETOR"
 COLUNAS_OBRIGATORIAS = (COL_SETOR, COL_BASE, COL_RESPONSAVEL, COL_INDIRETO)
 COLUNAS_PLANILHA = (
     COL_SETOR, COL_BASE, COL_RESPONSAVEL, "NOME RESPONSÁVEL",
-    COL_INDIRETO, "NOME INDIRETO", "FUNÇÃO INDIRETO", COL_OBSERVACAO,
+    COL_INDIRETO, "NOME INDIRETO", "FUNÇÃO INDIRETO", COL_OBSERVACAO, COL_SUBSETOR,
 )
 LINHAS_EXTRAS_PLANILHA = 600
 
@@ -108,10 +109,40 @@ def descrever_pessoa(colaborador, alocacao):
             "responsavel_chapa": alocacao.RESPONSAVEL_CHAPA,
             "observacao": alocacao.OBSERVACAO or "",
             "funcao": alocacao.FUNCAO or "",
+            "assessoria": bool(alocacao.ASSESSORIA),
+            "subsetor": alocacao.SUBSETOR or "",
+            "bases_responsavel": bases_da_coluna(alocacao.BASES_RESPONSAVEL),
+            "abaixo_de_funcao": alocacao.ABAIXO_DE_FUNCAO or "",
             "alocado_por": alocacao.ALOCADO_POR or "",
             "alocado_em": alocacao.ALOCADO_EM.isoformat() if alocacao.ALOCADO_EM else "",
         },
     }
+
+
+def subsetor_efetivo(alocacoes, chapa):
+    """Subsetor da pessoa; sem um próprio, herda o do bloco abaixo do qual
+    está pendurada (ABAIXO_DE_FUNCAO = "CARGO|SUBSETOR") ou, senão, o do
+    chefe (e assim por diante na cadeia, dentro do mesmo setor).
+    "" = setor geral. alocacoes: {chapa: AlocacaoIndireto}."""
+    atual = alocacoes.get(chapa)
+    setor = atual.SETOR if atual else None
+    vistos = set()
+    while atual and atual.CHAPA not in vistos:
+        if atual.SUBSETOR:
+            return atual.SUBSETOR
+        _, _, do_bloco = (atual.ABAIXO_DE_FUNCAO or "").partition("|")
+        if do_bloco:
+            return do_bloco
+        vistos.add(atual.CHAPA)
+        chefe = alocacoes.get(atual.RESPONSAVEL_CHAPA)
+        if not chefe or chefe.SETOR != setor:
+            return ""
+        atual = chefe
+    return ""
+
+
+def bases_da_coluna(valor):
+    return [b for b in (valor or "").split(",") if b]
 
 
 def funcoes_do_cadastro(colaboradores):
@@ -222,11 +253,21 @@ def alocar_indireto():
         if not alocacao:
             alocacao = AlocacaoIndireto(CHAPA=chapa)
             session.add(alocacao)
+        # outro responsável: deixa de ser assessoria do anterior e de ficar
+        # abaixo de um bloco da equipe dele
+        if alocacao.RESPONSAVEL_CHAPA != responsavel:
+            alocacao.ASSESSORIA = False
+            alocacao.ABAIXO_DE_FUNCAO = None
+        # outro setor: as bases pelas quais respondia eram do setor anterior
+        if alocacao.SETOR and alocacao.SETOR != setor:
+            alocacao.BASES_RESPONSAVEL = None
         alocacao.SETOR = setor
         alocacao.BASE = base
         alocacao.RESPONSAVEL_CHAPA = responsavel
         if "observacao" in dados:
             alocacao.OBSERVACAO = observacao
+        if "subsetor" in dados:
+            alocacao.SUBSETOR = texto_padrao(dados.get("subsetor")) or None
         if "funcao" in dados:
             alocacao.FUNCAO = funcao
         alocacao.ALOCADO_POR = quem_esta_logado()
@@ -262,6 +303,8 @@ def trocar_responsavel_indiretos():
             .update(
                 {
                     AlocacaoIndireto.RESPONSAVEL_CHAPA: responsavel,
+                    AlocacaoIndireto.ASSESSORIA: False,
+                    AlocacaoIndireto.ABAIXO_DE_FUNCAO: None,
                     AlocacaoIndireto.ALOCADO_POR: quem_esta_logado(),
                     AlocacaoIndireto.ALOCADO_EM: datetime.now(timezone.utc),
                 },
@@ -274,6 +317,165 @@ def trocar_responsavel_indiretos():
         session.rollback()
         print(f"[ERRO] trocar_responsavel_indiretos: {erro}")
         return jsonify({"erro": "Não foi possível trocar o responsável."}), 500
+    finally:
+        session.close()
+
+
+# ============================================================
+# ORGANOGRAMA (arrastar pessoas)
+# ============================================================
+
+class OrganogramaInvalido(ValueError):
+    pass
+
+
+def validar_cadeia(responsavel_de, mudancas):
+    """responsavel_de: {chapa: responsavel_chapa} de hoje. Aplica as
+    mudanças {chapa: novo_responsavel} e recusa se alguém passar a responder
+    a si mesmo ou se a cadeia fechar um ciclo (A responde a B que, subindo,
+    responde a A)."""
+    final = {**responsavel_de, **mudancas}
+    for chapa in mudancas:
+        if final.get(chapa) == chapa:
+            raise OrganogramaInvalido("Ninguém pode responder a si mesmo.")
+        vistos = {chapa}
+        acima = final.get(chapa)
+        while acima:
+            if acima in vistos:
+                raise OrganogramaInvalido(
+                    "Esse movimento faria a cadeia de responsáveis voltar para a mesma pessoa."
+                )
+            vistos.add(acima)
+            proximo = final.get(acima)
+            acima = proximo if proximo != acima else None
+
+
+@bp.route("/api/indiretos/organograma", methods=["POST"])
+@auth.exige_administrador
+def mover_no_organograma():
+    """Arrastar no organograma: para cada pessoa, a quem ela responde (o mesmo
+    responsável dos cartões), se é assessoria dele e, opcionalmente, abaixo
+    de qual bloco de função da equipe dele aparece. Tudo ou nada."""
+    mudancas = _corpo().get("mudancas")
+    if not isinstance(mudancas, list) or not mudancas:
+        return jsonify({"erro": "Nenhuma mudança enviada."}), 400
+
+    session = SessionLocal()
+    try:
+        alocacoes = {a.CHAPA: a for a in session.query(AlocacaoIndireto).all()}
+        novos = {}
+        for mudanca in mudancas:
+            chapa = chapa_da_celula((mudanca or {}).get("chapa"))
+            responsavel = chapa_da_celula((mudanca or {}).get("responsavel_chapa"))
+            if chapa not in alocacoes:
+                return jsonify({"erro": f"Indireto {chapa} não está alocado."}), 404
+            if not responsavel or not _colaborador(session, responsavel):
+                return jsonify({"erro": "Responsável não encontrado no cadastro."}), 404
+            abaixo = str(mudanca.get("abaixo_de_funcao") or "").strip() or None
+            novos[chapa] = (responsavel, bool(mudanca.get("assessoria")), abaixo)
+
+        try:
+            validar_cadeia(
+                {c: a.RESPONSAVEL_CHAPA for c, a in alocacoes.items() if a.RESPONSAVEL_CHAPA},
+                {c: r for c, (r, _, _) in novos.items()},
+            )
+        except OrganogramaInvalido as erro:
+            return jsonify({"erro": str(erro)}), 400
+
+        for chapa, (responsavel, assessoria, abaixo) in novos.items():
+            alocacao = alocacoes[chapa]
+            alocacao.RESPONSAVEL_CHAPA = responsavel
+            alocacao.ASSESSORIA = assessoria
+            alocacao.ABAIXO_DE_FUNCAO = abaixo
+            alocacao.ALOCADO_POR = quem_esta_logado()
+            alocacao.ALOCADO_EM = datetime.now(timezone.utc)
+        session.commit()
+        return jsonify({"sucesso": True})
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] mover_no_organograma: {erro}")
+        return jsonify({"erro": "Não foi possível mover no organograma."}), 500
+    finally:
+        session.close()
+
+
+def plano_bases_responsavel(alocacoes, chapa, bases):
+    """Responsável por base. alocacoes: {chapa: AlocacaoIndireto}. Devolve
+    (novos_responsaveis {chapa: responsavel}, bases_por_chapa {chapa: [bases]}).
+
+    - base marcada: as pessoas do setor naquela base que respondiam ao chefe
+      dele (ou a quem respondia pela base antes) passam a responder a ele, e
+      a base sai de quem respondia por ela;
+    - base desmarcada: quem daquela base respondia a ele volta para o chefe
+      dele."""
+    pessoa = alocacoes[chapa]
+    setor = pessoa.SETOR
+    chefe = pessoa.RESPONSAVEL_CHAPA if pessoa.RESPONSAVEL_CHAPA != chapa else None
+    antigas = set(bases_da_coluna(pessoa.BASES_RESPONSAVEL))
+    novas = set(bases)
+    do_setor = [a for a in alocacoes.values() if a.SETOR == setor]
+
+    responsaveis = {}
+    bases_por_chapa = {chapa: sorted(novas)}
+    for base in novas - antigas:
+        anteriores = {
+            a.CHAPA for a in do_setor
+            if a.CHAPA != chapa and base in bases_da_coluna(a.BASES_RESPONSAVEL)
+        }
+        for c in anteriores:
+            restantes = [b for b in bases_da_coluna(alocacoes[c].BASES_RESPONSAVEL) if b != base]
+            bases_por_chapa[c] = restantes
+        para_mim = {chefe} | anteriores if chefe else anteriores
+        for a in do_setor:
+            if a.BASE == base and a.CHAPA not in (chapa, chefe) and a.RESPONSAVEL_CHAPA in para_mim:
+                responsaveis[a.CHAPA] = chapa
+    for base in antigas - novas:
+        if not chefe:
+            continue
+        for a in do_setor:
+            if a.BASE == base and a.RESPONSAVEL_CHAPA == chapa:
+                responsaveis[a.CHAPA] = chefe
+    return responsaveis, bases_por_chapa
+
+
+@bp.route("/api/indiretos/responsavel-base", methods=["POST"])
+@auth.exige_administrador
+def salvar_responsavel_base():
+    """Marca as bases do setor pelas quais a pessoa responde (ver
+    plano_bases_responsavel)."""
+    dados = _corpo()
+    chapa = chapa_da_celula(dados.get("chapa"))
+    bases = sorted({texto_padrao(b) for b in (dados.get("bases") or []) if texto_padrao(b)})
+
+    session = SessionLocal()
+    try:
+        alocacoes = {a.CHAPA: a for a in session.query(AlocacaoIndireto).all()}
+        if chapa not in alocacoes:
+            return jsonify({"erro": "Aloque a pessoa num setor antes de torná-la responsável por base."}), 404
+        responsaveis, bases_por_chapa = plano_bases_responsavel(alocacoes, chapa, bases)
+        try:
+            validar_cadeia(
+                {c: a.RESPONSAVEL_CHAPA for c, a in alocacoes.items() if a.RESPONSAVEL_CHAPA},
+                responsaveis,
+            )
+        except OrganogramaInvalido as erro:
+            return jsonify({"erro": str(erro)}), 400
+
+        agora = datetime.now(timezone.utc)
+        quem = quem_esta_logado()
+        for c, responsavel in responsaveis.items():
+            alocacoes[c].RESPONSAVEL_CHAPA = responsavel
+            alocacoes[c].ASSESSORIA = False
+            alocacoes[c].ABAIXO_DE_FUNCAO = None
+            alocacoes[c].ALOCADO_POR, alocacoes[c].ALOCADO_EM = quem, agora
+        for c, lista in bases_por_chapa.items():
+            alocacoes[c].BASES_RESPONSAVEL = ",".join(lista) or None
+        session.commit()
+        return jsonify({"sucesso": True, "movidos": len(responsaveis)})
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] salvar_responsavel_base: {erro}")
+        return jsonify({"erro": "Não foi possível salvar o responsável pela base."}), 500
     finally:
         session.close()
 
@@ -308,7 +510,7 @@ def montar_planilha_indiretos(session):
     """Planilha de cadastro já com as alocações de hoje, mais as abas de apoio
     (Indiretos, com quem falta; Colaboradores, para achar o responsável;
     Bases). As colunas de nome são fórmulas só para conferência: a análise
-    lê apenas SETOR, BASE, as duas chapas e a observação."""
+    lê apenas SETOR, BASE, as duas chapas, a observação e o subsetor."""
     colaboradores = session.query(Colaborador).order_by(Colaborador.NOME).all()
     alocacoes = (
         session.query(AlocacaoIndireto)
@@ -324,7 +526,7 @@ def montar_planilha_indiretos(session):
     for i, titulo in enumerate(COLUNAS_PLANILHA, start=1):
         aba.cell(row=1, column=i, value=titulo)
 
-    preencher = {1, 2, 3, 5, 8}
+    preencher = {1, 2, 3, 5, 8, 9}
     ultima = len(alocacoes) + LINHAS_EXTRAS_PLANILHA + 1
 
     def busca(celula, coluna):
@@ -339,6 +541,7 @@ def montar_planilha_indiretos(session):
         aba.cell(row=n, column=3, value=alocacao.RESPONSAVEL_CHAPA or "")
         aba.cell(row=n, column=5, value=alocacao.CHAPA)
         aba.cell(row=n, column=8, value=alocacao.OBSERVACAO or "")
+        aba.cell(row=n, column=9, value=alocacao.SUBSETOR or "")
 
     for n in range(2, ultima + 1):
         for c in range(1, len(COLUNAS_PLANILHA) + 1):
@@ -352,7 +555,7 @@ def montar_planilha_indiretos(session):
         aba.cell(row=n, column=6, value=busca(f"E{n}", "B"))
         aba.cell(row=n, column=7, value=busca(f"E{n}", "C"))
 
-    for c, (titulo, largura) in enumerate(zip(COLUNAS_PLANILHA, (26, 12, 18, 34, 16, 34, 30, 30)), start=1):
+    for c, (titulo, largura) in enumerate(zip(COLUNAS_PLANILHA, (26, 12, 18, 34, 16, 34, 30, 30, 18)), start=1):
         celula = aba.cell(row=1, column=c)
         celula.font, celula.fill, celula.border = estilo.FONTE_CABECALHO, estilo.FUNDO_CABECALHO, estilo.BORDA
         celula.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
@@ -364,7 +567,7 @@ def montar_planilha_indiretos(session):
         aba.column_dimensions[celula.column_letter].width = largura
     aba.row_dimensions[1].height = 30
     aba.freeze_panes = "A2"
-    aba.auto_filter.ref = f"A1:H{ultima}"
+    aba.auto_filter.ref = f"A1:I{ultima}"
     aba.sheet_properties.tabColor = estilo.BORDO
 
     lista_bases = DataValidation(
@@ -437,7 +640,7 @@ def montar_planilha_indiretos(session):
         "Planilha de alocação de indiretos",
         [
             ("Para que serve", "Informar em qual SETOR e BASE cada indireto trabalha e quem é o RESPONSÁVEL dele. Uma linha por indireto. O arquivo já vem com as alocações de hoje."),
-            ("Onde preencher", "Aba ALOCAÇÃO, nas colunas amarelas: SETOR, BASE, CHAPA RESPONSÁVEL, CHAPA INDIRETO e OBSERVAÇÃO (opcional)."),
+            ("Onde preencher", "Aba ALOCAÇÃO, nas colunas amarelas: SETOR, BASE, CHAPA RESPONSÁVEL, CHAPA INDIRETO, OBSERVAÇÃO (opcional) e SUBSETOR (opcional)."),
             ("Colunas automáticas", "NOME RESPONSÁVEL, NOME INDIRETO e FUNÇÃO INDIRETO (cinza) se preenchem pela chapa, só para conferir. \"CHAPA NÃO ENCONTRADA\" em vermelho = chapa errada ou fora do cadastro."),
             ("SETOR", "Escreva sempre do mesmo jeito (o sistema guarda em maiúsculas). O mesmo setor em várias bases aparece na tela num cartão só, com uma seção por base."),
             ("BASE", "Escolha na lista. Você decide a base, independente da seção do cadastro da pessoa."),
@@ -501,7 +704,7 @@ def _ler_aba(arquivo):
 
 def analisar_planilha_indiretos(arquivo, session):
     """Monta o plano sem gravar nada: alocar (novos), mover (setor ou base
-    mudou), atualizar (só responsável/observação mudou), sem mudança e erros."""
+    mudou), atualizar (só responsável/observação/subsetor mudou), sem mudança e erros."""
     df = _ler_aba(arquivo)
     colaboradores = {c.CHAPA: c for c in session.query(Colaborador).all()}
     atuais = {a.CHAPA: a for a in session.query(AlocacaoIndireto).all()}
@@ -516,6 +719,9 @@ def analisar_planilha_indiretos(arquivo, session):
         responsavel = chapa_da_celula(linha.get(COL_RESPONSAVEL))
         chapa = chapa_da_celula(linha.get(COL_INDIRETO))
         observacao = texto_livre(linha.get(COL_OBSERVACAO)) if COL_OBSERVACAO in df.columns else None
+        # coluna opcional: planilha sem ela não mexe no subsetor de ninguém
+        tem_subsetor = COL_SUBSETOR in df.columns
+        subsetor = (texto_padrao(linha.get(COL_SUBSETOR)) or None) if tem_subsetor else None
 
         if not (setor or base or responsavel or chapa):
             continue  # linha preparada e não usada
@@ -551,18 +757,27 @@ def analisar_planilha_indiretos(arquivo, session):
             "observacao": observacao,
         }
         atual = atuais.get(chapa)
+        if not tem_subsetor:
+            subsetor = (atual.SUBSETOR if atual else None) or None
+        item["subsetor"] = subsetor
         if not atual:
             plano["alocar"].append(item)
         elif (atual.SETOR, atual.BASE) != (setor, base):
             item["de"] = f"{atual.SETOR} · {atual.BASE}"
             plano["mover"].append(item)
-        elif atual.RESPONSAVEL_CHAPA != responsavel or (atual.OBSERVACAO or None) != observacao:
+        elif (
+            atual.RESPONSAVEL_CHAPA != responsavel
+            or (atual.OBSERVACAO or None) != observacao
+            or (atual.SUBSETOR or None) != subsetor
+        ):
             mudou = []
             if atual.RESPONSAVEL_CHAPA != responsavel:
                 antigo = colaboradores.get(atual.RESPONSAVEL_CHAPA)
                 mudou.append(f"responsável: {antigo.NOME if antigo else atual.RESPONSAVEL_CHAPA or '—'} → {chefe.NOME}")
             if (atual.OBSERVACAO or None) != observacao:
                 mudou.append("observação")
+            if (atual.SUBSETOR or None) != subsetor:
+                mudou.append(f"subsetor: {atual.SUBSETOR or '—'} → {subsetor or '—'}")
             item["mudancas"] = mudou
             plano["atualizar"].append(item)
         else:
@@ -614,8 +829,11 @@ def aplicar_planilha_indiretos():
                 session.add(alocacao)
             alocacao.SETOR = item["setor"]
             alocacao.BASE = item["base"]
+            if alocacao.RESPONSAVEL_CHAPA != item["responsavel_chapa"]:
+                alocacao.ASSESSORIA = False
             alocacao.RESPONSAVEL_CHAPA = item["responsavel_chapa"]
             alocacao.OBSERVACAO = item["observacao"]
+            alocacao.SUBSETOR = item["subsetor"]
             alocacao.ALOCADO_POR = quem
             alocacao.ALOCADO_EM = agora
         session.commit()

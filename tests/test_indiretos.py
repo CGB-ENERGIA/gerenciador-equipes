@@ -133,3 +133,86 @@ def test_funcao_para_gravar(sessao):
     # inventada: recusa
     with pytest.raises(indiretos.FuncaoInvalida):
         indiretos.funcao_para_gravar(sessao, pessoa, "FUNÇÃO INVENTADA")
+
+
+def test_validar_cadeia_recusa_ciclo_e_responder_a_si_mesmo():
+    # Camila (1) <- Rikelme (2) <- Luis (3) <- Danilo (4); Camila responde a si mesma
+    hoje = {"1": "1", "2": "1", "3": "2", "4": "3"}
+    indiretos.validar_cadeia(hoje, {"4": "2"})  # Danilo direto ao Rikelme: ok
+    with pytest.raises(indiretos.OrganogramaInvalido):
+        indiretos.validar_cadeia(hoje, {"3": "3"})
+    # Rikelme abaixo do Danilo fecharia Rikelme -> Danilo -> Luis -> Rikelme
+    with pytest.raises(indiretos.OrganogramaInvalido):
+        indiretos.validar_cadeia(hoje, {"2": "4"})
+    # "acima": Luis assume o chefe do Rikelme e o Rikelme passa a responder ao Luis
+    indiretos.validar_cadeia(hoje, {"3": "1", "2": "3"})
+
+
+def test_planilha_le_subsetor_e_sem_a_coluna_mantem_o_atual(sessao):
+    sessao.add(AlocacaoIndireto(CHAPA="100", SETOR="ALMOXARIFADO", BASE="BCB",
+                                RESPONSAVEL_CHAPA="900", SUBSETOR="OBRAS"))
+    sessao.commit()
+    # com a coluna: troca
+    linhas = [dict(linha(chapa=100), **{"SUBSETOR": " epi/epc "})]
+    colunas = ["SETOR", "BASE", "CHAPA RESPONSÁVEL", "CHAPA INDIRETO", "OBSERVAÇÃO", "SUBSETOR"]
+    arquivo = io.BytesIO()
+    with pd.ExcelWriter(arquivo, engine="openpyxl") as writer:
+        pd.DataFrame(linhas, columns=colunas).to_excel(writer, index=False, sheet_name="Alocação")
+    arquivo.seek(0)
+    plano = indiretos.analisar_planilha_indiretos(arquivo, sessao)
+    assert plano["atualizar"][0]["subsetor"] == "EPI/EPC"
+    # sem a coluna (planilha antiga): mantém OBRAS, nada a mudar
+    plano = indiretos.analisar_planilha_indiretos(planilha([linha(chapa=100)]), sessao)
+    assert plano["sem_mudanca"] == 1 and not plano["atualizar"]
+
+
+def test_plano_bases_responsavel():
+    def a(chapa, base, resp, bases=None):
+        return AlocacaoIndireto(CHAPA=chapa, SETOR="ALMOX", BASE=base,
+                                RESPONSAVEL_CHAPA=resp, BASES_RESPONSAVEL=bases)
+    # Camila (C) chefe de todos; Rikelme (R) em BCB; equipe em BCB e BDC
+    alocacoes = {x.CHAPA: x for x in [
+        a("R", "BCB", "C"), a("B1", "BCB", "C"), a("B2", "BCB", "C"),
+        a("D1", "BDC", "C"), a("L", "BCB", "B1"),
+    ]}
+    resp, bases = indiretos.plano_bases_responsavel(alocacoes, "R", ["BCB"])
+    # quem da BCB respondia à Camila passa ao Rikelme; L (abaixo de B1) fica
+    assert resp == {"B1": "R", "B2": "R"}
+    assert bases == {"R": ["BCB"]}
+
+    alocacoes["R"].BASES_RESPONSAVEL = "BCB"
+    alocacoes["B1"].RESPONSAVEL_CHAPA = alocacoes["B2"].RESPONSAVEL_CHAPA = "R"
+    # desmarca BCB e marca BDC: BCB volta à Camila, BDC vem para ele
+    resp, bases = indiretos.plano_bases_responsavel(alocacoes, "R", ["BDC"])
+    assert resp == {"B1": "C", "B2": "C", "D1": "R"}
+    assert bases == {"R": ["BDC"]}
+
+
+def test_subsetor_efetivo_herda_pela_cadeia():
+    def a(chapa, resp, sub=None, setor="ALMOX"):
+        return AlocacaoIndireto(CHAPA=chapa, SETOR=setor, BASE="BCB",
+                                RESPONSAVEL_CHAPA=resp, SUBSETOR=sub)
+    # Luis (OBRAS) <- Danilo <- Ana ; Bia (EPI) abaixo de Luis ; Caio em outro setor
+    alocacoes = {x.CHAPA: x for x in [
+        a("C", "C"), a("L", "C", "OBRAS"), a("D", "L"), a("A", "D"),
+        a("B", "L", "EPI"), a("E", "B"), a("X", "L", setor="FROTA"),
+    ]}
+    assert indiretos.subsetor_efetivo(alocacoes, "A") == "OBRAS"
+    assert indiretos.subsetor_efetivo(alocacoes, "E") == "EPI"
+    assert indiretos.subsetor_efetivo(alocacoes, "C") == ""
+    assert indiretos.subsetor_efetivo(alocacoes, "X") == ""  # chefe de outro setor
+
+
+def test_subsetor_efetivo_herda_do_bloco_pendurado():
+    def a(chapa, resp, sub=None, abaixo=None):
+        return AlocacaoIndireto(CHAPA=chapa, SETOR="ALMOX", BASE="BCB", RESPONSAVEL_CHAPA=resp,
+                                SUBSETOR=sub, ABAIXO_DE_FUNCAO=abaixo)
+    # R (sem subsetor) chefia o bloco ALMOXARIFE de MEDIDORES; Ana fica abaixo
+    # dele e Bia responde a Ana; Caio está abaixo de um bloco sem subsetor
+    alocacoes = {x.CHAPA: x for x in [
+        a("R", "R"), a("F", "R", "MEDIDORES"), a("A", "R", abaixo="ALMOXARIFE|MEDIDORES"),
+        a("B", "A"), a("C", "R", abaixo="ALMOXARIFE"),
+    ]}
+    assert indiretos.subsetor_efetivo(alocacoes, "A") == "MEDIDORES"
+    assert indiretos.subsetor_efetivo(alocacoes, "B") == "MEDIDORES"
+    assert indiretos.subsetor_efetivo(alocacoes, "C") == ""

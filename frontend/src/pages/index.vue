@@ -2238,13 +2238,13 @@ watch(
      -base        = card de cada base
      -consolidada = tabela Composicao */
   --linha-fonte-base: 0.85rem;
-  --linha-fonte-consolidada: 0.7rem;
+  --linha-fonte-consolidada: 0.88rem;
 
   /* Texto da celula Equipe, separado pelo mesmo motivo */
   --grupo-rotulo-base: 1.2rem;
   --grupo-detalhe-base: 0.55rem;
-  --grupo-rotulo-consolidada: 1.0rem;
-  --grupo-detalhe-consolidada: 0.55rem;
+  --grupo-rotulo-consolidada: 1.21rem;
+  --grupo-detalhe-consolidada: 0.6rem;
 
   /* Largura das colunas Equipe e Funcao. Separadas por tabela de
      proposito: a composicao por base ocupa a largura cheia da pagina e a
@@ -2378,9 +2378,14 @@ watch(
   background: var(--realce);
 }
 
-.resumo-page :deep(.q-table thead tr),
+/* gradiente na LINHA do cabeçalho (cada célula transparente): pintar a
+   célula repetiria o degradê coluna a coluna */
+.resumo-page :deep(.q-table thead tr) {
+  background: var(--gradiente-marca) !important;
+}
+
 .resumo-page :deep(.q-table thead th) {
-  background: var(--marca) !important;
+  background: transparent !important;
   color: #fff !important;
   font-weight: 700;
   text-align: center !important;
@@ -2476,15 +2481,17 @@ watch(
   max-width: 100%;
 }
 
+/* meio a meio: com 60/40 a tabela de cada base sobrava espaço vazio entre
+   as colunas e a Composição (à direita) ficava espremida */
 @media (min-width: 1024px) {
   .resumo-composicao {
-    flex-basis: 60%;
-    max-width: 60%;
+    flex-basis: 50%;
+    max-width: 50%;
   }
 
   .resumo-lateral {
-    flex-basis: 40%;
-    max-width: 40%;
+    flex-basis: 50%;
+    max-width: 50%;
   }
 }
 

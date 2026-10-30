@@ -69,6 +69,18 @@
 
               <div class="col-12 col-sm-6 col-md">
                 <SelectFiltroMultiplo
+                  :model-value="filtroSubsetores"
+                  :options="opcoesSubsetores"
+                  icon="account_tree"
+                  label="Subsetor"
+                  @update:model-value="
+                    v => (filtroSubsetores = proximaSelecaoMultipla(filtroSubsetores, v, TODOS))
+                  "
+                />
+              </div>
+
+              <div class="col-12 col-sm-6 col-md">
+                <SelectFiltroMultiplo
                   :model-value="filtroResponsaveis"
                   :options="opcoesResponsaveis"
                   icon="supervisor_account"
@@ -231,6 +243,19 @@
                           </q-tooltip>
                         </button>
                       </div>
+
+                      <q-btn
+                        flat
+                        round
+                        dense
+                        icon="account_tree"
+                        color="primary"
+                        class="q-mr-sm"
+                        aria-label="Ver como organograma"
+                        @click="abrirOrganograma(grupo)"
+                      >
+                        <q-tooltip>Ver como organograma</q-tooltip>
+                      </q-btn>
 
                       <div class="cartao-setor__contagem">
                         <div class="cartao-setor__numero">{{ grupo.total }}</div>
@@ -445,6 +470,189 @@
     </q-page-container>
 
     <!-- ================================================== -->
+    <!-- ORGANOGRAMA DO SETOR -->
+    <!-- ================================================== -->
+
+    <q-dialog v-model="organograma.aberto" full-width>
+      <q-card class="cartao-organograma">
+        <q-card-section class="row items-center no-wrap">
+          <q-icon name="account_tree" color="primary" size="26px" class="q-mr-sm" />
+          <div>
+            <div class="text-h6">{{ organograma.setor }}</div>
+            <div v-if="grupoOrganograma" class="text-caption">
+              {{ grupoOrganograma.total }}
+              {{ grupoOrganograma.total === 1 ? 'pessoa' : 'pessoas' }} ·
+              {{ grupoOrganograma.bases.length }}
+              {{ grupoOrganograma.bases.length === 1 ? 'base' : 'bases' }}
+            </div>
+          </div>
+          <q-space />
+          <q-btn
+            class="btn-exportar q-mr-sm"
+            color="positive"
+            text-color="white"
+            no-caps
+            icon="image"
+            label="Exportar imagem"
+            :loading="exportandoOrganograma"
+            @click="exportarOrganograma"
+          >
+            <q-tooltip>
+              PNG Full HD (1920 × 1080). Se não ficar legível numa imagem só, divide por bases
+            </q-tooltip>
+          </q-btn>
+          <q-btn v-close-popup flat round dense icon="close" />
+        </q-card-section>
+
+        <q-separator />
+
+        <div v-if="podeEditar" class="dica-arraste">
+          <q-icon name="pan_tool" size="16px" />
+          Arraste uma pessoa sobre outra: no meio ou embaixo da caixa, passa a
+          responder a ela; em cima, fica acima dela; no lado direito, vira
+          assessoria dela; na caixa da base, volta ao nível da base. Clique na pessoa
+          para mudar o subsetor ou as bases dela.
+          <q-spinner v-if="salvandoOrganograma" size="16px" color="primary" class="q-ml-sm" />
+        </div>
+
+        <q-banner
+          v-if="avisoOrganograma.texto"
+          dense
+          :class="avisoOrganograma.tipo === 'erro' ? 'bg-red-1 text-negative' : 'bg-green-1 text-positive'"
+          class="q-mx-md q-mt-sm"
+          rounded
+        >
+          {{ avisoOrganograma.texto }}
+          <template #action>
+            <q-btn flat dense round icon="close" @click="avisoOrganograma = { tipo: '', texto: '' }" />
+          </template>
+        </q-banner>
+
+        <q-card-section class="area-organograma">
+          <div ref="desenhoOrganograma" class="org-raizes">
+            <div v-if="subsetoresDoOrganograma.length" class="org-legenda">
+              <span class="org-legenda__item">
+                <span class="org-legenda__cor org-legenda__cor--geral" />
+                Geral
+              </span>
+              <span v-for="nome in subsetoresDoOrganograma" :key="nome" class="org-legenda__item">
+                <span
+                  class="org-legenda__cor"
+                  :style="{
+                    '--sub-fundo': coresDosSubsetores[nome].fundo,
+                    '--sub-borda': coresDosSubsetores[nome].borda,
+                    '--sub-fundo-escuro': coresDosSubsetores[nome].fundoEscuro,
+                    '--sub-borda-escura': coresDosSubsetores[nome].bordaEscura
+                  }"
+                />
+                {{ nome }}
+              </span>
+            </div>
+            <div class="org-topos">
+              <div v-for="raiz in arvoreOrganograma" :key="raiz.id" class="org-topos__ramo">
+                <OrganogramaNo :no="raiz" />
+              </div>
+            </div>
+          </div>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
+
+    <!-- A QUEM DO GRUPO RESPONDE (soltar sobre um cartão agrupado) -->
+    <q-dialog v-model="escolhaDoChefe.aberto">
+      <q-card style="width: 420px; max-width: 94vw">
+        <q-card-section class="row items-center">
+          <q-icon name="account_tree" color="primary" size="26px" class="q-mr-sm" />
+          <div class="text-h6">Onde fica?</div>
+          <q-space />
+          <q-btn v-close-popup flat round dense icon="close" />
+        </q-card-section>
+        <q-separator />
+        <q-card-section v-if="escolhaDoChefe.origem">
+          <div class="text-body2 q-mb-sm">
+            Onde fica <strong>{{ escolhaDoChefe.origem.nome }}</strong>? Abaixo do bloco
+            {{ escolhaDoChefe.cargo }} todo, ou de uma pessoa dele?
+          </div>
+          <q-option-group v-model="escolhaDoChefe.chapa" :options="opcoesEscolhaDoChefe" dense />
+          <div class="text-caption q-mt-sm">
+            Dica: soltar direto sobre um nome dentro do cartão já escolhe a pessoa.
+          </div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat label="Cancelar" />
+          <q-btn
+            color="primary"
+            label="Confirmar"
+            :disable="!escolhaDoChefe.chapa"
+            :loading="salvandoOrganograma"
+            @click="confirmarEscolhaDoChefe"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- EDITAR NO ORGANOGRAMA (clicar na pessoa): subsetor e bases -->
+    <q-dialog v-model="basesDaPessoa.aberto">
+      <q-card style="width: 440px; max-width: 94vw">
+        <q-card-section class="row items-center">
+          <q-icon name="account_tree" color="primary" size="26px" class="q-mr-sm" />
+          <div>
+            <div class="text-h6">Editar no organograma</div>
+            <div class="text-caption">{{ basesDaPessoa.nome }} · {{ organograma.setor }}</div>
+          </div>
+          <q-space />
+          <q-btn v-close-popup flat round dense icon="close" />
+        </q-card-section>
+        <q-separator />
+        <q-card-section class="q-gutter-md">
+          <q-select
+            v-model="basesDaPessoa.subsetor"
+            outlined
+            dense
+            use-input
+            hide-selected
+            fill-input
+            clearable
+            input-debounce="0"
+            new-value-mode="add-unique"
+            label="Subsetor"
+            :hint="dicaSubsetorDaPessoa"
+            :options="opcoesSubsetorOrganograma"
+            @filter="filtrarSubsetoresOrganograma"
+            @input-value="valor => digitarSubsetor(basesDaPessoa, valor)"
+            @clear="digitarSubsetor(basesDaPessoa, '')"
+          >
+            <template #prepend><q-icon name="account_tree" /></template>
+          </q-select>
+
+          <q-select
+            v-model="basesDaPessoa.bases"
+            outlined
+            dense
+            multiple
+            use-chips
+            clearable
+            options-dense
+            label="Responsável pelas bases"
+            hint="Uma base: a caixa dele vira a da base. Várias: ele em cima e as bases abaixo."
+            :options="basesDoSetorOrganograma"
+          >
+            <template #prepend><q-icon name="place" /></template>
+          </q-select>
+
+          <div class="text-caption">
+            Ao marcar uma base, quem dela respondia ao chefe dele passa a responder
+            a ele; ao desmarcar, volta para o chefe.
+          </div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat label="Cancelar" />
+          <q-btn color="primary" label="Salvar" :loading="salvandoOrganograma" @click="salvarBasesDaPessoa" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- ================================================== -->
     <!-- ALOCAR / MOVER (pessoa + setor + base + responsável) -->
     <!-- ================================================== -->
 
@@ -544,6 +752,27 @@
               </q-select>
             </div>
           </div>
+
+          <!-- subsetor: opcional; não aparece nos cartões, só no filtro e no organograma -->
+          <q-select
+            v-model="alocacao.subsetor"
+            outlined
+            dense
+            use-input
+            hide-selected
+            fill-input
+            clearable
+            input-debounce="0"
+            new-value-mode="add-unique"
+            label="Subsetor (opcional)"
+            :hint="dicaSubsetor"
+            :options="opcoesSubsetorDialogo"
+            @filter="filtrarSubsetores"
+            @input-value="valor => digitarSubsetor(alocacao, valor)"
+            @clear="digitarSubsetor(alocacao, '')"
+          >
+            <template #prepend><q-icon name="account_tree" /></template>
+          </q-select>
 
           <q-select
             v-model="alocacao.responsavelChapa"
@@ -871,10 +1100,12 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, provide, reactive, ref, watch } from 'vue'
+import { toCanvas } from 'html-to-image'
 
 import CabecalhoApp from '../components/CabecalhoApp.vue'
 import MarcaDaguaFundo from '../components/MarcaDaguaFundo.vue'
+import OrganogramaNo from '../components/OrganogramaNo.vue'
 import SelectFiltroMultiplo from '../components/SelectFiltroMultiplo.vue'
 import { PODE_VER_EQUIPES, useSessao } from '../composables/useSessao'
 import { useConfirmacao } from '../composables/useConfirmacao'
@@ -979,8 +1210,18 @@ const vCaberNaLinha = {
   }
 }
 
+// Dois primeiros nomes; se o segundo for partícula (DA, DE, DOS...), entra
+// também o seguinte: "JUNIEL DA SILVA", e não "JUNIEL DA".
+const PARTICULAS = new Set(['DA', 'DE', 'DO', 'DAS', 'DOS', 'E', "D'"])
+
 function nomeCurto(nome) {
-  return String(nome || '').trim().split(/\s+/).slice(0, 2).join(' ')
+  const partes = String(nome || '').trim().split(/\s+/)
+  const curto = partes.slice(0, 2)
+  let i = 2
+  while (PARTICULAS.has(curto[curto.length - 1]?.toUpperCase()) && i < partes.length) {
+    curto.push(partes[i++])
+  }
+  return curto.join(' ')
 }
 
 async function chamarApi(url, opcoes, mensagemErro) {
@@ -1001,6 +1242,9 @@ async function chamarApi(url, opcoes, mensagemErro) {
 const TODOS = 'TODOS'
 const filtroBases = ref([TODOS])
 const filtroSetores = ref([TODOS])
+const filtroSubsetores = ref([TODOS])
+// quem não tem subsetor é do setor geral: opção "Geral" do filtro
+const SEM_SUBSETOR = '__SEM_SUBSETOR__'
 const filtroResponsaveis = ref([TODOS])
 const busca = ref('')
 const buscaSemSetor = ref('')
@@ -1009,11 +1253,13 @@ const buscaSemSetor = ref('')
 const escolhidos = selecao => (selecao.includes(TODOS) ? [] : selecao)
 const basesAtivas = computed(() => escolhidos(filtroBases.value))
 const setoresAtivos = computed(() => escolhidos(filtroSetores.value))
+const subsetoresAtivos = computed(() => escolhidos(filtroSubsetores.value))
 const responsaveisAtivos = computed(() => escolhidos(filtroResponsaveis.value))
 
 function limparFiltros() {
   filtroBases.value = [TODOS]
   filtroSetores.value = [TODOS]
+  filtroSubsetores.value = [TODOS]
   filtroResponsaveis.value = [TODOS]
   busca.value = ''
   buscaSemSetor.value = ''
@@ -1049,14 +1295,29 @@ const opcoesBases = computed(() => [
   { label: 'Todas as bases', value: TODOS },
   ...opcoesUnicas(alocados.value.map(p => p.alocacao.base))
 ])
+const opcoesSubsetores = computed(() => {
+  const alocadosDosSetores = setoresAtivos.value.length
+    ? alocados.value.filter(p => setoresAtivos.value.includes(p.alocacao.setor))
+    : alocados.value
+  return [
+    { label: 'Todos os subsetores', value: TODOS },
+    // sem subsetor atribuído = o setor geral
+    { label: 'Geral', value: SEM_SUBSETOR },
+    ...opcoesUnicas(alocadosDosSetores.map(subsetorEfetivo))
+  ]
+})
+
 const opcoesSetores = computed(() => [
   { label: 'Todos os setores', value: TODOS },
   ...opcoesUnicas(nomesSetores.value)
 ])
 // só os dois primeiros nomes, como no chip; se dois ficarem iguais, a chapa
 // desempata
+// Responsável é uma CADEIA (coordenador > supervisor > analista...): o filtro
+// lista só o topo de cada cadeia — o mesmo responsável dos cartões — e
+// escolher alguém traz a cadeia inteira dele.
 const opcoesResponsaveis = computed(() => {
-  const opcoes = [...new Set(alocados.value.map(p => p.alocacao.responsavel_chapa).filter(Boolean))]
+  const opcoes = [...new Set(alocados.value.map(topoDaCadeia).filter(Boolean))]
     .map(chapa => ({ label: nomeCurto(responsavelPorChapa(chapa)?.nome) || chapa, value: chapa }))
   const repetidos = new Set(
     opcoes.map(o => o.label).filter((label, i, todos) => todos.indexOf(label) !== i)
@@ -1090,8 +1351,14 @@ const alocadosFiltrados = computed(() =>
     if (basesAtivas.value.length && !basesAtivas.value.includes(a.base)) return false
     if (setoresAtivos.value.length && !setoresAtivos.value.includes(a.setor)) return false
     if (
+      subsetoresAtivos.value.length &&
+      !subsetoresAtivos.value.includes(subsetorEfetivo(pessoa) || SEM_SUBSETOR)
+    ) {
+      return false
+    }
+    if (
       responsaveisAtivos.value.length &&
-      !responsaveisAtivos.value.includes(a.responsavel_chapa)
+      !responsaveisAtivos.value.includes(topoDaCadeia(pessoa))
     ) {
       return false
     }
@@ -1106,6 +1373,7 @@ const semSetorFiltrados = computed(() =>
       filtroStatus.value !== 'alocados' &&
       casaComStatus(pessoa) &&
       !setoresAtivos.value.length &&
+      !subsetoresAtivos.value.length &&
       !responsaveisAtivos.value.length &&
       (!basesAtivas.value.length || basesAtivas.value.includes(pessoa.base_cadastro)) &&
       casaComBusca(pessoa) &&
@@ -1143,10 +1411,50 @@ function ordemCargo(funcao) {
 }
 
 // setor -> base -> responsável -> pessoas
+// O responsável é o chefe DIRETO (o organograma mostra a cadeia). Nos
+// cartões, a pessoa fica no grupo do TOPO da cadeia dentro do setor: quem
+// responde ao Rikelme, que responde à Camila, aparece sob a Camila.
+const alocadoPorChapa = computed(() => new Map(alocados.value.map(p => [p.chapa, p])))
+
+// Subsetor herdado: sem um próprio, a pessoa usa o do chefe (e assim por
+// diante na cadeia, dentro do mesmo setor). Luís em OBRAS -> a equipe dele
+// também. Quem tem subsetor próprio fica com o dele. "" = setor geral.
+function subsetorEfetivo(pessoa) {
+  const setor = pessoa.alocacao?.setor
+  const vistos = new Set()
+  let atual = pessoa
+  while (atual?.alocacao && !vistos.has(atual.chapa)) {
+    if (atual.alocacao.subsetor) return atual.alocacao.subsetor
+    // pendurado abaixo de um bloco ("CARGO|SUBSETOR"): herda o do bloco
+    const doBloco = (atual.alocacao.abaixo_de_funcao || '').split('|')[1]
+    if (doBloco) return doBloco
+    vistos.add(atual.chapa)
+    const chefe = alocadoPorChapa.value.get(atual.alocacao.responsavel_chapa)
+    if (!chefe || chefe.alocacao.setor !== setor) return ''
+    atual = chefe
+  }
+  return ''
+}
+
+function topoDaCadeia(pessoa) {
+  let chapa = pessoa.alocacao.responsavel_chapa || ''
+  const vistos = new Set([pessoa.chapa])
+  while (chapa && !vistos.has(chapa)) {
+    vistos.add(chapa)
+    const chefe = alocadoPorChapa.value.get(chapa)
+    const acima = chefe?.alocacao.responsavel_chapa
+    // o chefe está no mesmo setor e responde a outra pessoa: sobe mais um
+    if (!chefe || chefe.alocacao.setor !== pessoa.alocacao.setor || !acima || acima === chapa) break
+    chapa = acima
+  }
+  return chapa
+}
+
 const gruposSetor = computed(() => {
   const porSetor = new Map()
   for (const pessoa of alocadosFiltrados.value) {
-    const { setor, base, responsavel_chapa: chapaResp } = pessoa.alocacao
+    const { setor, base } = pessoa.alocacao
+    const chapaResp = topoDaCadeia(pessoa)
     if (!porSetor.has(setor)) porSetor.set(setor, new Map())
     const porBase = porSetor.get(setor)
     if (!porBase.has(base)) porBase.set(base, new Map())
@@ -1203,6 +1511,766 @@ const gruposSetor = computed(() => {
 // ============================================================
 // INDICADORES
 // ============================================================
+
+// ============================================================
+// ORGANOGRAMA DO SETOR
+// ============================================================
+//
+// Pessoa a pessoa: cada caixa é uma pessoa (cargo + nome) e fica abaixo de
+// quem ela responde — o mesmo "Responsável" dos cartões da página. Quem é
+// ASSESSORIA do chefe aparece ao lado da linha dele, fora da cadeia
+// principal. A base entra só no cargo, "(BCB)", quando o setor tem mais de
+// uma. Responsável de fora do setor aparece no topo, tracejado.
+
+const organograma = reactive({ aberto: false, setor: '' })
+const salvandoOrganograma = ref(false)
+// erro e aviso mostrados dentro do diálogo (o banner da página fica atrás dele)
+const avisoOrganograma = ref({ tipo: '', texto: '' })
+
+const porCargoENome = (a, b) =>
+  ordemCargo(a.funcao) - ordemCargo(b.funcao) ||
+  a.funcao.localeCompare(b.funcao, 'pt-BR') ||
+  a.nomeCompleto.localeCompare(b.nomeCompleto, 'pt-BR')
+
+const grupoOrganograma = computed(() => gruposSetor.value.find(g => g.nome === organograma.setor))
+
+const pessoasDoOrganograma = computed(() => {
+  const grupo = grupoOrganograma.value
+  return grupo ? grupo.bases.flatMap(s => s.responsaveis.flatMap(t => t.pessoas)) : []
+})
+
+// Paleta discreta, uma cor por subsetor do organograma aberto: os tons são
+// espalhados igualmente no círculo de cores, então crescem ou diminuem com a
+// quantidade de subsetores. "Geral" (sem subsetor) fica neutro, sem cor.
+const subsetoresDoOrganograma = computed(() =>
+  [...new Set(pessoasDoOrganograma.value.map(subsetorEfetivo).filter(Boolean))].sort(
+    (a, b) => a.localeCompare(b, 'pt-BR')
+  )
+)
+
+const coresDosSubsetores = computed(() => {
+  const nomes = subsetoresDoOrganograma.value
+  const cores = {}
+  nomes.forEach((nome, i) => {
+    const matiz = Math.round((200 + (i * 360) / nomes.length) % 360)
+    cores[nome] = {
+      fundo: `hsl(${matiz} 60% 97%)`,
+      borda: `hsl(${matiz} 45% 62%)`,
+      fundoEscuro: `hsl(${matiz} 22% 19%)`,
+      bordaEscura: `hsl(${matiz} 40% 55%)`
+    }
+  })
+  return cores
+})
+
+// subsetores juntos (Geral primeiro), depois cargo e nome
+const porSubsetorCargoENome = (a, b) =>
+  (a.subsetor || '').localeCompare(b.subsetor || '', 'pt-BR') || porCargoENome(a, b)
+
+// Bases separadas: quando os subordinados de alguém estão em bases
+// diferentes da base em que ele já está desenhado, eles vão para caixas de
+// base (BCB, BDC...) logo abaixo dele. Equipe toda na mesma base: sem caixa.
+// Responsável por UMA base: a caixa dele já é a da base (faixa no topo).
+// Responsável por VÁRIAS: ele em cima, as bases dele abaixo, a equipe em
+// cada base.
+function separarPorBase(no, baseAtual) {
+  const minhas = no.basesResponsavel || []
+  if (minhas.length === 1) {
+    no.baseTitulo = minhas[0]
+    baseAtual = minhas[0]
+  }
+  const forcar = minhas.length > 1
+  // quem responde por várias bases fica direto abaixo do chefe (as bases
+  // dele aparecem abaixo dele), sem ir para a caixa da base em que está
+  const variosLideres = no.filhos.filter(f => (f.basesResponsavel || []).length > 1)
+  const demais = no.filhos.filter(f => !variosLideres.includes(f))
+  variosLideres.forEach(f => separarPorBase(f, null))
+  const bases = [...new Set(demais.map(f => f.base))]
+  if (!forcar && (!bases.length || (bases.length === 1 && bases[0] === baseAtual))) {
+    demais.forEach(f => separarPorBase(f, baseAtual))
+    return
+  }
+  const lista = forcar ? [...new Set([...minhas, ...bases])] : bases
+  no.filhos = [
+    ...variosLideres,
+    ...lista
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+      .flatMap(base => caixaDaBase(no, base, demais, forcar))
+  ]
+}
+
+// Para economizar espaço: irmãos com a mesma função que não lideram ninguém
+// (sem subordinados, sem assessoria, sem base própria) viram um cartão só,
+// com o cargo e a lista de nomes. chefe = a pessoa acima (uma caixa de base
+// no meio não muda o chefe).
+// mesma função E mesmo subsetor (a base já vem separada pelas caixas),
+// sem subordinados: viram um cartão de grupo. assessoria = grupo ao lado
+// da linha (soltar alguém da mesma função nele também vira assessoria)
+function agruparFolhas(lista, prefixo, chefe, assessoria) {
+  const folha = f =>
+    f.tipo === 'pessoa' && !f.filhos.length && !f.assessores.length && !f.baseTitulo && !f.externo
+  const chave = f => `${f.cargo}|${f.subsetor}`
+  const porCargo = new Map()
+  for (const f of lista.filter(folha)) {
+    if (!porCargo.has(chave(f))) porCargo.set(chave(f), [])
+    porCargo.get(chave(f)).push(f)
+  }
+  const emitidos = new Set()
+  return lista.flatMap(f => {
+    const iguais = folha(f) ? porCargo.get(chave(f)) : null
+    if (!iguais || iguais.length < 2) return [f]
+    if (emitidos.has(chave(f))) return []
+    emitidos.add(chave(f))
+    return [
+      {
+        id: `grupo-${prefixo}-${chave(f)}`,
+        tipo: 'grupo',
+        cargo: f.cargo,
+        subsetor: f.subsetor,
+        cor: f.cor,
+        assessoria,
+        chefe: chefe.chapa || '',
+        chefeNome: chefe.nome || '',
+        pessoas: iguais
+          .map(i => ({ chapa: i.chapa, nome: i.nome, nomeCompleto: i.nomeCompleto }))
+          .sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto, 'pt-BR')),
+        filhos: [],
+        assessores: []
+      }
+    ]
+  })
+}
+
+function agruparMesmaFuncao(no, chefe) {
+  const chefeDosFilhos = no.tipo === 'base' ? chefe : no
+  // quem foi pendurado abaixo de um bloco de função (abaixoDeFuncao =
+  // "CARGO" ou "CARGO|SUBSETOR") sai da lista agora e entra abaixo daquele
+  // bloco exato — pode haver dois blocos da mesma função (subsetores
+  // diferentes, ou um cartão individual e um agrupado)
+  const casaComBloco = (o, f) => {
+    const [cargo, subsetor] = f.abaixoDeFuncao.split('|')
+    return (
+      o !== f &&
+      !o.abaixoDeFuncao &&
+      o.cargo === cargo &&
+      (subsetor === undefined || (o.subsetor || '') === subsetor)
+    )
+  }
+  const temBloco = f => f.abaixoDeFuncao && no.filhos.some(o => casaComBloco(o, f))
+  const pendurados = no.filhos.filter(temBloco)
+  no.filhos = no.filhos.filter(f => !pendurados.includes(f))
+  no.filhos = agruparFolhas(no.filhos, `${no.id}`, chefeDosFilhos, false)
+  // a assessoria também junta quem tem a mesma função num cartão só
+  no.assessores = agruparFolhas(no.assessores, `${no.id}-assessoria`, no, true)
+  // pendura cada um abaixo do bloco da função escolhida; entre eles, quem
+  // tiver a mesma função vira um cartão só (agrupado no passo recursivo)
+  for (const f of pendurados) {
+    // o cartão agrupado tem preferência sobre um cartão individual do mesmo cargo
+    const bloco =
+      no.filhos.find(o => o.tipo === 'grupo' && casaComBloco(o, f)) ||
+      no.filhos.find(o => casaComBloco(o, f))
+    bloco.filhos.push(f)
+  }
+  no.filhos.forEach(f => agruparMesmaFuncao(f, chefeDosFilhos))
+  no.assessores.forEach(f => agruparMesmaFuncao(f, no))
+}
+
+// caixa de uma base com os subordinados daquela base
+function caixaDaBase(no, base, filhos, forcar) {
+  const daBase = filhos.filter(f => f.base === base)
+  daBase.forEach(f => separarPorBase(f, base))
+  // quem responde só por esta base já é a caixa dela
+  if (!forcar && daBase.length && daBase.every(f => f.baseTitulo === base)) return daBase
+  const total = daBase.reduce((soma, f) => soma + contarPessoas(f), 0)
+  return [
+    {
+      id: `base-${no.id}-${base}`,
+      tipo: 'base',
+      titulo: base,
+      // soltar alguém na caixa da base = responder a quem está acima dela
+      chefe: no.chapa || '',
+      chefeNome: no.nome || '',
+      subtitulo: `${total} ${total === 1 ? 'pessoa' : 'pessoas'}`,
+      filhos: daBase,
+      assessores: []
+    }
+  ]
+}
+
+function contarPessoas(no) {
+  if (no.tipo === 'grupo') return no.pessoas.length
+  const propria = no.tipo === 'pessoa' && !no.externo ? 1 : 0
+  return propria + [...no.filhos, ...no.assessores].reduce((soma, f) => soma + contarPessoas(f), 0)
+}
+
+const arvoreOrganograma = computed(() => {
+  const grupo = grupoOrganograma.value
+  if (!grupo) return []
+  const variasBases = grupo.bases.length > 1
+  const nos = new Map()
+
+  for (const pessoa of pessoasDoOrganograma.value) {
+    const funcao = funcaoExibida(pessoa) || 'SEM FUNÇÃO'
+    nos.set(pessoa.chapa, {
+      id: pessoa.chapa,
+      chapa: pessoa.chapa,
+      funcao,
+      tipo: 'pessoa',
+      base: pessoa.alocacao.base,
+      basesResponsavel: pessoa.alocacao.bases_responsavel || [],
+      cargo: funcao,
+      abaixoDeFuncao: pessoa.alocacao.abaixo_de_funcao || '',
+      subsetor: subsetorEfetivo(pessoa),
+      cor: coresDosSubsetores.value[subsetorEfetivo(pessoa)] || null,
+      nome: nomeCurto(pessoa.nome),
+      nomeCompleto: pessoa.nome,
+      assessoria: Boolean(pessoa.alocacao.assessoria),
+      externo: false,
+      responsavel: pessoa.alocacao.responsavel_chapa || '',
+      filhos: [],
+      assessores: []
+    })
+  }
+  // chefe que não está no desenho, no topo: tracejado se estiver alocado em
+  // OUTRO setor ("fora do setor") ou escondido pelos filtros ("fora do
+  // filtro"); normal se não estiver alocado em lugar nenhum (lidera o setor)
+  for (const no of nos.values()) {
+    const chapa = no.responsavel
+    if (!chapa || chapa === no.chapa || nos.has(chapa)) continue
+    const dados = responsavelPorChapa(chapa)
+    const setorDele = alocadoPorChapa.value.get(chapa)?.alocacao.setor
+    const externo = !setorDele ? false : setorDele === grupo.nome ? 'fora do filtro' : 'fora do setor'
+    nos.set(chapa, {
+      id: chapa,
+      chapa,
+      funcao: dados?.funcao || '',
+      tipo: 'pessoa',
+      base: '',
+      basesResponsavel: [],
+      semAlocacao: !setorDele,
+      cargo: dados?.funcao || '',
+      subsetor: '',
+      cor: null,
+      nome: nomeCurto(dados?.nome || chapa),
+      nomeCompleto: dados?.nome || chapa,
+      assessoria: false,
+      externo,
+      responsavel: '',
+      filhos: [],
+      assessores: []
+    })
+  }
+
+  // liga cada um ao chefe; ciclo (A responde a B e B a A) vira topo
+  const chefe = no => (no.responsavel && no.responsavel !== no.chapa ? nos.get(no.responsavel) : null)
+  const raizes = []
+  for (const no of nos.values()) {
+    let acima = chefe(no)
+    const vistos = new Set([no])
+    while (acima && !vistos.has(acima)) {
+      vistos.add(acima)
+      acima = chefe(acima)
+    }
+    const pai = acima ? null : chefe(no)
+    if (!pai) raizes.push(no)
+    else (no.assessoria ? pai.assessores : pai.filhos).push(no)
+  }
+  const ordenar = lista => {
+    lista.sort(porSubsetorCargoENome)
+    lista.forEach(no => {
+      ordenar(no.filhos)
+      ordenar(no.assessores)
+    })
+    return lista
+  }
+  ordenar(raizes)
+  // um setor de base única não precisa da caixa da base
+  if (variasBases) raizes.forEach(raiz => separarPorBase(raiz, raiz.base || null))
+  raizes.forEach(raiz => agruparMesmaFuncao(raiz, raiz))
+  return raizes
+})
+
+function abrirOrganograma(grupo) {
+  avisoOrganograma.value = { tipo: '', texto: '' }
+  Object.assign(organograma, { aberto: true, setor: grupo.nome })
+}
+
+// ---------- arrastar (só quem edita; ver OrganogramaNo.vue)
+
+const emArraste = ref(null)
+
+function chefeDe(chapa) {
+  const pessoa = pessoasDoOrganograma.value.find(p => p.chapa === chapa)
+  const responsavel = pessoa?.alocacao.responsavel_chapa
+  return responsavel && responsavel !== chapa ? responsavel : ''
+}
+
+// "b" está abaixo de "a" na cadeia de responsáveis?
+function estaAbaixoDe(b, a) {
+  const vistos = new Set()
+  let atual = chefeDe(b)
+  while (atual && !vistos.has(atual)) {
+    if (atual === a) return true
+    vistos.add(atual)
+    atual = chefeDe(atual)
+  }
+  return false
+}
+
+async function salvarOrganograma(mudancas, mensagem) {
+  salvandoOrganograma.value = true
+  avisoOrganograma.value = { tipo: '', texto: '' }
+  try {
+    await chamarApi(
+      '/api/indiretos/organograma',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mudancas })
+      },
+      'Não foi possível mover no organograma.'
+    )
+    avisoOrganograma.value = { tipo: 'ok', texto: mensagem }
+    await carregar()
+  } catch (e) {
+    avisoOrganograma.value = { tipo: 'erro', texto: e.message }
+  } finally {
+    salvandoOrganograma.value = false
+  }
+}
+
+function soltarNoOrganograma(origem, alvo, posicao) {
+  // soltou sobre um cartão agrupado (várias pessoas da mesma função)
+  if (alvo.grupo) {
+    soltarNoGrupo(origem, alvo)
+    return
+  }
+  // cartão de grupo arrastado: todas as pessoas dele vão juntas
+  if (origem.chapas) {
+    moverGrupo(origem, alvo, posicao)
+    return
+  }
+  if (origem.chapa === alvo.chapa) return
+  const quem = origem.nome
+  const de = alvo.nome
+  if (posicao !== 'acima' && estaAbaixoDe(alvo.chapa, origem.chapa)) {
+    avisoOrganograma.value = {
+      tipo: 'erro',
+      texto: `${de} já está abaixo de ${quem}: primeiro mova ${de} para outro lugar.`
+    }
+    return
+  }
+  if (posicao === 'lado') {
+    salvarOrganograma(
+      [{ chapa: origem.chapa, responsavel_chapa: alvo.chapa, assessoria: true }],
+      `${quem} agora é assessoria de ${de}.`
+    )
+    return
+  }
+  if (posicao === 'acima') {
+    // quem foi arrastado fica com o chefe do alvo, e o alvo passa a responder a ele
+    const chefeDoAlvo = chefeDe(alvo.chapa) || origem.chapa
+    if (alvo.externo || chefeDoAlvo === origem.chapa) {
+      avisoOrganograma.value = { tipo: 'erro', texto: `Não dá para pôr ${quem} acima de ${de}.` }
+      return
+    }
+    salvarOrganograma(
+      [
+        { chapa: origem.chapa, responsavel_chapa: chefeDoAlvo, assessoria: false },
+        { chapa: alvo.chapa, responsavel_chapa: origem.chapa, assessoria: false }
+      ],
+      `${quem} agora fica acima de ${de}.`
+    )
+    return
+  }
+  salvarOrganograma(
+    [{ chapa: origem.chapa, responsavel_chapa: alvo.chapa, assessoria: false }],
+    `${quem} agora responde a ${de}.`
+  )
+}
+
+// ---------- responsável por base (clicar na pessoa)
+
+const basesDaPessoa = reactive({
+  aberto: false,
+  chapa: '',
+  nome: '',
+  bases: [],
+  basesOriginais: [],
+  subsetor: null,
+  subsetorDigitado: '',
+  subsetorOriginal: ''
+})
+
+// todas as bases do setor (sem filtro): as que dá para marcar
+const basesDoSetorOrganograma = computed(() =>
+  [...new Set(alocados.value.filter(p => p.alocacao.setor === organograma.setor).map(p => p.alocacao.base))]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+)
+
+// subsetores que já existem no setor (pode digitar um novo)
+const termoSubsetorOrganograma = ref('')
+const opcoesSubsetorOrganograma = computed(() => {
+  const termo = termoSubsetorOrganograma.value.toLowerCase()
+  return [
+    ...new Set(
+      alocados.value
+        .filter(p => p.alocacao.setor === organograma.setor && p.alocacao.subsetor)
+        .map(p => p.alocacao.subsetor)
+    )
+  ]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    .filter(nome => !termo || nome.toLowerCase().includes(termo))
+})
+
+function filtrarSubsetoresOrganograma(termo, atualizar) {
+  atualizar(() => {
+    termoSubsetorOrganograma.value = termo || ''
+  })
+}
+
+const subsetorDaPessoaEscolhido = computed(() =>
+  String(basesDaPessoa.subsetor || basesDaPessoa.subsetorDigitado || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase()
+)
+
+// vazio: mostra o que herda do chefe
+const dicaSubsetorDaPessoa = computed(() => {
+  const pessoa = alocadoPorChapa.value.get(basesDaPessoa.chapa)
+  const chefe = pessoa ? alocadoPorChapa.value.get(pessoa.alocacao.responsavel_chapa) : null
+  const herdado =
+    chefe && chefe !== pessoa && chefe.alocacao.setor === pessoa.alocacao.setor
+      ? subsetorEfetivo(chefe)
+      : ''
+  if (subsetorDaPessoaEscolhido.value) return 'Quem estiver abaixo dele também passa a ser deste subsetor.'
+  return herdado
+    ? `Vazio: herda de ${nomeCurto(chefe.nome)} (${herdado}).`
+    : 'Vazio: setor geral. Escolha um ou digite um novo.'
+})
+
+function abrirBasesDaPessoa(chapa) {
+  const pessoa = alocadoPorChapa.value.get(chapa)
+  if (!pessoa) return
+  termoSubsetorOrganograma.value = ''
+  const bases = [...(pessoa.alocacao.bases_responsavel || [])]
+  Object.assign(basesDaPessoa, {
+    aberto: true,
+    chapa,
+    nome: nomeCurto(pessoa.nome),
+    bases,
+    basesOriginais: [...bases],
+    subsetor: pessoa.alocacao.subsetor || null,
+    subsetorDigitado: '',
+    subsetorOriginal: pessoa.alocacao.subsetor || ''
+  })
+}
+
+// grava só o que mudou: subsetor (pela alocação) e/ou bases
+async function salvarBasesDaPessoa() {
+  const pessoa = alocadoPorChapa.value.get(basesDaPessoa.chapa)
+  if (!pessoa) return
+  const subsetor = subsetorDaPessoaEscolhido.value
+  const mudouSubsetor = subsetor !== basesDaPessoa.subsetorOriginal
+  const mudouBases =
+    [...basesDaPessoa.bases].sort().join(',') !== [...basesDaPessoa.basesOriginais].sort().join(',')
+  if (!mudouSubsetor && !mudouBases) {
+    basesDaPessoa.aberto = false
+    return
+  }
+  salvandoOrganograma.value = true
+  avisoOrganograma.value = { tipo: '', texto: '' }
+  const avisos = []
+  try {
+    if (mudouSubsetor) {
+      const a = pessoa.alocacao
+      await chamarApi(
+        '/api/indiretos/alocar',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chapa: pessoa.chapa,
+            setor: a.setor,
+            base: a.base,
+            responsavel_chapa: a.responsavel_chapa,
+            observacao: a.observacao,
+            subsetor
+          })
+        },
+        'Não foi possível salvar o subsetor.'
+      )
+      avisos.push(subsetor ? `subsetor ${subsetor}` : 'subsetor removido')
+    }
+    if (mudouBases) {
+      const dados = await chamarApi(
+        '/api/indiretos/responsavel-base',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chapa: basesDaPessoa.chapa, bases: basesDaPessoa.bases })
+        },
+        'Não foi possível salvar o responsável pela base.'
+      )
+      const bases = basesDaPessoa.bases
+      avisos.push(
+        bases.length
+          ? `responde por ${bases.join(', ')} (${dados.movidos} ${dados.movidos === 1 ? 'pessoa passou' : 'pessoas passaram'} a responder a ele)`
+          : 'não responde mais por nenhuma base'
+      )
+    }
+    avisoOrganograma.value = { tipo: 'ok', texto: `${basesDaPessoa.nome}: ${avisos.join('; ')}.` }
+    basesDaPessoa.aberto = false
+    await carregar()
+  } catch (e) {
+    avisoOrganograma.value = { tipo: 'erro', texto: e.message }
+    await carregar()
+  } finally {
+    salvandoOrganograma.value = false
+  }
+}
+
+// Mesma função do grupo: entra nele (passa a responder ao mesmo chefe).
+// Outra função: pergunta a qual pessoa do grupo passa a responder — ex.:
+// auxiliares soltos no cartão dos almoxarifes escolhem o almoxarife.
+// BLOCO = opção "abaixo do bloco todo" (sem ligar a uma pessoa)
+const BLOCO = '__BLOCO__'
+const escolhaDoChefe = reactive({
+  aberto: false,
+  origem: null,
+  cargo: '',
+  subsetor: '',
+  chefe: '',
+  chefeNome: '',
+  pessoas: [],
+  chapa: null
+})
+
+const opcoesEscolhaDoChefe = computed(() => [
+  { label: `Abaixo do bloco ${escolhaDoChefe.cargo} (todos)`, value: BLOCO },
+  ...escolhaDoChefe.pessoas.map(p => ({ label: p.nomeCompleto, value: p.chapa }))
+])
+
+function soltarNoGrupo(origem, alvo) {
+  if (origem.cargo === alvo.cargo) {
+    if (!alvo.chefe) return
+    // grupo da assessoria: entra também como assessoria do mesmo chefe
+    soltarNoOrganograma(
+      origem,
+      { chapa: alvo.chefe, nome: alvo.chefeNome },
+      alvo.assessoria ? 'lado' : 'abaixo'
+    )
+    return
+  }
+  Object.assign(escolhaDoChefe, {
+    aberto: true,
+    origem,
+    cargo: alvo.cargo,
+    subsetor: alvo.subsetor || '',
+    chefe: alvo.chefe,
+    chefeNome: alvo.chefeNome,
+    pessoas: alvo.pessoas,
+    chapa: BLOCO
+  })
+}
+
+function confirmarEscolhaDoChefe() {
+  if (escolhaDoChefe.chapa === BLOCO) {
+    escolhaDoChefe.aberto = false
+    pendurarNoBloco(escolhaDoChefe.origem, escolhaDoChefe)
+    return
+  }
+  const escolhido = escolhaDoChefe.pessoas.find(p => p.chapa === escolhaDoChefe.chapa)
+  if (!escolhido) return
+  escolhaDoChefe.aberto = false
+  soltarNoOrganograma(escolhaDoChefe.origem, { chapa: escolhido.chapa, nome: escolhido.nome }, 'abaixo')
+}
+
+// abaixo do bloco: responde ao chefe do bloco e aparece pendurado nele
+function pendurarNoBloco(origem, bloco) {
+  if (!bloco.chefe) return
+  const chapas = origem.chapas || [origem.chapa]
+  salvarOrganograma(
+    chapas.map(chapa => ({
+      chapa,
+      responsavel_chapa: bloco.chefe,
+      assessoria: false,
+      // guarda o bloco exato: função e, se tiver, subsetor
+      abaixo_de_funcao: bloco.subsetor ? `${bloco.cargo}|${bloco.subsetor}` : bloco.cargo
+    })),
+    `${origem.nome} agora ${chapas.length > 1 ? 'ficam' : 'fica'} abaixo do bloco ${bloco.cargo}.`
+  )
+}
+
+function moverGrupo(origem, alvo, posicao) {
+  const chapas = origem.chapas.filter(chapa => chapa !== alvo.chapa)
+  if (chapas.some(chapa => estaAbaixoDe(alvo.chapa, chapa))) {
+    avisoOrganograma.value = {
+      tipo: 'erro',
+      texto: `${alvo.nome} está abaixo de alguém do grupo: mova ${alvo.nome} primeiro.`
+    }
+    return
+  }
+  const assessoria = posicao === 'lado'
+  salvarOrganograma(
+    chapas.map(chapa => ({ chapa, responsavel_chapa: alvo.chapa, assessoria })),
+    `${origem.nome} agora ${assessoria ? 'são assessoria de' : 'respondem a'} ${alvo.nome}.`
+  )
+}
+
+provide('arrasteOrganograma', {
+  habilitado: computed(() => podeEditar.value && !salvandoOrganograma.value),
+  emArraste,
+  soltar: soltarNoOrganograma,
+  abrirBases: abrirBasesDaPessoa
+})
+
+// ---------- exportar
+
+// Exporta o organograma em imagens 1920 × 1080 (Full HD, 16:9), no tema da
+// tela. Se o desenho inteiro cabe numa imagem com o texto legível (ao menos
+// LEITURA_MINIMA do tamanho da tela), sai um arquivo só; senão, divide pelos
+// galhos do primeiro nível abaixo do topo — o máximo que ainda fica legível
+// em cada imagem — e cada imagem repete o topo.
+const desenhoOrganograma = ref(null)
+const exportandoOrganograma = ref(false)
+const LARGURA_EXPORTACAO = 1920
+const ALTURA_EXPORTACAO = 1080
+const MARGEM_EXPORTACAO = 40
+const TOPO_EXPORTACAO = 96
+const LEITURA_MINIMA = 0.85
+
+const ESPACO_L = LARGURA_EXPORTACAO - MARGEM_EXPORTACAO * 2
+const ESPACO_A = ALTURA_EXPORTACAO - TOPO_EXPORTACAO - MARGEM_EXPORTACAO
+
+const escalaDoDesenho = elemento =>
+  Math.min(ESPACO_L / elemento.scrollWidth, ESPACO_A / elemento.scrollHeight)
+
+// a linha de galhos que divide as páginas: os vários topos, ou os galhos
+// logo abaixo do topo quando ele é um só
+function linhaDosGalhos(elemento) {
+  const topos = elemento.querySelector('.org-topos')
+  if (topos && topos.children.length > 1) return topos
+  return elemento.querySelector('.org-ramos')
+}
+
+// grupos de galhos por imagem; [null] = tudo numa imagem só
+function paginasDoOrganograma(elemento) {
+  const linha = linhaDosGalhos(elemento)
+  const ramos = linha ? [...linha.children] : []
+  if (ramos.length < 2 || escalaDoDesenho(elemento) >= LEITURA_MINIMA) return [null]
+
+  const paginas = []
+  let atual = []
+  for (const ramo of ramos) {
+    const tentativa = [...atual, ramo]
+    mostrarSoEstes(linha, tentativa)
+    if (atual.length && escalaDoDesenho(elemento) < LEITURA_MINIMA) {
+      paginas.push(atual)
+      atual = [ramo]
+    } else {
+      atual = tentativa
+    }
+  }
+  paginas.push(atual)
+  mostrarSoEstes(linha, null)
+  return paginas
+}
+
+// esconde os outros galhos (e a linha horizontal que os ligaria); null = todos
+function mostrarSoEstes(linha, ramos) {
+  linha.classList.toggle('org-quebra', Boolean(ramos))
+  for (const ramo of linha.children) {
+    ramo.style.display = !ramos || ramos.includes(ramo) ? '' : 'none'
+  }
+}
+
+function baixarImagem(tela, nome) {
+  const link = document.createElement('a')
+  link.download = nome
+  link.href = tela.toDataURL('image/png')
+  link.click()
+}
+
+async function desenharPagina(elemento, cores, legenda) {
+  const largura = elemento.scrollWidth
+  const altura = elemento.scrollHeight
+  const desenho = await toCanvas(elemento, {
+    backgroundColor: cores.fundo,
+    width: largura,
+    height: altura,
+    // nitidez: desenha em até 3x antes de reduzir para caber
+    pixelRatio: Math.min(3, Math.max(1, (LARGURA_EXPORTACAO / largura) * 2))
+  })
+
+  const tela = document.createElement('canvas')
+  tela.width = LARGURA_EXPORTACAO
+  tela.height = ALTURA_EXPORTACAO
+  const ctx = tela.getContext('2d')
+  ctx.fillStyle = cores.fundo
+  ctx.fillRect(0, 0, tela.width, tela.height)
+
+  ctx.textBaseline = 'top'
+  ctx.fillStyle = cores.titulo
+  ctx.font = "700 36px 'Barlow Semi Condensed', 'Segoe UI', sans-serif"
+  ctx.fillText(`Organograma · ${organograma.setor}`, MARGEM_EXPORTACAO, 28)
+  ctx.fillStyle = cores.fraca
+  ctx.font = "400 18px 'IBM Plex Sans', 'Segoe UI', sans-serif"
+  ctx.textAlign = 'right'
+  ctx.fillText(
+    [legenda, new Date().toLocaleDateString('pt-BR')].filter(Boolean).join('   ·   '),
+    tela.width - MARGEM_EXPORTACAO,
+    40
+  )
+
+  const escala = Math.min(ESPACO_L / desenho.width, ESPACO_A / desenho.height)
+  const l = desenho.width * escala
+  const a = desenho.height * escala
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(desenho, (tela.width - l) / 2, TOPO_EXPORTACAO + (ESPACO_A - a) / 2, l, a)
+  return tela
+}
+
+async function exportarOrganograma() {
+  const elemento = desenhoOrganograma.value
+  if (!elemento) return
+  exportandoOrganograma.value = true
+  avisoOrganograma.value = { tipo: '', texto: '' }
+  const linha = linhaDosGalhos(elemento)
+  try {
+    const estilo = getComputedStyle(document.body)
+    const cores = {
+      fundo: estilo.getPropertyValue('--superficie').trim() || '#ffffff',
+      titulo: estilo.getPropertyValue('--titulo').trim() || '#4f1723',
+      fraca: estilo.getPropertyValue('--tinta-fraca').trim() || '#6d5f63'
+    }
+    const nomeBase = `organograma-${organograma.setor.toLowerCase().replace(/\s+/g, '-')}`
+    const paginas = paginasDoOrganograma(elemento)
+
+    for (const [indice, ramos] of paginas.entries()) {
+      if (ramos) mostrarSoEstes(linha, ramos)
+      const legenda = paginas.length > 1 ? `Página ${indice + 1} de ${paginas.length}` : ''
+      const tela = await desenharPagina(elemento, cores, legenda)
+      baixarImagem(
+        tela,
+        paginas.length > 1 ? `${nomeBase}-${indice + 1}-de-${paginas.length}.png` : `${nomeBase}.png`
+      )
+    }
+    if (paginas.length > 1) {
+      avisoOrganograma.value = {
+        tipo: 'ok',
+        texto: `Organograma exportado em ${paginas.length} imagens para o texto ficar legível.`
+      }
+    }
+  } catch (e) {
+    avisoOrganograma.value = { tipo: 'erro', texto: 'Não foi possível exportar o organograma.' }
+    console.error(e)
+  } finally {
+    if (linha) mostrarSoEstes(linha, null)
+    exportandoOrganograma.value = false
+  }
+}
 
 const indicadores = computed(() => [
   { chave: '', rotulo: 'Indiretos', icone: 'groups', valor: pessoas.value.length },
@@ -1271,6 +2339,8 @@ const alocacao = reactive({
   base: null,
   responsavelChapa: null,
   funcao: null,
+  subsetor: null,
+  subsetorDigitado: '',
   observacao: ''
 })
 const salvando = ref(false)
@@ -1318,6 +2388,53 @@ const setorEscolhido = computed(() =>
     .toUpperCase()
 )
 
+// subsetores que já existem no setor escolhido (pode digitar um novo)
+const termoSubsetor = ref('')
+const opcoesSubsetorDialogo = computed(() => {
+  const termo = termoSubsetor.value.toLowerCase()
+  const nomes = new Set(
+    alocados.value
+      .filter(p => p.alocacao.setor === setorEscolhido.value && p.alocacao.subsetor)
+      .map(p => p.alocacao.subsetor)
+  )
+  return [...nomes]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    .filter(nome => !termo || nome.toLowerCase().includes(termo))
+})
+
+function filtrarSubsetores(termo, atualizar) {
+  atualizar(() => {
+    termoSubsetor.value = termo || ''
+  })
+}
+
+// O texto do campo de subsetor É o valor: digitar um novo ou escolher da
+// lista. Guardar só o texto à parte não basta — ao clicar fora do campo (no
+// Salvar) o Quasar limpa o texto em edição e o subsetor ia vazio.
+function digitarSubsetor(alvo, valor) {
+  alvo.subsetorDigitado = valor || ''
+  alvo.subsetor = valor || null
+}
+
+// campo vazio: mostra o que a pessoa herda do responsável escolhido
+const dicaSubsetor = computed(() => {
+  const chefe = alocadoPorChapa.value.get(alocacao.responsavelChapa)
+  const herdado =
+    chefe && chefe.alocacao.setor === setorEscolhido.value ? subsetorEfetivo(chefe) : ''
+  if (herdado && !subsetorEscolhido.value) {
+    return `Herdado de ${nomeCurto(chefe.nome)}: ${herdado}. Preencha só para usar outro.`
+  }
+  return 'Vazio = setor geral (ou o do responsável). Escolha um do setor ou digite um novo'
+})
+
+// como no setor: vale o texto digitado mesmo sem Enter
+const subsetorEscolhido = computed(() =>
+  String(alocacao.subsetor || alocacao.subsetorDigitado || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase()
+)
+
 const setorNovo = computed(
   () => Boolean(setorEscolhido.value) && !nomesSetores.value.includes(setorEscolhido.value)
 )
@@ -1357,6 +2474,8 @@ function abrirAlocacao(pessoa) {
     base: atual?.base || null,
     responsavelChapa: atual?.responsavel_chapa || null,
     funcao: funcaoExibida(pessoa) || null,
+    subsetor: atual?.subsetor || null,
+    subsetorDigitado: '',
     observacao: atual?.observacao || ''
   })
 }
@@ -1374,6 +2493,8 @@ function abrirAdicionarNoSetor(nomeSetor) {
     base: null,
     responsavelChapa: null,
     funcao: null,
+    subsetor: null,
+    subsetorDigitado: '',
     observacao: ''
   })
 }
@@ -1395,6 +2516,7 @@ async function confirmarAlocacao() {
           responsavel_chapa: alocacao.responsavelChapa,
           // vazio ou igual à do cadastro: o servidor volta a usar a do cadastro
           funcao: alocacao.funcao || '',
+          subsetor: subsetorEscolhido.value,
           observacao: alocacao.observacao
         })
       },
@@ -1489,7 +2611,11 @@ function abrirTrocaResponsavel(grupo) {
   termoResponsavel.value = ''
   Object.assign(trocaResponsavel, {
     aberto: true,
-    pessoas: grupo.pessoas,
+    // troca só quem responde DIRETO a ele: quem está abaixo de um
+    // sub-responsável (ex.: equipe do Rikelme) continua com o seu chefe
+    pessoas: grupo.chapa
+      ? grupo.pessoas.filter(p => p.alocacao.responsavel_chapa === grupo.chapa)
+      : grupo.pessoas,
     responsavelAtual: grupo.responsavel || null,
     chapa: grupo.responsavel?.chapa || null
   })
@@ -1698,6 +2824,91 @@ async function aplicarPlanilha() {
 }
 
 /* ---------- cartão do setor ---------- */
+.cartao-organograma {
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.area-organograma {
+  flex: 1;
+  overflow: auto;
+}
+
+.org-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 16px;
+  padding: 6px 14px;
+  border: 1px solid var(--linha);
+  border-radius: 999px;
+  background: var(--superficie);
+  font-family: var(--fonte-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--tinta);
+}
+
+.org-legenda__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.org-legenda__cor {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 2px solid var(--sub-borda);
+  background: var(--sub-fundo);
+}
+
+body.body--dark .org-legenda__cor {
+  border-color: var(--sub-borda-escura);
+  background: var(--sub-fundo-escuro);
+}
+
+.org-legenda__cor--geral {
+  border-color: var(--marca);
+  background: var(--superficie);
+}
+
+/* setor no topo e as bases como primeiro nível de galhos */
+.org-raizes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  min-width: max-content;
+  padding: 8px;
+}
+
+/* vários topos (responsáveis sem chefe comum no setor) lado a lado */
+.org-topos {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 40px;
+}
+
+/* exportação em várias imagens (só alguns galhos visíveis): sem a linha
+   horizontal que ligaria galhos escondidos */
+.org-raizes :deep(.org-quebra > .org-ramo)::after {
+  display: none;
+}
+
+.dica-arraste {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  font-size: 0.8rem;
+  color: var(--tinta-fraca);
+}
+
+
 .mural-setores {
   column-count: 1;
   column-gap: 16px;
@@ -1915,8 +3126,12 @@ async function aplicarPlanilha() {
   font-size: 1.05rem;
 }
 
+.tabela-modelo thead tr {
+  background: var(--gradiente-marca);
+}
+
 .tabela-modelo th {
-  background: var(--marca);
+  background: transparent;
   color: #fff;
   font-family: var(--fonte-ui);
   font-weight: 600;

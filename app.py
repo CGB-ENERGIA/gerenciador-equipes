@@ -46,7 +46,7 @@ from database.models import (
 app = Flask(__name__, static_folder=None, template_folder=None)
 
 # rotas da página Indiretos (alocação nominal do pessoal indireto)
-from indiretos import bp as bp_indiretos  # noqa: E402
+from indiretos import bp as bp_indiretos, subsetor_efetivo  # noqa: E402
 
 app.register_blueprint(bp_indiretos)
 
@@ -1088,11 +1088,14 @@ def exportar_pessoas_resumo():
             session.rollback()
             print(f"[AVISO] exportar_pessoas_resumo sem indiretos: {erro}")
             alocacoes_indiretos = []
+        # subsetor herdado do chefe quando a pessoa não tem um próprio
+        alocacoes_por_chapa = {a.CHAPA: a for a in alocacoes_indiretos}
         for alocacao in alocacoes_indiretos:
             colaborador = por_chapa.get(alocacao.CHAPA)
             responsavel = por_chapa.get(alocacao.RESPONSAVEL_CHAPA)
             indiretos.append({
                 "SETOR": alocacao.SETOR,
+                "SUBSETOR": subsetor_efetivo(alocacoes_por_chapa, alocacao.CHAPA) or "GERAL",
                 "BASE": alocacao.BASE,
                 "CHAPA": alocacao.CHAPA,
                 "COLABORADOR": colaborador.NOME if colaborador else "",
@@ -1128,7 +1131,7 @@ def exportar_pessoas_resumo():
                 "AFASTADO", "JUSTIFICATIVA", "JUSTIFICADO POR", "DATA DA JUSTIFICATIVA",
             ])),
             ("Indiretos", pd.DataFrame(indiretos, columns=[
-                "SETOR", "BASE", "CHAPA", "COLABORADOR", "FUNÇÃO NO CADASTRO",
+                "SETOR", "SUBSETOR", "BASE", "CHAPA", "COLABORADOR", "FUNÇÃO NO CADASTRO",
                 "FUNÇÃO NO SETOR", "CHAPA RESPONSÁVEL", "RESPONSÁVEL", "OBSERVAÇÃO", "ALOCADO POR", "ALOCADO EM",
             ])),
             ("Colaboradores", df_colaboradores),
