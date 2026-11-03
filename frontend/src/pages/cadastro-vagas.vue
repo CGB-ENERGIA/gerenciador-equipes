@@ -128,6 +128,24 @@
                       :options="opcoesSetores"
                     />
                   </div>
+                  <div class="col-12 col-sm-6">
+                    <SelectFiltroMultiplo
+                      :model-value="coordenadorFiltro"
+                      :options="opcoesCoordenadores"
+                      icon="badge"
+                      label="Coordenador"
+                      @update:model-value="selecao => (coordenadorFiltro = proximaSelecaoMultipla(coordenadorFiltro, selecao, RESPONSAVEL_TODOS))"
+                    />
+                  </div>
+                  <div class="col-12 col-sm-6">
+                    <SelectFiltroMultiplo
+                      :model-value="supervisorFiltro"
+                      :options="opcoesSupervisores"
+                      icon="engineering"
+                      label="Supervisor"
+                      @update:model-value="selecao => (supervisorFiltro = proximaSelecaoMultipla(supervisorFiltro, selecao, RESPONSAVEL_TODOS))"
+                    />
+                  </div>
                 </div>
               </q-card-section>
 
@@ -937,18 +955,23 @@ import { ref, reactive, computed, onMounted } from 'vue'
 
 import CabecalhoApp from '../components/CabecalhoApp.vue'
 import MarcaDaguaFundo from '../components/MarcaDaguaFundo.vue'
+import SelectFiltroMultiplo from '../components/SelectFiltroMultiplo.vue'
 import { PODE_GERENCIAR_VAGAS } from '../composables/useSessao'
 import { useConfirmacao } from '../composables/useConfirmacao'
 import { criarOrdenacaoTabela, ordenarLista } from '../utils/ordenacaoTabela'
 import {
+  equipeCombinaComResponsavel,
   equipeCombinaComSetor,
   equipeCombinaComTipo,
   equipeNaSelecaoDeBases,
   FUNCOES_SISTEMA,
   OPCAO_TODAS_BASES,
+  opcoesResponsavelFiltro,
   opcoesSetorFiltro,
   opcoesTipoFiltro,
   proximaSelecaoBases,
+  proximaSelecaoMultipla,
+  RESPONSAVEL_TODOS,
   SETOR_TODOS,
   TIPO_TODOS
 } from '../utils/equipes'
@@ -976,6 +999,8 @@ const filtroEquipe = ref('')
 const baseFiltro = ref([])
 const tipoFiltro = ref(TIPO_TODOS)
 const setorFiltro = ref(SETOR_TODOS)
+const coordenadorFiltro = ref([RESPONSAVEL_TODOS])
+const supervisorFiltro = ref([RESPONSAVEL_TODOS])
 
 const setoresNegocio = ref([])
 
@@ -1077,6 +1102,12 @@ function atualizarSelecaoBaseFiltro(selecao) {
 
 const opcoesTipos = computed(() => opcoesTipoFiltro(equipes.value))
 const opcoesSetores = computed(() => opcoesSetorFiltro(equipes.value))
+const opcoesCoordenadores = computed(() =>
+  opcoesResponsavelFiltro(equipes.value, 'coordenador', 'Todos os coordenadores')
+)
+const opcoesSupervisores = computed(() =>
+  opcoesResponsavelFiltro(equipes.value, 'supervisor', 'Todos os supervisores')
+)
 
 const equipesFiltradas = computed(() => {
   const termo = (filtroEquipe.value || '').trim().toLowerCase()
@@ -1086,6 +1117,8 @@ const equipesFiltradas = computed(() => {
       equipeNaSelecaoDeBases(equipe, baseFiltro.value || []) &&
       equipeCombinaComTipo(equipe, tipoFiltro.value) &&
       equipeCombinaComSetor(equipe, setorFiltro.value) &&
+      equipeCombinaComResponsavel(equipe, 'coordenador', coordenadorFiltro.value) &&
+      equipeCombinaComResponsavel(equipe, 'supervisor', supervisorFiltro.value) &&
       (!termo || `${equipe.prefixo} ${equipe.base}`.toLowerCase().includes(termo))
   )
 })
