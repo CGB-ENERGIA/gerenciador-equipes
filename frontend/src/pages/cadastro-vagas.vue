@@ -10,15 +10,11 @@
 
     <q-page-container>
       <q-page class="q-pa-md">
-        <!-- ================================================== -->
-        <!-- CABEÇALHO -->
-        <!-- ================================================== -->
-
         <div class="q-mb-md">
           <div class="text-h5"> Cadastro de Vagas </div>
 
           <div class="text-subtitle2 text-grey-7">
-            Criação de equipes e das vagas disponíveis para alocação
+            Equipes, quantas vagas de cada função elas têm e quem responde por cada tipo de equipe
           </div>
         </div>
 
@@ -34,802 +30,638 @@
           {{ sucesso }}
         </q-banner>
 
-        <!-- ================================================== -->
-        <!-- FORMULÁRIOS -->
-        <!-- ================================================== -->
+        <div class="row q-col-gutter-md items-start">
+          <!-- ================================================== -->
+          <!-- LISTA DE EQUIPES -->
+          <!-- ================================================== -->
 
-        <!--
-          As 3 cards (Nova equipe / Planilha em massa / Nova vaga) formam um
-          bloco de 2 alturas iguais: a soma das duas da esquerda tem que bater
-          com a única da direita. Isso não sai só de padding — o .row vira um
-          flex que estica as duas colunas pra mesma altura (align-items
-          padrão = stretch), a coluna esquerda vira flex-column, e a segunda
-          card de lá (.card-planilha) ganha flex:1 pra absorver a diferença.
-        -->
-        <div class="row q-col-gutter-md q-mb-md coluna-formularios">
-          <div class="col-12 col-md-6 column q-gutter-md coluna-esquerda-formularios">
-            <q-card bordered dense>
-              <q-card-section class="text-center q-py-sm">
-                <div class="text-subtitle1 text-weight-bold"> Nova equipe </div>
-              </q-card-section>
+          <div class="col-12 col-md-5">
+            <q-card bordered>
+              <q-card-section class="q-gutter-y-sm">
+                <div class="row items-center q-gutter-sm no-wrap">
+                  <q-input
+                    v-model="filtroEquipe"
+                    outlined
+                    dense
+                    clearable
+                    class="col"
+                    placeholder="Buscar prefixo ou base"
+                  >
+                    <template #prepend>
+                      <q-icon name="search" />
+                    </template>
+                  </q-input>
 
-              <q-separator />
+                  <q-btn-dropdown
+                    outline
+                    dense
+                    no-caps
+                    color="primary"
+                    icon="table_view"
+                    label="Planilha"
+                  >
+                    <q-list dense>
+                      <q-item v-close-popup clickable :disable="baixandoPlanilha" @click="baixarPlanilha">
+                        <q-item-section avatar><q-icon name="download" /></q-item-section>
+                        <q-item-section>
+                          <q-item-label>Baixar planilha</q-item-label>
+                          <q-item-label caption>Equipes de hoje, com a quantidade de cada função</q-item-label>
+                        </q-item-section>
+                      </q-item>
+                      <q-item v-close-popup clickable @click="dialogEnvioPlanilha = true">
+                        <q-item-section avatar><q-icon name="upload_file" /></q-item-section>
+                        <q-item-section>
+                          <q-item-label>Enviar planilha preenchida</q-item-label>
+                          <q-item-label caption>Cria, edita ou exclui várias equipes de uma vez</q-item-label>
+                        </q-item-section>
+                      </q-item>
+                    </q-list>
+                  </q-btn-dropdown>
 
-              <q-card-section class="q-gutter-sm q-pa-sm">
-                <q-select
-                  v-model="novaEquipeBase"
-                  outlined
-                  dense
-                  use-input
-                  fill-input
-                  hide-selected
-                  input-debounce="0"
-                  new-value-mode="add-unique"
-                  label="Base"
-                  hint="Selecione uma base existente ou digite uma nova"
-                  :options="basesFiltradas"
-                  @filter="filtrarBases"
-                />
-
-                <q-input
-                  v-model="novaEquipePrefixo"
-                  outlined
-                  dense
-                  label="Prefixo"
-                  hint="Ex.: MA-BCB-O007M ou Folguista"
-                />
-
-                <q-btn
-                  dense
-                  color="primary"
-                  icon="group_add"
-                  label="Criar equipe"
-                  :disable="!podeCriarEquipe"
-                  :loading="salvandoEquipe"
-                  @click="criarEquipe"
-                />
-              </q-card-section>
-            </q-card>
-
-            <!-- ================================================== -->
-            <!-- PLANILHA EM MASSA -->
-            <!-- ================================================== -->
-
-            <q-card bordered dense class="card-planilha column col">
-              <q-card-section class="text-center q-py-sm">
-                <div class="text-subtitle1 text-weight-bold"> Cadastro em massa por planilha </div>
-              </q-card-section>
-
-              <q-separator />
-
-              <q-card-section class="q-gutter-sm q-pa-sm col justify-center">
-                <q-btn
-                  dense
-                  unelevated
-                  rounded
-                  no-caps
-                  color="positive"
-                  icon="download"
-                  label="Baixar planilha"
-                  :loading="baixandoPlanilha"
-                  class="full-width btn-exportar"
-                  @click="baixarPlanilha"
-                />
-                <div class="text-caption text-grey-7">
-                  Traz as equipes de hoje, uma por linha, com a quantidade de
-                  cada função.
+                  <q-btn
+                    unelevated
+                    dense
+                    no-caps
+                    color="primary"
+                    icon="add"
+                    label="Nova equipe"
+                    class="q-px-sm"
+                    @click="iniciarNovaEquipe"
+                  />
                 </div>
 
-                <q-file
-                  v-model="arquivoPlanilha"
-                  outlined
-                  dense
-                  clearable
-                  accept=".xlsx"
-                  label="Planilha preenchida (.xlsx)"
-                >
-                  <template #prepend>
-                    <q-icon name="attach_file" />
-                  </template>
-                </q-file>
-
-                <div class="text-caption text-grey-7">
-                  Preencha a coluna AÇÃO com <strong>criar</strong>,
-                  <strong>editar</strong> ou <strong>excluir</strong>. Linha sem
-                  ação é ignorada.
-                </div>
-
-                <q-btn
-                  dense
-                  color="primary"
-                  icon="fact_check"
-                  label="Conferir mudanças"
-                  class="full-width"
-                  :disable="!arquivoPlanilha"
-                  :loading="analisandoPlanilha"
-                  @click="analisarPlanilha"
-                />
-              </q-card-section>
-            </q-card>
-          </div>
-
-          <div class="col-12 col-md-6">
-            <q-card bordered dense class="full-height">
-              <q-card-section class="text-center q-py-sm">
-                <div class="text-subtitle1 text-weight-bold"> Nova vaga </div>
-              </q-card-section>
-
-              <q-separator />
-
-              <q-card-section class="q-gutter-sm q-pa-sm">
-                <q-select
-                  v-model="vagaEquipe"
-                  outlined
-                  dense
-                  use-input
-                  fill-input
-                  hide-selected
-                  emit-value
-                  map-options
-                  input-debounce="0"
-                  label="Equipe"
-                  :options="equipesOpcoesFiltradas"
-                  @filter="filtrarEquipesOpcoes"
-                />
-
-                <q-select
-                  v-model="vagaFuncao"
-                  outlined
-                  dense
-                  label="Função da vaga"
-                  :options="FUNCOES_SISTEMA"
-                />
-
-                <q-select
-                  v-model="vagaEstrutura"
-                  outlined
-                  dense
-                  use-input
-                  fill-input
-                  hide-selected
-                  input-debounce="0"
-                  new-value-mode="add-unique"
-                  label="Tipo de equipe (disciplina)"
-                  hint="Ex.: CONSTRUÇÃO, PODA, LINHA VIVA..."
-                  :options="estruturasFiltradas"
-                  @filter="filtrarEstruturas"
-                />
-
-                <q-input
-                  v-model="vagaSetor"
-                  outlined
-                  dense
-                  label="Setor (opcional)"
-                  :readonly="metadadoVagaTravado"
-                  :hint="metadadoVagaTravado ? 'Já definido para esta equipe/disciplina' : ''"
-                />
-
-                <q-input
-                  v-model="vagaSupervisor"
-                  outlined
-                  dense
-                  label="Supervisor (opcional)"
-                  :readonly="metadadoVagaTravado"
-                  :hint="metadadoVagaTravado ? 'Já definido para esta equipe/disciplina' : ''"
-                />
-
-                <q-input
-                  v-model="vagaCoordenador"
-                  outlined
-                  dense
-                  label="Coordenador (opcional)"
-                  :readonly="metadadoVagaTravado"
-                  :hint="metadadoVagaTravado ? 'Já definido para esta equipe/disciplina' : ''"
-                />
-
-                <q-btn
-                  dense
-                  color="primary"
-                  icon="add"
-                  label="Adicionar vaga"
-                  :disable="!podeCriarVaga"
-                  :loading="salvandoVaga"
-                  @click="criarVaga"
-                />
-              </q-card-section>
-            </q-card>
-          </div>
-        </div>
-
-        <!-- ================================================== -->
-        <!-- VAGAS CADASTRADAS -->
-        <!-- ================================================== -->
-
-        <q-card bordered>
-          <q-card-section>
-            <div class="row items-center justify-between">
-              <div class="text-h6">
-                {{ modoVagas === 'lista' ? 'Vagas cadastradas' : 'Edição em massa' }}
-              </div>
-
-              <q-btn-toggle
-                v-model="modoVagas"
-                dense
-                no-caps
-                unelevated
-                toggle-color="primary"
-                color="grey-3"
-                text-color="grey-8"
-                :options="[
-                  { label: 'Vagas cadastradas', value: 'lista' },
-                  { label: 'Edição em massa', value: 'massa' }
-                ]"
-              />
-            </div>
-          </q-card-section>
-
-          <q-separator />
-
-          <q-card-section>
-            <div class="row q-col-gutter-md items-center filtros-campos">
-              <div class="col-12 col-md-4">
-                <q-select
-                  :model-value="baseFiltro"
-                  outlined
-                  dense
-                  clearable
-                  multiple
-                  use-chips
-                  emit-value
-                  map-options
-                  label="Base"
-                  :options="opcoesBaseFiltro"
-                  @update:model-value="atualizarSelecaoBaseFiltro"
-                >
-                  <template #prepend>
-                    <q-icon name="place" size="20px" />
-                  </template>
-                </q-select>
-              </div>
-
-              <div class="col-12 col-md-3">
-                <q-select
-                  v-model="tipoFiltro"
-                  outlined
-                  dense
-                  emit-value
-                  map-options
-                  label="Tipo"
-                  :options="opcoesTipos"
-                >
-                  <template #prepend>
-                    <q-icon name="category" size="20px" />
-                  </template>
-                </q-select>
-              </div>
-
-              <div class="col-12 col-md-3">
-                <q-select
-                  v-model="setorFiltro"
-                  outlined
-                  dense
-                  emit-value
-                  map-options
-                  label="Setor"
-                  :options="opcoesSetores"
-                >
-                  <template #prepend>
-                    <q-icon name="apartment" size="20px" />
-                  </template>
-                </q-select>
-              </div>
-
-              <div class="col-12 col-md">
-                <q-input
-                  v-model="filtroEquipe"
-                  outlined
-                  dense
-                  clearable
-                  placeholder="Pesquisar por prefixo ou base..."
-                >
-                  <template #prepend>
-                    <q-icon name="search" />
-                  </template>
-                </q-input>
-              </div>
-
-              <div class="col-auto">
-                <q-chip color="primary" text-color="white">
-                  {{ equipesFiltradas.length }} equipe(s)
-                </q-chip>
-              </div>
-            </div>
-          </q-card-section>
-
-          <div v-if="carregando && primeiraCarga" class="row justify-center q-pa-xl">
-            <q-spinner color="primary" size="50px" />
-          </div>
-
-          <q-list v-else-if="modoVagas === 'lista'" separator>
-            <div
-              v-if="!equipesFiltradas.length"
-              class="text-grey-7 q-pa-md text-center"
-            >
-              Nenhuma equipe encontrada.
-            </div>
-
-            <q-expansion-item
-              v-for="equipe in equipesFiltradas"
-              :key="equipe.id"
-              expand-separator
-              :label="equipe.prefixo || 'Equipe'"
-              :caption="`${equipe.base || ''} — ${equipe.vagas.length} vaga(s)`"
-            >
-              <q-card flat>
-                <q-card-section class="q-pb-none">
-                  <div class="row q-gutter-sm justify-end">
-                    <q-btn
-                      outline
+                <div class="row q-col-gutter-sm">
+                  <div class="col-12 col-sm-4">
+                    <q-select
+                      :model-value="baseFiltro"
+                      outlined
                       dense
-                      size="sm"
-                      color="primary"
-                      icon="edit"
-                      label="Editar equipe"
-                      @click="abrirEdicaoEquipe(equipe)"
+                      clearable
+                      multiple
+                      use-chips
+                      emit-value
+                      map-options
+                      label="Base"
+                      :options="opcoesBaseFiltro"
+                      @update:model-value="atualizarSelecaoBaseFiltro"
                     />
+                  </div>
+                  <div class="col-6 col-sm-4">
+                    <q-select
+                      v-model="tipoFiltro"
+                      outlined
+                      dense
+                      emit-value
+                      map-options
+                      label="Tipo de equipe"
+                      :options="opcoesTipos"
+                    />
+                  </div>
+                  <div class="col-6 col-sm-4">
+                    <q-select
+                      v-model="setorFiltro"
+                      outlined
+                      dense
+                      emit-value
+                      map-options
+                      label="Setor"
+                      :options="opcoesSetores"
+                    />
+                  </div>
+                </div>
+              </q-card-section>
 
-                    <q-btn
-                      outline
+              <q-separator />
+
+              <div v-if="selecionadas.length" class="barra-selecao row items-center no-wrap q-px-md q-py-xs">
+                <span class="text-weight-medium">{{ selecionadas.length }} selecionada(s)</span>
+                <q-space />
+                <q-btn
+                  flat
+                  dense
+                  no-caps
+                  color="primary"
+                  icon="edit"
+                  label="Editar setor e responsáveis"
+                  @click="abrirEdicaoSelecionadas"
+                />
+                <q-btn flat dense round icon="close" aria-label="Limpar seleção" @click="selecionadas = []" />
+              </div>
+
+              <div class="row items-center no-wrap q-px-sm q-py-xs text-caption text-grey-7">
+                <q-checkbox
+                  dense
+                  size="sm"
+                  :model-value="estadoMarcarTodas"
+                  aria-label="Selecionar todas as equipes da lista"
+                  @update:model-value="marcarTodasFiltradas"
+                />
+                <span class="q-ml-sm">
+                  {{ equipesFiltradas.length }} equipe(s)
+                  <template v-if="equipesComVagaLivre">
+                    · <span class="text-negative">{{ equipesComVagaLivre }} com vaga livre</span>
+                  </template>
+                </span>
+              </div>
+
+              <q-separator />
+
+              <div v-if="carregando && primeiraCarga" class="row justify-center q-pa-xl">
+                <q-spinner color="primary" size="40px" />
+              </div>
+
+              <div v-else-if="!equipesFiltradas.length" class="text-grey-7 q-pa-lg text-center">
+                Nenhuma equipe encontrada com esses filtros.
+              </div>
+
+              <q-virtual-scroll
+                v-else
+                class="lista-equipes"
+                :items="equipesFiltradas"
+                separator
+                v-slot="{ item: equipe }"
+              >
+                <q-item
+                  :key="equipe.id"
+                  clickable
+                  :active="painel.equipeId === equipe.id"
+                  active-class="item-ativo"
+                  @click="abrirEquipe(equipe)"
+                >
+                  <q-item-section side class="q-pr-sm">
+                    <q-checkbox
                       dense
                       size="sm"
-                      color="negative"
-                      icon="person_remove"
-                      label="Remover todos os colaboradores"
-                      :disable="!equipe.vagas.some(vaga => vaga.ocupada)"
-                      @click="liberarEquipe(equipe)"
+                      :model-value="selecionadas.includes(equipe.id)"
+                      :aria-label="`Selecionar ${equipe.prefixo}`"
+                      @click.stop
+                      @update:model-value="alternarSelecao(equipe.id)"
+                    />
+                  </q-item-section>
+
+                  <q-item-section>
+                    <q-item-label class="text-weight-medium">{{ equipe.prefixo || 'Equipe' }}</q-item-label>
+                    <q-item-label caption>
+                      {{ equipe.base }}<template v-if="(equipe.setores || []).length"> · {{ equipe.setores.join(', ') }}</template>
+                    </q-item-label>
+                    <q-item-label caption class="ellipsis">{{ (equipe.tipos || []).join(', ') }}</q-item-label>
+                  </q-item-section>
+
+                  <q-item-section side top class="text-right">
+                    <span
+                      class="contagem-vagas"
+                      :class="contagemDaEquipe(equipe).livres ? 'text-negative' : 'text-grey-9'"
                     >
-                      <q-tooltip v-if="!equipe.vagas.some(vaga => vaga.ocupada)">
-                        Nenhum colaborador alocado nesta equipe
-                      </q-tooltip>
-                    </q-btn>
+                      {{ contagemDaEquipe(equipe).ocupadas }} de {{ contagemDaEquipe(equipe).total }}
+                    </span>
+                    <q-item-label caption>ocupadas</q-item-label>
+                  </q-item-section>
+                </q-item>
+              </q-virtual-scroll>
+            </q-card>
+          </div>
 
-                    <q-btn
-                      outline
-                      dense
-                      size="sm"
-                      color="negative"
-                      icon="delete_forever"
-                      label="Excluir equipe"
-                      :disable="equipe.vagas.some(vaga => vaga.ocupada)"
-                      @click="removerEquipe(equipe)"
-                    >
-                      <q-tooltip v-if="equipe.vagas.some(vaga => vaga.ocupada)">
-                        Remova os colaboradores alocados antes de excluir a
-                        equipe
-                      </q-tooltip>
-                    </q-btn>
-                  </div>
-                </q-card-section>
+          <!-- ================================================== -->
+          <!-- PAINEL DA EQUIPE -->
+          <!-- ================================================== -->
 
-                <q-card-section>
-                  <div v-if="!equipe.vagas.length" class="text-grey-7">
-                    Nenhuma vaga cadastrada nesta equipe.
-                  </div>
-
-                  <q-list v-else separator>
-                    <q-item v-for="vaga in equipe.vagas" :key="vaga.id">
-                      <q-item-section>
-                        <q-item-label class="text-weight-medium">
-                          {{ vaga.funcao_er || 'Função não informada' }}
-                        </q-item-label>
-
-                        <q-item-label caption>
-                          {{
-                            vaga.colaborador
-                              ? `${vaga.colaborador.chapa} — ${vaga.colaborador.nome}`
-                              : 'Sem colaborador alocado'
-                          }}
-                        </q-item-label>
-
-                        <q-item-label
-                          v-if="vaga.setor || vaga.supervisor || vaga.coordenador"
-                          caption
-                        >
-                          {{
-                            [
-                              vaga.setor && `Setor: ${vaga.setor}`,
-                              vaga.supervisor && `Supervisor: ${vaga.supervisor}`,
-                              vaga.coordenador && `Coordenador: ${vaga.coordenador}`
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')
-                          }}
-                        </q-item-label>
-                      </q-item-section>
-
-                      <q-item-section side>
-                        <div class="row items-center no-wrap">
-                          <q-chip
-                            v-if="vaga.ocupada"
-                            color="positive"
-                            text-color="white"
-                            size="sm"
-                          >
-                            OCUPADA
-                          </q-chip>
-
-                          <q-chip
-                            v-else
-                            color="grey-6"
-                            text-color="white"
-                            size="sm"
-                          >
-                            LIVRE
-                          </q-chip>
-
-                          <q-btn
-                            flat
-                            round
-                            dense
-                            color="negative"
-                            icon="delete"
-                            class="q-ml-sm"
-                            aria-label="Excluir vaga"
-                            :disable="vaga.ocupada"
-                            @click="removerVaga(vaga)"
-                          >
-                            <q-tooltip v-if="vaga.ocupada">
-                              Remova o colaborador antes de excluir a vaga
-                            </q-tooltip>
-                          </q-btn>
-                        </div>
-                      </q-item-section>
-                    </q-item>
-                  </q-list>
-                </q-card-section>
-              </q-card>
-            </q-expansion-item>
-          </q-list>
-
-          <!-- ============================================== -->
-          <!-- EDIÇÃO EM MASSA -->
-          <!-- ============================================== -->
-
-          <q-card-section v-else>
-            <div class="row q-col-gutter-sm items-end q-mb-md">
-              <div class="col-12 col-md-3">
-                <q-select
-                  v-model="bulkSetor"
-                  outlined
-                  dense
-                  clearable
-                  label="Setor (aplicar aos filtrados)"
-                  :options="setoresNegocio"
-                />
-              </div>
-              <div class="col-12 col-md-3">
-                <q-input
-                  v-model="bulkSupervisor"
-                  outlined
-                  dense
-                  label="Supervisor (aplicar aos filtrados)"
-                />
-              </div>
-              <div class="col-12 col-md-3">
-                <q-input
-                  v-model="bulkCoordenador"
-                  outlined
-                  dense
-                  label="Coordenador (aplicar aos filtrados)"
-                />
-              </div>
-              <div class="col-12 col-md-auto">
+          <div class="col-12 col-md-7">
+            <q-card bordered class="painel-equipe">
+              <!-- nada aberto -->
+              <q-card-section v-if="!painel.modo" class="column items-center text-center q-pa-xl text-grey-7">
+                <q-icon name="groups" size="48px" color="grey-5" />
+                <div class="q-mt-sm">Escolha uma equipe na lista para ver e mudar as vagas dela.</div>
                 <q-btn
                   outline
+                  no-caps
                   color="primary"
-                  label="Aplicar às equipes filtradas"
-                  :disable="!equipesFiltradas.length"
-                  @click="aplicarCamposEmMassa"
+                  icon="add"
+                  label="Nova equipe"
+                  class="q-mt-md"
+                  @click="iniciarNovaEquipe"
                 />
-              </div>
-            </div>
+              </q-card-section>
 
-            <div
-              v-if="!equipesFiltradas.length"
-              class="text-grey-7 q-pa-md text-center"
-            >
-              Nenhuma equipe encontrada para os filtros atuais.
-            </div>
+              <!-- nova equipe, passo 1: base e prefixo -->
+              <template v-else-if="painel.modo === 'nova' && painel.passo === 1">
+                <q-card-section>
+                  <div class="text-overline text-grey-7">Nova equipe · passo 1 de 2</div>
+                  <div class="text-h6">Identificação</div>
+                  <div class="text-caption text-grey-7">
+                    A base e o prefixo identificam a equipe. No próximo passo, você define as vagas e os responsáveis.
+                  </div>
+                </q-card-section>
 
-            <q-card
-              v-for="equipe in equipesFiltradas"
-              :key="equipe.id"
-              flat
-              bordered
-              class="q-mb-sm"
-            >
-              <q-card-section>
-                <div class="row q-col-gutter-sm items-center">
-                  <div class="col-12 col-md-2">
-                    <div class="text-weight-medium">
-                      {{ equipe.prefixo || 'Equipe' }}
+                <q-card-section class="q-gutter-md">
+                  <q-select
+                    v-model="painel.base"
+                    outlined
+                    dense
+                    use-input
+                    fill-input
+                    hide-selected
+                    input-debounce="0"
+                    new-value-mode="add-unique"
+                    label="Base"
+                    hint="Escolha uma base existente ou digite uma nova"
+                    :error="Boolean(erroBase) && painelTocado"
+                    :error-message="erroBase"
+                    :options="basesFiltradas"
+                    @filter="filtrarBases"
+                    @input-value="valor => (painel.base = valor)"
+                  />
+
+                  <q-input
+                    v-model="painel.prefixo"
+                    outlined
+                    dense
+                    label="Prefixo"
+                    hint="Ex.: MA-BCB-O007M ou FOLGUISTA"
+                    :error="Boolean(erroPrefixo) && painelTocado"
+                    :error-message="erroPrefixo"
+                    @keyup.enter="avancarParaVagas"
+                  />
+                </q-card-section>
+
+                <q-separator />
+
+                <q-card-actions align="right">
+                  <q-btn flat no-caps color="grey-8" label="Cancelar" @click="fecharPainel" />
+                  <q-btn
+                    unelevated
+                    no-caps
+                    color="primary"
+                    icon-right="arrow_forward"
+                    label="Continuar"
+                    @click="avancarParaVagas"
+                  />
+                </q-card-actions>
+              </template>
+
+              <!-- nova equipe (passo 2) ou equipe existente -->
+              <template v-else>
+                <q-card-section class="q-pb-sm">
+                  <div v-if="painel.modo === 'nova'" class="row items-start no-wrap">
+                    <div class="col">
+                      <div class="text-overline text-grey-7">Nova equipe · passo 2 de 2</div>
+                      <div class="text-h6">{{ painel.prefixo }}</div>
+                      <div class="text-caption text-grey-7">Base {{ painel.base }}</div>
                     </div>
-                    <div class="text-caption text-grey-7">
-                      {{ equipe.vagas.length }} vaga(s)
+                    <q-btn flat dense no-caps color="primary" icon="arrow_back" label="Voltar" @click="painel.passo = 1" />
+                  </div>
+
+                  <template v-else>
+                    <div class="row q-col-gutter-sm">
+                      <div class="col-12 col-sm-5">
+                        <q-select
+                          v-model="painel.base"
+                          outlined
+                          dense
+                          use-input
+                          fill-input
+                          hide-selected
+                          input-debounce="0"
+                          new-value-mode="add-unique"
+                          label="Base"
+                          :options="basesFiltradas"
+                          @filter="filtrarBases"
+                          @input-value="valor => (painel.base = valor)"
+                        />
+                      </div>
+                      <div class="col-12 col-sm-7">
+                        <q-input v-model="painel.prefixo" outlined dense label="Prefixo" />
+                      </div>
                     </div>
-                    <q-badge
-                      v-if="obterLinhaMassa(equipe).responsavelDivergente"
-                      color="orange-8"
-                    >
-                      responsáveis diferentes por disciplina
-                      <q-tooltip>
-                        Esta equipe tem Setor/Supervisor/Coordenador diferentes
-                        entre disciplinas. Salvar aqui iguala todas ao valor
-                        preenchido nesta linha.
-                      </q-tooltip>
-                    </q-badge>
-                  </div>
+                    <div class="text-caption text-grey-7 q-mt-sm">
+                      {{ resumoPainel.ocupadas }} de {{ resumoPainel.total }} vagas ocupadas
+                      <template v-if="painel.extras">
+                        · {{ painel.extras }} Folguista Extra, gerido no Banco de Dados
+                      </template>
+                    </div>
+                  </template>
+                </q-card-section>
 
-                  <div class="col-6 col-md-2">
-                    <q-input
-                      v-model="obterLinhaMassa(equipe).base"
-                      dense
-                      outlined
-                      label="Base"
-                    />
-                  </div>
-
-                  <div class="col-6 col-md-2">
-                    <q-select
-                      v-model="obterLinhaMassa(equipe).setor"
-                      dense
-                      outlined
-                      clearable
-                      label="Setor"
-                      :options="setoresNegocio"
-                    />
-                  </div>
-
-                  <div class="col-6 col-md-2">
-                    <q-input
-                      v-model="obterLinhaMassa(equipe).supervisor"
-                      dense
-                      outlined
-                      label="Supervisor"
-                    />
-                  </div>
-
-                  <div class="col-6 col-md-2">
-                    <q-input
-                      v-model="obterLinhaMassa(equipe).coordenador"
-                      dense
-                      outlined
-                      label="Coordenador"
-                    />
-                  </div>
-
-                  <div class="col-12 col-md-auto">
-                    <q-btn
-                      flat
-                      dense
-                      no-caps
-                      icon="tune"
-                      color="primary"
-                      :label="obterLinhaMassa(equipe).mostrarVagas ? 'Ocultar vagas' : 'Vagas por função'"
-                      @click="obterLinhaMassa(equipe).mostrarVagas = !obterLinhaMassa(equipe).mostrarVagas"
-                    />
-                  </div>
-                </div>
-
-                <div
-                  v-if="obterLinhaMassa(equipe).mostrarVagas"
-                  class="q-mt-sm q-gutter-sm"
-                >
-                  <q-separator />
+                <q-card-section class="q-pt-none q-gutter-y-md">
+                  <div class="text-subtitle2">Vagas por tipo de equipe</div>
 
                   <div
-                    v-for="(linha, indice) in obterLinhaMassa(equipe).vagas"
-                    :key="indice"
-                    class="row q-col-gutter-sm items-center"
+                    v-for="(disciplina, indice) in painel.disciplinas"
+                    :key="disciplina.chave"
+                    class="bloco-disciplina"
                   >
-                    <div class="col-4">
+                    <div class="row items-center no-wrap q-gutter-sm">
                       <q-select
-                        v-model="linha.tipo"
-                        dense
+                        v-model="disciplina.tipo"
                         outlined
+                        dense
                         use-input
+                        fill-input
+                        hide-selected
+                        input-debounce="0"
                         new-value-mode="add-unique"
-                        label="Tipo"
-                        :options="estruturasDisponiveis"
+                        label="Tipo de equipe"
+                        class="col"
+                        :options="estruturasFiltradas"
+                        @filter="filtrarEstruturas"
+                        @input-value="valor => (disciplina.tipo = (valor || '').toUpperCase())"
                       />
-                    </div>
-                    <div class="col-4">
-                      <q-select
-                        v-model="linha.funcao"
-                        dense
-                        outlined
-                        label="Função"
-                        :options="FUNCOES_SISTEMA"
-                      />
-                    </div>
-                    <div class="col-3">
-                      <q-input
-                        v-model.number="linha.quantidade"
-                        dense
-                        outlined
-                        type="number"
-                        min="0"
-                        label="Qtd."
-                      />
-                    </div>
-                    <div class="col-1">
                       <q-btn
                         flat
-                        round
                         dense
-                        icon="delete"
-                        color="negative"
-                        @click="obterLinhaMassa(equipe).vagas.splice(indice, 1)"
+                        round
+                        color="grey-7"
+                        icon="delete_outline"
+                        :aria-label="`Tirar o tipo ${disciplina.tipo || ''}`"
+                        @click="removerDisciplina(indice)"
+                      >
+                        <q-tooltip>Tirar este tipo de equipe e as vagas dele</q-tooltip>
+                      </q-btn>
+                    </div>
+
+                    <div class="row q-col-gutter-sm q-mt-xs">
+                      <div class="col-12 col-sm-4">
+                        <q-select
+                          v-model="disciplina.setor"
+                          outlined
+                          dense
+                          clearable
+                          label="Setor"
+                          :options="setoresNegocio"
+                        />
+                      </div>
+                      <div class="col-12 col-sm-4">
+                        <q-select
+                          v-model="disciplina.supervisor"
+                          outlined
+                          dense
+                          clearable
+                          use-input
+                          fill-input
+                          hide-selected
+                          input-debounce="0"
+                          label="Supervisor"
+                          :options="contasFiltradas"
+                          :hint="semConta('SUPERVISOR', disciplina.supervisor) ? 'Nome antigo, sem conta no sistema: escolha a conta' : ''"
+                          @filter="(termo, atualizar) => filtrarContas('SUPERVISOR', termo, atualizar)"
+                        />
+                      </div>
+                      <div class="col-12 col-sm-4">
+                        <q-select
+                          v-model="disciplina.coordenador"
+                          outlined
+                          dense
+                          clearable
+                          use-input
+                          fill-input
+                          hide-selected
+                          input-debounce="0"
+                          label="Coordenador"
+                          :options="contasFiltradas"
+                          :hint="semConta('COORDENADOR', disciplina.coordenador) ? 'Nome antigo, sem conta no sistema: escolha a conta' : ''"
+                          @filter="(termo, atualizar) => filtrarContas('COORDENADOR', termo, atualizar)"
+                        />
+                      </div>
+                    </div>
+
+                    <div class="q-mt-sm">
+                      <div
+                        v-for="(linha, i) in disciplina.funcoes"
+                        :key="linha.chave"
+                        class="linha-funcao row items-center no-wrap q-gutter-sm"
+                      >
+                        <q-select
+                          v-model="linha.funcao"
+                          outlined
+                          dense
+                          use-input
+                          fill-input
+                          hide-selected
+                          input-debounce="0"
+                          new-value-mode="add-unique"
+                          label="Função"
+                          class="col"
+                          :options="funcoesFiltradas"
+                          @filter="filtrarFuncoes"
+                          @input-value="valor => (linha.funcao = (valor || '').toUpperCase())"
+                        />
+
+                        <div class="contador row items-center no-wrap">
+                          <q-btn
+                            flat
+                            dense
+                            round
+                            icon="remove"
+                            :disable="!linha.quantidade"
+                            :aria-label="`Uma vaga a menos de ${linha.funcao || 'função'}`"
+                            @click="linha.quantidade = Math.max(0, (linha.quantidade || 0) - 1)"
+                          />
+                          <q-input
+                            v-model.number="linha.quantidade"
+                            dense
+                            outlined
+                            type="number"
+                            min="0"
+                            input-class="text-center"
+                            class="campo-quantidade"
+                            :aria-label="`Vagas de ${linha.funcao || 'função'}`"
+                          />
+                          <q-btn
+                            flat
+                            dense
+                            round
+                            icon="add"
+                            :aria-label="`Uma vaga a mais de ${linha.funcao || 'função'}`"
+                            @click="linha.quantidade = (linha.quantidade || 0) + 1"
+                          />
+                        </div>
+
+                        <div class="info-ocupadas text-caption" :class="(linha.quantidade || 0) < linha.ocupadas ? 'text-negative' : 'text-grey-7'">
+                          <template v-if="(linha.quantidade || 0) < linha.ocupadas">
+                            tira {{ linha.ocupadas - (linha.quantidade || 0) }} pessoa(s)
+                          </template>
+                          <template v-else-if="linha.ocupadas">
+                            {{ linha.ocupadas }} ocupada(s)
+                          </template>
+                          <template v-else>livre</template>
+                        </div>
+
+                        <q-btn
+                          flat
+                          dense
+                          round
+                          size="sm"
+                          color="grey-7"
+                          icon="close"
+                          :aria-label="`Tirar a função ${linha.funcao || ''}`"
+                          @click="removerFuncao(disciplina, i)"
+                        />
+                      </div>
+
+                      <q-btn
+                        flat
+                        dense
+                        no-caps
+                        color="primary"
+                        icon="add"
+                        label="Adicionar função"
+                        class="q-mt-xs"
+                        @click="adicionarFuncao(disciplina)"
                       />
                     </div>
                   </div>
 
                   <q-btn
+                    outline
+                    dense
+                    no-caps
+                    color="primary"
+                    icon="add"
+                    label="Adicionar outro tipo de equipe"
+                    @click="adicionarDisciplina"
+                  />
+
+                  <div v-if="problemaVagas && painelTocado" class="text-negative text-caption">
+                    {{ problemaVagas }}
+                  </div>
+                </q-card-section>
+
+                <q-separator />
+
+                <q-card-actions class="q-px-md">
+                  <q-btn
+                    v-if="painel.modo === 'editar'"
                     flat
                     dense
-                    icon="add"
-                    label="Adicionar linha"
+                    no-caps
+                    color="negative"
+                    icon="delete"
+                    label="Excluir equipe"
+                    :disable="resumoPainel.ocupadas > 0"
+                    @click="removerEquipeAberta"
+                  >
+                    <q-tooltip v-if="resumoPainel.ocupadas > 0">
+                      Tire as pessoas da equipe no Banco de Dados antes de excluir
+                    </q-tooltip>
+                  </q-btn>
+                  <q-space />
+                  <q-btn flat no-caps color="grey-8" label="Cancelar" @click="fecharPainel" />
+                  <q-btn
+                    unelevated
+                    no-caps
                     color="primary"
-                    @click="
-                      obterLinhaMassa(equipe).vagas.push({
-                        tipo: 'CONSTRUÇÃO',
-                        funcao: null,
-                        quantidade: 0
-                      })
-                    "
+                    :label="painel.modo === 'nova' ? 'Criar equipe' : 'Salvar'"
+                    :loading="salvandoPainel"
+                    @click="salvarPainel"
                   />
-                </div>
-              </q-card-section>
+                </q-card-actions>
+              </template>
             </q-card>
-
-            <div v-if="equipesFiltradas.length" class="row justify-end q-mt-md">
-              <q-btn
-                color="primary"
-                label="Salvar edição em massa"
-                :loading="salvandoMassa"
-                @click="salvarEdicaoMassa"
-              />
-            </div>
-          </q-card-section>
-        </q-card>
+          </div>
+        </div>
       </q-page>
     </q-page-container>
 
     <!-- ==================================================== -->
-    <!-- EDIÇÃO DE EQUIPE -->
+    <!-- EDITAR SETOR E RESPONSÁVEIS DAS SELECIONADAS -->
     <!-- ==================================================== -->
 
-    <q-dialog v-model="dialogEdicao">
-      <q-card style="min-width: 420px; max-width: 90vw">
+    <q-dialog v-model="dialogSelecionadas">
+      <q-card style="width: 460px; max-width: 92vw">
         <q-card-section>
-          <div class="text-h6"> Editar equipe </div>
+          <div class="text-h6">Setor e responsáveis</div>
+          <div class="text-caption text-grey-7">
+            Vale para todos os tipos de equipe das {{ selecionadas.length }} equipe(s) selecionada(s).
+            Campo em branco não muda nada.
+          </div>
         </q-card-section>
 
-        <q-separator />
-
-        <q-card-section class="q-gutter-md" style="max-height: 70vh" >
+        <q-card-section class="q-gutter-md q-pt-none">
+          <q-select v-model="massa.setor" outlined dense clearable label="Setor" :options="setoresNegocio" />
           <q-select
-            v-model="edicaoBase"
+            v-model="massa.supervisor"
             outlined
             dense
+            clearable
             use-input
             fill-input
             hide-selected
             input-debounce="0"
-            new-value-mode="add-unique"
-            label="Base"
-            :options="basesFiltradas"
-            @filter="filtrarBases"
+            label="Supervisor"
+            :options="contasFiltradas"
+            :hint="semConta('SUPERVISOR', massa.supervisor) ? 'Nome antigo, sem conta no sistema: escolha a conta' : ''"
+            @filter="(termo, atualizar) => filtrarContas('SUPERVISOR', termo, atualizar)"
           />
-
-          <q-input v-model="edicaoPrefixo" outlined dense label="Prefixo" />
-
-          <q-banner
-            v-if="edicaoResponsavelDivergente"
-            class="bg-orange-1 text-orange-9"
-            dense
-            rounded
-          >
-            Esta equipe tem disciplinas com Setor/Supervisor/Coordenador
-            diferentes entre si. Salvar aqui vai igualar TODAS as
-            disciplinas ao valor preenchido abaixo. Para manter
-            responsáveis diferentes por disciplina, use a planilha ou a
-            edição em massa em vez deste formulário.
-          </q-banner>
-
           <q-select
-            v-model="edicaoSetor"
+            v-model="massa.coordenador"
             outlined
             dense
             clearable
-            label="Setor"
-            :options="setoresNegocio"
-          />
-
-          <q-input v-model="edicaoSupervisor" outlined dense label="Supervisor" />
-
-          <q-input v-model="edicaoCoordenador" outlined dense label="Coordenador" />
-
-          <q-separator />
-
-          <div class="text-subtitle2">Vagas por função</div>
-
-          <div
-            v-for="(linha, indice) in edicaoVagas"
-            :key="indice"
-            class="row q-col-gutter-sm items-center"
-          >
-            <div class="col-4">
-              <q-select
-                v-model="linha.tipo"
-                outlined
-                dense
-                use-input
-                new-value-mode="add-unique"
-                label="Tipo"
-                :options="estruturasDisponiveis"
-              />
-            </div>
-            <div class="col-4">
-              <q-select
-                v-model="linha.funcao"
-                outlined
-                dense
-                label="Função"
-                :options="FUNCOES_SISTEMA"
-              />
-            </div>
-            <div class="col-3">
-              <q-input
-                v-model.number="linha.quantidade"
-                outlined
-                dense
-                type="number"
-                min="0"
-                label="Qtd."
-              />
-            </div>
-            <div class="col-1">
-              <q-btn
-                flat
-                round
-                dense
-                icon="delete"
-                color="negative"
-                @click="edicaoVagas.splice(indice, 1)"
-              />
-            </div>
-          </div>
-
-          <q-btn
-            flat
-            dense
-            icon="add"
-            label="Adicionar linha"
-            color="primary"
-            @click="edicaoVagas.push({ tipo: 'CONSTRUÇÃO', funcao: null, quantidade: 0 })"
+            use-input
+            fill-input
+            hide-selected
+            input-debounce="0"
+            label="Coordenador"
+            :options="contasFiltradas"
+            :hint="semConta('COORDENADOR', massa.coordenador) ? 'Nome antigo, sem conta no sistema: escolha a conta' : ''"
+            @filter="(termo, atualizar) => filtrarContas('COORDENADOR', termo, atualizar)"
           />
         </q-card-section>
 
         <q-card-actions align="right">
-          <q-btn v-close-popup flat label="Cancelar" color="grey-7" />
-
+          <q-btn v-close-popup flat no-caps color="grey-8" label="Cancelar" />
           <q-btn
+            unelevated
+            no-caps
             color="primary"
-            label="Salvar"
-            :disable="!podeSalvarEdicao"
-            :loading="salvandoEdicao"
-            @click="salvarEdicaoEquipe()"
+            label="Aplicar"
+            :loading="salvandoMassa"
+            @click="aplicarEdicaoSelecionadas"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- ==================================================== -->
+    <!-- ENVIAR PLANILHA -->
+    <!-- ==================================================== -->
+
+    <q-dialog v-model="dialogEnvioPlanilha">
+      <q-card style="width: 460px; max-width: 92vw">
+        <q-card-section>
+          <div class="text-h6">Enviar planilha preenchida</div>
+          <div class="text-caption text-grey-7">
+            Use a planilha baixada aqui. Na coluna AÇÃO, escreva <strong>criar</strong>,
+            <strong>editar</strong> ou <strong>excluir</strong>; linha sem ação é ignorada.
+            Nada é gravado antes de você conferir.
+          </div>
+        </q-card-section>
+
+        <q-card-section class="q-pt-none">
+          <q-file
+            v-model="arquivoPlanilha"
+            outlined
+            dense
+            clearable
+            accept=".xlsx"
+            label="Planilha (.xlsx)"
+          >
+            <template #prepend>
+              <q-icon name="attach_file" />
+            </template>
+          </q-file>
+        </q-card-section>
+
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat no-caps color="grey-8" label="Cancelar" />
+          <q-btn
+            unelevated
+            no-caps
+            color="primary"
+            icon="fact_check"
+            label="Conferir mudanças"
+            :disable="!arquivoPlanilha"
+            :loading="analisandoPlanilha"
+            @click="analisarPlanilha"
           />
         </q-card-actions>
       </q-card>
@@ -1101,7 +933,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 
 import CabecalhoApp from '../components/CabecalhoApp.vue'
 import MarcaDaguaFundo from '../components/MarcaDaguaFundo.vue'
@@ -1132,38 +964,25 @@ const { confirmar } = useConfirmacao()
 const equipes = ref([])
 
 const carregando = ref(false)
-// Spinner que OCUPA a tela inteira só na primeira abertura. Numa recarga
-// (depois de alocar, salvar, aplicar planilha...) o conteúdo fica no lugar:
-// trocar tudo pelo spinner desmontava a lista, a página encolhia para menos
-// de uma tela e o navegador jogava a rolagem para o topo — além de fechar a
-// equipe que estivesse aberta. O ícone de atualizar do cabeçalho continua
-// girando, então o recarregamento não fica invisível.
+// Spinner que ocupa a lista só na primeira abertura: numa recarga (depois de
+// salvar, aplicar planilha...) o conteúdo fica no lugar e o ícone de
+// atualizar do cabeçalho é que gira.
 const primeiraCarga = ref(true)
 
 const erro = ref('')
 const sucesso = ref('')
-
-const novaEquipeBase = ref(null)
-const novaEquipePrefixo = ref('')
-const salvandoEquipe = ref(false)
-
-const vagaEquipe = ref(null)
-const vagaFuncao = ref(null)
-const vagaEstrutura = ref(null)
-const vagaSetor = ref('')
-const vagaSupervisor = ref('')
-const vagaCoordenador = ref('')
-const salvandoVaga = ref(false)
-const estruturasFiltradas = ref([])
 
 const filtroEquipe = ref('')
 const baseFiltro = ref([])
 const tipoFiltro = ref(TIPO_TODOS)
 const setorFiltro = ref(SETOR_TODOS)
 
+const setoresNegocio = ref([])
+
 const arquivoPlanilha = ref(null)
 const planoPlanilha = ref(null)
 const dialogPlanilha = ref(false)
+const dialogEnvioPlanilha = ref(false)
 const baixandoPlanilha = ref(false)
 const analisandoPlanilha = ref(false)
 const aplicandoPlanilha = ref(false)
@@ -1211,11 +1030,7 @@ const errosPlanilhaOrdenados = computed(() => {
 })
 
 const criarPlanilhaOrdenados = computed(() => {
-  const extratores = {
-    linha: i => i.linha,
-    equipe: i => i.equipe,
-    total: i => i.total
-  }
+  const extratores = { linha: i => i.linha, equipe: i => i.equipe, total: i => i.total }
   const extrair = extratores[ordenacaoCriarPlanilha.coluna]
   const lista = planoPlanilha.value?.criar || []
   return extrair ? ordenarLista(lista, extrair, ordenacaoCriarPlanilha) : lista
@@ -1229,65 +1044,27 @@ const editarPlanilhaOrdenados = computed(() => {
 })
 
 const excluirPlanilhaOrdenados = computed(() => {
-  const extratores = {
-    linha: i => i.linha,
-    equipe: i => i.equipe,
-    vagas: i => i.vagas
-  }
+  const extratores = { linha: i => i.linha, equipe: i => i.equipe, vagas: i => i.vagas }
   const extrair = extratores[ordenacaoExcluirPlanilha.coluna]
   const lista = planoPlanilha.value?.excluir || []
   return extrair ? ordenarLista(lista, extrair, ordenacaoExcluirPlanilha) : lista
 })
 
-const dialogEdicao = ref(false)
-const equipeEmEdicao = ref(null)
-const edicaoBase = ref(null)
-const edicaoPrefixo = ref('')
-const edicaoSetor = ref(null)
-const edicaoSupervisor = ref('')
-const edicaoCoordenador = ref('')
-const edicaoVagas = ref([])
-const edicaoResponsavelDivergente = ref(false)
-const salvandoEdicao = ref(false)
-const setoresNegocio = ref([])
-
-const basesFiltradas = ref([])
-const equipesOpcoesFiltradas = ref([])
-
-// alterna entre a lista de vagas cadastradas e a grade de edição em massa,
-// para nao deixar as duas visiveis e a tela pesada ao mesmo tempo
-const modoVagas = ref('massa')
-const edicaoMassa = ref({})
-const salvandoMassa = ref(false)
-const bulkSetor = ref(null)
-const bulkSupervisor = ref('')
-const bulkCoordenador = ref('')
-
-// ============================================================
-// DERIVADOS
-// ============================================================
-
-const estruturasDisponiveis = computed(() => {
-  const valores = new Set()
-
-  equipes.value.forEach(equipe => {
-    ;(equipe.tipos || []).forEach(tipo => tipo && valores.add(tipo))
-  })
-
-  return valores.size ? [...valores].sort() : ['CONSTRUÇÃO']
+const podeAplicarPlanilha = computed(() => {
+  const plano = planoPlanilha.value
+  if (!plano || plano.erros.length) {
+    return false
+  }
+  return Boolean(plano.criar.length || plano.editar.length || plano.excluir.length)
 })
 
-const bases = computed(() => {
-  const valores = new Set()
+// ============================================================
+// LISTA
+// ============================================================
 
-  equipes.value.forEach(equipe => {
-    if (equipe.base) {
-      valores.add(equipe.base)
-    }
-  })
-
-  return [...valores].sort()
-})
+const bases = computed(() =>
+  [...new Set(equipes.value.map(equipe => equipe.base).filter(Boolean))].sort()
+)
 
 const opcoesBaseFiltro = computed(() => [
   { label: 'Todas as bases', value: OPCAO_TODAS_BASES },
@@ -1299,139 +1076,688 @@ function atualizarSelecaoBaseFiltro(selecao) {
 }
 
 const opcoesTipos = computed(() => opcoesTipoFiltro(equipes.value))
-
 const opcoesSetores = computed(() => opcoesSetorFiltro(equipes.value))
-
-const equipesOpcoes = computed(() =>
-  equipes.value.map(equipe => ({
-    label: `${equipe.prefixo} — ${equipe.base}`,
-    value: equipe.id
-  }))
-)
 
 const equipesFiltradas = computed(() => {
   const termo = (filtroEquipe.value || '').trim().toLowerCase()
-  const basesEscolhidas = baseFiltro.value || []
 
-  return equipes.value.filter(equipe => {
-    if (!equipeNaSelecaoDeBases(equipe, basesEscolhidas)) {
-      return false
-    }
-
-    if (!equipeCombinaComTipo(equipe, tipoFiltro.value)) {
-      return false
-    }
-
-    if (!equipeCombinaComSetor(equipe, setorFiltro.value)) {
-      return false
-    }
-
-    return (
-      !termo || `${equipe.prefixo} ${equipe.base}`.toLowerCase().includes(termo)
-    )
-  })
+  return equipes.value.filter(
+    equipe =>
+      equipeNaSelecaoDeBases(equipe, baseFiltro.value || []) &&
+      equipeCombinaComTipo(equipe, tipoFiltro.value) &&
+      equipeCombinaComSetor(equipe, setorFiltro.value) &&
+      (!termo || `${equipe.prefixo} ${equipe.base}`.toLowerCase().includes(termo))
+  )
 })
 
-const podeAplicarPlanilha = computed(() => {
-  const plano = planoPlanilha.value
-  if (!plano || plano.erros.length) {
+// vagas padrão: o Folguista Extra fica fora da conta (é gerido no Banco de Dados)
+function vagasPadrao(equipe) {
+  return (equipe?.vagas || []).filter(vaga => !vaga.eh_extra)
+}
+
+function contagemDaEquipe(equipe) {
+  const vagas = vagasPadrao(equipe)
+  const ocupadas = vagas.filter(vaga => vaga.ocupada).length
+  return { total: vagas.length, ocupadas, livres: vagas.length - ocupadas }
+}
+
+const equipesComVagaLivre = computed(
+  () => equipesFiltradas.value.filter(equipe => contagemDaEquipe(equipe).livres).length
+)
+
+// ------------------------------------------------------------
+// Seleção para editar várias de uma vez
+// ------------------------------------------------------------
+
+const selecionadas = ref([])
+
+function alternarSelecao(id) {
+  selecionadas.value = selecionadas.value.includes(id)
+    ? selecionadas.value.filter(item => item !== id)
+    : [...selecionadas.value, id]
+}
+
+const estadoMarcarTodas = computed(() => {
+  const ids = equipesFiltradas.value.map(equipe => equipe.id)
+  const marcadas = ids.filter(id => selecionadas.value.includes(id)).length
+  if (!marcadas) {
     return false
   }
-  return Boolean(plano.criar.length || plano.editar.length || plano.excluir.length)
+  return marcadas === ids.length ? true : null
 })
 
-const podeSalvarEdicao = computed(() =>
-  Boolean((edicaoBase.value || '').trim() && edicaoPrefixo.value.trim())
-)
+function marcarTodasFiltradas(marcar) {
+  const ids = equipesFiltradas.value.map(equipe => equipe.id)
+  selecionadas.value = marcar
+    ? [...new Set([...selecionadas.value, ...ids])]
+    : selecionadas.value.filter(id => !ids.includes(id))
+}
 
-const podeCriarEquipe = computed(() =>
-  Boolean(
-    (novaEquipeBase.value || '').trim() && novaEquipePrefixo.value.trim()
+// ============================================================
+// OPÇÕES DOS CAMPOS (com busca e texto novo)
+// ============================================================
+
+const basesFiltradas = ref([])
+const estruturasFiltradas = ref([])
+const funcoesFiltradas = ref([])
+const contasFiltradas = ref([])
+
+// contas que podem ser supervisor ou coordenador de vaga: o nome escolhido
+// aqui é o da conta, e o servidor liga a vaga a ela
+// (ver database/responsaveis_vaga.py)
+const contasResponsaveis = ref([])
+
+// o coordenador da vaga pode ser um Gerente (equipe que responde direto a ele)
+const NIVEIS_ACEITOS = { SUPERVISOR: ['SUPERVISOR'], COORDENADOR: ['COORDENADOR', 'GERENTE'] }
+
+function nomesDasContas(campo) {
+  return contasResponsaveis.value
+    .filter(conta => NIVEIS_ACEITOS[campo].includes(conta.nivel) && conta.ativo)
+    .map(conta => conta.nome)
+}
+
+function semConta(campo, nome) {
+  const procurado = (nome || '').trim().toUpperCase()
+  return Boolean(procurado) &&
+    !contasResponsaveis.value.some(
+      conta =>
+        NIVEIS_ACEITOS[campo].includes(conta.nivel) &&
+        (conta.nome || '').trim().toUpperCase() === procurado
+    )
+}
+
+const estruturasDisponiveis = computed(() => {
+  const valores = new Set()
+  equipes.value.forEach(equipe => (equipe.tipos || []).forEach(tipo => tipo && valores.add(tipo)))
+  return valores.size ? [...valores].sort() : ['CONSTRUÇÃO']
+})
+
+const funcoesDisponiveis = computed(() => {
+  const valores = new Set(FUNCOES_SISTEMA)
+  equipes.value.forEach(equipe =>
+    (equipe.vagas || []).forEach(vaga => vaga.funcao_er && valores.add(vaga.funcao_er))
   )
-)
-
-const podeCriarVaga = computed(() =>
-  Boolean(vagaEquipe.value && vagaFuncao.value && vagaEstrutura.value)
-)
-
-// setor/supervisor/coordenador sao por (equipe + disciplina), nunca por
-// vaga: se a equipe ja tem alguma vaga dessa disciplina, o responsavel
-// vem de la e os campos ficam travados, pra nao dar pra cadastrar a
-// mesma disciplina com responsaveis diferentes.
-const vagaExistenteDoTipo = computed(() => {
-  const equipe = equipes.value.find(item => item.id === vagaEquipe.value)
-  const tipoAlvo = (vagaEstrutura.value || '').trim().toUpperCase()
-  if (!equipe || !tipoAlvo) {
-    return null
-  }
-  return (equipe.vagas || []).find(
-    vaga => (vaga.tipo || '').toUpperCase() === tipoAlvo
-  ) || null
+  return [...valores].sort()
 })
 
-const metadadoVagaTravado = computed(() => Boolean(vagaExistenteDoTipo.value))
-
-// ============================================================
-// FILTROS DOS SELECTS
-// ============================================================
-
-function filtrarBases(termo, update) {
-  update(() => {
-    const busca = termo.toLowerCase()
-
-    basesFiltradas.value = busca
-      ? bases.value.filter(base => base.toLowerCase().includes(busca))
-      : bases.value
-  })
+function filtrarLista(lista, termo) {
+  const busca = (termo || '').toLowerCase()
+  return busca ? lista.filter(item => item.toLowerCase().includes(busca)) : lista
 }
 
-function filtrarEstruturas(termo, update) {
-  update(() => {
-    const busca = termo.toUpperCase()
-
-    estruturasFiltradas.value = busca
-      ? estruturasDisponiveis.value.filter(tipo => tipo.toUpperCase().includes(busca))
-      : estruturasDisponiveis.value
-  })
+function filtrarBases(termo, atualizar) {
+  atualizar(() => (basesFiltradas.value = filtrarLista(bases.value, termo)))
 }
 
-function filtrarEquipesOpcoes(termo, update) {
-  update(() => {
-    const busca = termo.toLowerCase()
+function filtrarEstruturas(termo, atualizar) {
+  atualizar(() => (estruturasFiltradas.value = filtrarLista(estruturasDisponiveis.value, termo)))
+}
 
-    equipesOpcoesFiltradas.value = busca
-      ? equipesOpcoes.value.filter(opcao =>
-          opcao.label.toLowerCase().includes(busca)
-        )
-      : equipesOpcoes.value
-  })
+function filtrarFuncoes(termo, atualizar) {
+  atualizar(() => (funcoesFiltradas.value = filtrarLista(funcoesDisponiveis.value, termo)))
+}
+
+function filtrarContas(campo, termo, atualizar) {
+  atualizar(() => (contasFiltradas.value = filtrarLista(nomesDasContas(campo), termo)))
+}
+
+async function carregarContasResponsaveis() {
+  try {
+    const resposta = await fetch('/api/responsaveis-vaga')
+    const dados = await resposta.json()
+    contasResponsaveis.value = Array.isArray(dados) ? dados : []
+  } catch (e) {
+    console.error(e)
+  }
 }
 
 // ============================================================
-// AÇÕES
+// PAINEL DA EQUIPE
+// ============================================================
+//
+// Uma equipe é organizada por disciplina (tipo de equipe): setor, supervisor
+// e coordenador valem para a disciplina inteira, e cada função tem uma
+// quantidade de vagas. É o mesmo formato que o servidor recebe em
+// PUT /api/equipes/<id> (ver responsaveis_por_tipo em app.py).
+
+let proximaChave = 0
+const chave = () => ++proximaChave
+
+const painel = reactive({
+  modo: null, // null | 'nova' | 'editar'
+  passo: 1, // só na nova: 1 = base e prefixo, 2 = vagas
+  equipeId: null,
+  base: '',
+  prefixo: '',
+  extras: 0,
+  disciplinas: [],
+  // funções que existiam e saíram do painel: vão com quantidade 0, senão o
+  // servidor não sabe que deve tirar essas vagas
+  removidas: []
+})
+
+const painelTocado = ref(false)
+const salvandoPainel = ref(false)
+let retratoPainel = ''
+
+function novaLinhaFuncao(funcao = null, quantidade = 1, ocupadas = 0) {
+  return { chave: chave(), funcao, quantidade, ocupadas, original: funcao ? quantidade : 0 }
+}
+
+function novaDisciplina(tipo = 'CONSTRUÇÃO') {
+  return {
+    chave: chave(),
+    tipo,
+    tipoOriginal: null,
+    setor: null,
+    supervisor: '',
+    coordenador: '',
+    funcoes: [novaLinhaFuncao()]
+  }
+}
+
+function disciplinasDaEquipe(equipe) {
+  const porTipo = new Map()
+  for (const vaga of vagasPadrao(equipe)) {
+    if (!porTipo.has(vaga.tipo)) {
+      porTipo.set(vaga.tipo, {
+        chave: chave(),
+        tipo: vaga.tipo,
+        tipoOriginal: vaga.tipo,
+        setor: vaga.setor || null,
+        supervisor: vaga.supervisor || '',
+        coordenador: vaga.coordenador || '',
+        porFuncao: new Map()
+      })
+    }
+    const funcoes = porTipo.get(vaga.tipo).porFuncao
+    const atual = funcoes.get(vaga.funcao_er) || { quantidade: 0, ocupadas: 0 }
+    atual.quantidade += 1
+    atual.ocupadas += vaga.ocupada ? 1 : 0
+    funcoes.set(vaga.funcao_er, atual)
+  }
+
+  return [...porTipo.values()].map(({ porFuncao, ...disciplina }) => ({
+    ...disciplina,
+    funcoes: [...porFuncao.entries()].map(([funcao, { quantidade, ocupadas }]) =>
+      novaLinhaFuncao(funcao, quantidade, ocupadas)
+    )
+  }))
+}
+
+function retratoAtual() {
+  return JSON.stringify([painel.base, painel.prefixo, painel.disciplinas, painel.removidas])
+}
+
+const painelAlterado = computed(() => Boolean(painel.modo) && retratoAtual() !== retratoPainel)
+
+async function podeTrocarDePainel() {
+  if (!painelAlterado.value) {
+    return true
+  }
+  return confirmar('Há mudanças não salvas nesta equipe. Descartar?', {
+    titulo: 'Descartar mudanças',
+    textoConfirmar: 'Descartar'
+  })
+}
+
+function preencherPainel(modo, dados) {
+  Object.assign(painel, {
+    modo,
+    passo: dados.passo || 1,
+    equipeId: dados.equipeId ?? null,
+    base: dados.base || '',
+    prefixo: dados.prefixo || '',
+    extras: dados.extras || 0,
+    disciplinas: dados.disciplinas || [],
+    removidas: []
+  })
+  painelTocado.value = false
+  retratoPainel = retratoAtual()
+}
+
+async function abrirEquipe(equipe) {
+  if (painel.equipeId === equipe.id && painel.modo === 'editar') {
+    return
+  }
+  if (!(await podeTrocarDePainel())) {
+    return
+  }
+  preencherPainel('editar', {
+    equipeId: equipe.id,
+    base: equipe.base,
+    prefixo: equipe.prefixo,
+    extras: (equipe.vagas || []).length - vagasPadrao(equipe).length,
+    disciplinas: disciplinasDaEquipe(equipe)
+  })
+}
+
+async function iniciarNovaEquipe() {
+  if (!(await podeTrocarDePainel())) {
+    return
+  }
+  preencherPainel('nova', { passo: 1 })
+}
+
+async function fecharPainel() {
+  if (!(await podeTrocarDePainel())) {
+    return
+  }
+  preencherPainel(null, {})
+}
+
+const resumoPainel = computed(() => {
+  let total = 0
+  let ocupadas = 0
+  for (const disciplina of painel.disciplinas) {
+    for (const linha of disciplina.funcoes) {
+      total += Number(linha.original || 0)
+      ocupadas += linha.ocupadas
+    }
+  }
+  return { total, ocupadas }
+})
+
+// ------------------------------------------------------------
+// Passo 1 da nova equipe
+// ------------------------------------------------------------
+
+const erroBase = computed(() => ((painel.base || '').trim() ? '' : 'Informe a base.'))
+
+const erroPrefixo = computed(() => {
+  const base = (painel.base || '').trim().toUpperCase()
+  const prefixo = (painel.prefixo || '').trim()
+  if (!prefixo) {
+    return 'Informe o prefixo.'
+  }
+  const repetida = equipes.value.some(
+    equipe =>
+      equipe.id !== painel.equipeId &&
+      (equipe.base || '').toUpperCase() === base &&
+      (equipe.prefixo || '').trim().toUpperCase() === prefixo.toUpperCase()
+  )
+  return repetida ? `Já existe a equipe ${prefixo} na base ${base}.` : ''
+})
+
+const problemaIdentificacao = computed(() => erroBase.value || erroPrefixo.value)
+
+function avancarParaVagas() {
+  painelTocado.value = true
+  if (problemaIdentificacao.value) {
+    return
+  }
+  painel.base = painel.base.trim().toUpperCase()
+  painel.prefixo = painel.prefixo.trim()
+  if (!painel.disciplinas.length) {
+    // a disciplina mais comum; o tipo pode ser trocado no próprio bloco
+    painel.disciplinas = [novaDisciplina('CONSTRUÇÃO')]
+  }
+  painel.passo = 2
+  painelTocado.value = false
+}
+
+// ------------------------------------------------------------
+// Disciplinas e funções
+// ------------------------------------------------------------
+
+function adicionarDisciplina() {
+  const usados = new Set(painel.disciplinas.map(d => (d.tipo || '').toUpperCase()))
+  const livre = estruturasDisponiveis.value.find(tipo => !usados.has(tipo)) || ''
+  painel.disciplinas.push(novaDisciplina(livre))
+}
+
+function guardarRemovida(disciplina, linha) {
+  if (linha.original && disciplina.tipoOriginal && linha.funcao) {
+    painel.removidas.push({
+      tipo: disciplina.tipoOriginal,
+      funcao: linha.funcao,
+      ocupadas: linha.ocupadas
+    })
+  }
+}
+
+async function removerDisciplina(indice) {
+  const disciplina = painel.disciplinas[indice]
+  const ocupadas = disciplina.funcoes.reduce((soma, linha) => soma + linha.ocupadas, 0)
+  if (
+    ocupadas &&
+    !(await confirmar(
+      `O tipo ${disciplina.tipo} tem ${ocupadas} pessoa(s) alocada(s) nesta equipe. ` +
+        'Ao salvar, elas saem das vagas. Tirar este tipo?',
+      { titulo: 'Tirar tipo de equipe', textoConfirmar: 'Tirar' }
+    ))
+  ) {
+    return
+  }
+  disciplina.funcoes.forEach(linha => guardarRemovida(disciplina, linha))
+  painel.disciplinas.splice(indice, 1)
+}
+
+function adicionarFuncao(disciplina) {
+  disciplina.funcoes.push(novaLinhaFuncao())
+}
+
+function removerFuncao(disciplina, indice) {
+  guardarRemovida(disciplina, disciplina.funcoes[indice])
+  disciplina.funcoes.splice(indice, 1)
+}
+
+const problemaVagas = computed(() => {
+  if (!painel.disciplinas.length) {
+    return 'Adicione ao menos um tipo de equipe.'
+  }
+  const tipos = new Set()
+  for (const disciplina of painel.disciplinas) {
+    const tipo = (disciplina.tipo || '').trim().toUpperCase()
+    if (!tipo) {
+      return 'Escolha o tipo de equipe de cada bloco.'
+    }
+    if (tipos.has(tipo)) {
+      return `O tipo ${tipo} aparece duas vezes. Junte as funções num bloco só.`
+    }
+    tipos.add(tipo)
+    const funcoes = new Set()
+    for (const linha of disciplina.funcoes) {
+      const funcao = (linha.funcao || '').trim().toUpperCase()
+      if (!funcao) {
+        return `Escolha a função de cada linha em ${tipo}.`
+      }
+      if (funcoes.has(funcao)) {
+        return `A função ${funcao} aparece duas vezes em ${tipo}.`
+      }
+      funcoes.add(funcao)
+      if (!Number.isInteger(Number(linha.quantidade)) || Number(linha.quantidade) < 0) {
+        return `A quantidade de ${funcao} em ${tipo} precisa ser um número inteiro.`
+      }
+    }
+  }
+  const total = painel.disciplinas.reduce(
+    (soma, d) => soma + d.funcoes.reduce((s, l) => s + Number(l.quantidade || 0), 0),
+    0
+  )
+  return total ? '' : 'A equipe precisa de ao menos uma vaga.'
+})
+
+// linhas que o servidor recebe: as do painel e, com quantidade 0, as que saíram
+function vagasParaEnviar() {
+  const linhas = []
+  const vistos = new Set()
+  for (const disciplina of painel.disciplinas) {
+    const tipo = disciplina.tipo.trim().toUpperCase()
+    const responsaveis = {
+      setor: disciplina.setor || '',
+      supervisor: (disciplina.supervisor || '').trim(),
+      coordenador: (disciplina.coordenador || '').trim()
+    }
+    for (const linha of disciplina.funcoes) {
+      const funcao = linha.funcao.trim().toUpperCase()
+      vistos.add(`${tipo}|${funcao}`)
+      linhas.push({ tipo, funcao, quantidade: Number(linha.quantidade || 0), ...responsaveis })
+    }
+    // trocou o tipo da disciplina: zera as vagas do tipo antigo
+    if (disciplina.tipoOriginal && disciplina.tipoOriginal !== tipo) {
+      for (const linha of disciplina.funcoes) {
+        if (linha.original) {
+          painel.removidas.push({
+            tipo: disciplina.tipoOriginal,
+            funcao: linha.funcao,
+            ocupadas: linha.ocupadas,
+            retipo: true
+          })
+        }
+      }
+    }
+  }
+  for (const removida of painel.removidas) {
+    const chaveLinha = `${removida.tipo}|${removida.funcao}`
+    if (!vistos.has(chaveLinha)) {
+      vistos.add(chaveLinha)
+      linhas.push({ tipo: removida.tipo, funcao: removida.funcao, quantidade: 0, retipo: Boolean(removida.retipo) })
+    }
+  }
+  return linhas
+}
+
+// vagas ocupadas que a nova quantidade não comporta: o servidor só tira
+// pessoas de vaga com confirmação explícita (confirmar_remocoes)
+function vagasOcupadasARemover(equipe, linhas) {
+  const porChave = new Map()
+  for (const vaga of vagasPadrao(equipe)) {
+    const chaveVaga = `${vaga.tipo}|${vaga.funcao_er}`
+    if (!porChave.has(chaveVaga)) {
+      porChave.set(chaveVaga, [])
+    }
+    porChave.get(chaveVaga).push(vaga)
+  }
+  const remover = []
+  for (const linha of linhas) {
+    // tipo trocado: o servidor reclassifica as vagas e as pessoas ficam
+    if (linha.retipo) {
+      continue
+    }
+    const vagas = porChave.get(`${linha.tipo}|${linha.funcao}`) || []
+    const livres = vagas.filter(vaga => !vaga.ocupada).length
+    const reducao = vagas.length - linha.quantidade
+    if (reducao > livres) {
+      remover.push(...vagas.filter(vaga => vaga.ocupada).slice(0, reducao - livres))
+    }
+  }
+  return remover
+}
+
+async function enviarEquipe(equipeId, linhas, confirmarRemocoes) {
+  const resposta = await fetch(`/api/equipes/${equipeId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      base: painel.base.trim().toUpperCase(),
+      prefixo: painel.prefixo.trim(),
+      vagas: linhas,
+      confirmar_remocoes: confirmarRemocoes
+    })
+  })
+  const dados = await resposta.json()
+  if (!resposta.ok || dados.erro) {
+    const detalhe = (dados.erros || []).map(e => e.erro).join(' ')
+    throw new Error([dados.erro || 'Não foi possível salvar a equipe.', detalhe].filter(Boolean).join(' '))
+  }
+  return dados
+}
+
+async function salvarPainel() {
+  painelTocado.value = true
+  erro.value = ''
+  sucesso.value = ''
+  if (problemaIdentificacao.value || problemaVagas.value) {
+    return
+  }
+
+  const removidasAntes = painel.removidas.length
+  const linhas = vagasParaEnviar()
+  painel.removidas.splice(removidasAntes)
+
+  let confirmarRemocoes = []
+  if (painel.modo === 'editar') {
+    const equipe = equipes.value.find(item => item.id === painel.equipeId)
+    const remover = vagasOcupadasARemover(equipe, linhas)
+    if (remover.length) {
+      const nomes = remover.map(v => `${v.colaborador?.nome || v.colaborador?.chapa} (${v.funcao_er})`).join(', ')
+      if (
+        !(await confirmar(
+          `Com as quantidades novas, ${remover.length} pessoa(s) saem das vagas: ${nomes}. Confirma?`,
+          { titulo: 'Tirar pessoas das vagas', textoConfirmar: 'Salvar mesmo assim' }
+        ))
+      ) {
+        return
+      }
+      confirmarRemocoes = remover.map(v => v.id)
+    }
+  }
+
+  salvandoPainel.value = true
+  let equipeId = painel.equipeId
+  try {
+    if (painel.modo === 'nova') {
+      const resposta = await fetch('/api/equipes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base: painel.base.trim().toUpperCase(), prefixo: painel.prefixo.trim() })
+      })
+      const dados = await resposta.json()
+      if (!resposta.ok || dados.erro) {
+        throw new Error(dados.erro || 'Não foi possível criar a equipe.')
+      }
+      equipeId = dados.equipe.id
+      // a partir daqui a equipe existe: se as vagas falharem, ela abre para editar
+      painel.modo = 'editar'
+      painel.equipeId = equipeId
+    }
+
+    const dados = await enviarEquipe(equipeId, linhas, confirmarRemocoes)
+    sucesso.value = `Equipe ${dados.equipe.prefixo} salva.`
+    await carregarEquipes()
+    const atualizada = equipes.value.find(item => item.id === equipeId)
+    if (atualizada) {
+      retratoPainel = ''
+      painel.equipeId = null
+      await abrirEquipe(atualizada)
+    }
+  } catch (e) {
+    erro.value = e.message || 'Não foi possível salvar a equipe.'
+    if (painel.modo === 'editar' && equipeId) {
+      await carregarEquipes()
+    }
+  } finally {
+    salvandoPainel.value = false
+  }
+}
+
+async function removerEquipeAberta() {
+  const prefixo = painel.prefixo
+  if (
+    !(await confirmar(`Excluir a equipe ${prefixo} e todas as vagas dela?`, {
+      titulo: 'Excluir equipe',
+      textoConfirmar: 'Excluir'
+    }))
+  ) {
+    return
+  }
+
+  erro.value = ''
+  sucesso.value = ''
+
+  try {
+    const resposta = await fetch(`/api/equipes/${painel.equipeId}`, { method: 'DELETE' })
+    const dados = await resposta.json()
+    if (!resposta.ok || dados.erro) {
+      throw new Error(dados.erro || 'Não foi possível excluir a equipe.')
+    }
+    selecionadas.value = selecionadas.value.filter(id => id !== painel.equipeId)
+    preencherPainel(null, {})
+    sucesso.value = `Equipe ${prefixo} excluída.`
+    await carregarEquipes()
+  } catch (e) {
+    erro.value = e.message || 'Não foi possível excluir a equipe.'
+  }
+}
+
+// ============================================================
+// SETOR E RESPONSÁVEIS DE VÁRIAS EQUIPES
+// ============================================================
+
+const dialogSelecionadas = ref(false)
+const salvandoMassa = ref(false)
+const massa = reactive({ setor: null, supervisor: '', coordenador: '' })
+
+function abrirEdicaoSelecionadas() {
+  Object.assign(massa, { setor: null, supervisor: '', coordenador: '' })
+  dialogSelecionadas.value = true
+}
+
+async function aplicarEdicaoSelecionadas() {
+  const novo = {
+    setor: massa.setor || '',
+    supervisor: (massa.supervisor || '').trim(),
+    coordenador: (massa.coordenador || '').trim()
+  }
+  if (!novo.setor && !novo.supervisor && !novo.coordenador) {
+    dialogSelecionadas.value = false
+    return
+  }
+
+  // cada disciplina mantém o que tinha nos campos deixados em branco
+  const equipesPayload = equipes.value
+    .filter(equipe => selecionadas.value.includes(equipe.id))
+    .map(equipe => ({
+      equipe_id: equipe.id,
+      base: equipe.base,
+      prefixo: equipe.prefixo,
+      vagas: disciplinasDaEquipe(equipe).flatMap(disciplina =>
+        disciplina.funcoes.map(linha => ({
+          tipo: disciplina.tipo,
+          funcao: linha.funcao,
+          quantidade: linha.quantidade,
+          setor: novo.setor || disciplina.setor || '',
+          supervisor: novo.supervisor || disciplina.supervisor,
+          coordenador: novo.coordenador || disciplina.coordenador
+        }))
+      ),
+      confirmar_remocoes: []
+    }))
+    .filter(item => item.vagas.length)
+
+  erro.value = ''
+  sucesso.value = ''
+  salvandoMassa.value = true
+  try {
+    const resposta = await fetch('/api/equipes/edicao-massa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ equipes: equipesPayload })
+    })
+    const dados = await resposta.json()
+    if (!resposta.ok || dados.erro) {
+      const detalhe = (dados.erros || []).map(e => `${e.equipe}: ${e.erro}`).join(' | ')
+      throw new Error([dados.erro || 'Não foi possível aplicar.', detalhe].filter(Boolean).join(' '))
+    }
+    sucesso.value = `${dados.equipes_editadas} equipe(s) atualizada(s).`
+    dialogSelecionadas.value = false
+    selecionadas.value = []
+    await carregarEquipes()
+    const aberta = equipes.value.find(item => item.id === painel.equipeId)
+    if (aberta && painel.modo === 'editar' && !painelAlterado.value) {
+      painel.equipeId = null
+      await abrirEquipe(aberta)
+    }
+  } catch (e) {
+    erro.value = e.message || 'Não foi possível aplicar.'
+  } finally {
+    salvandoMassa.value = false
+  }
+}
+
+// ============================================================
+// CARREGAR E PLANILHA
 // ============================================================
 
 // carregarEquipes é chamada depois de cada criação/edição; se duas chamadas
-// se cruzam, só a última disparada grava na tela (mesmo padrão de
-// carregarResumo, no Resumo) — senão uma resposta antiga pode apagar a vaga
-// que acabou de ser criada.
+// se cruzam, só a última disparada grava na tela.
 let sequenciaEquipes = 0
 
 async function carregarEquipes() {
   const minhaSequencia = ++sequenciaEquipes
-
   carregando.value = true
 
   try {
     const resposta = await fetch('/api/equipes')
     const dados = await resposta.json()
-
     if (!resposta.ok || dados.erro) {
       throw new Error(dados.erro || 'Erro ao carregar as equipes.')
     }
-
     if (minhaSequencia === sequenciaEquipes) {
       equipes.value = dados
+      const existentes = new Set(dados.map(equipe => equipe.id))
+      selecionadas.value = selecionadas.value.filter(id => existentes.has(id))
     }
   } catch (e) {
     if (minhaSequencia === sequenciaEquipes) {
@@ -1445,118 +1771,16 @@ async function carregarEquipes() {
   }
 }
 
-async function criarEquipe() {
-  erro.value = ''
-  sucesso.value = ''
-  salvandoEquipe.value = true
-
-  try {
-    const resposta = await fetch('/api/equipes', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        base: novaEquipeBase.value,
-        prefixo: novaEquipePrefixo.value
-      })
-    })
-
-    const dados = await resposta.json()
-
-    if (!resposta.ok || dados.erro) {
-      throw new Error(dados.erro || 'Erro ao criar a equipe.')
-    }
-
-    sucesso.value = `Equipe ${dados.equipe.prefixo} criada com sucesso.`
-    novaEquipePrefixo.value = ''
-
-    await carregarEquipes()
-    vagaEquipe.value = dados.equipe.id
-  } catch (e) {
-    erro.value = e.message || 'Erro ao criar a equipe.'
-  } finally {
-    salvandoEquipe.value = false
-  }
-}
-
-async function criarVaga() {
-  erro.value = ''
-  sucesso.value = ''
-  salvandoVaga.value = true
-
-  try {
-    const resposta = await fetch('/api/equipes/vagas', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        equipe_id: vagaEquipe.value,
-        funcao_er: vagaFuncao.value,
-        estrutura: (vagaEstrutura.value || '').toUpperCase(),
-        setor: vagaSetor.value,
-        supervisor: vagaSupervisor.value,
-        coordenador: vagaCoordenador.value
-      })
-    })
-
-    const dados = await resposta.json()
-
-    if (!resposta.ok || dados.erro) {
-      throw new Error(dados.erro || 'Erro ao criar a vaga.')
-    }
-
-    sucesso.value = `Vaga de ${dados.vaga.funcao_er} adicionada com sucesso.`
-    vagaFuncao.value = null
-
-    await carregarEquipes()
-  } catch (e) {
-    erro.value = e.message || 'Erro ao criar a vaga.'
-  } finally {
-    salvandoVaga.value = false
-  }
-}
-
-async function removerVaga(vaga) {
-  if (!await confirmar('Deseja realmente excluir esta vaga?')) {
-    return
-  }
-
-  erro.value = ''
-  sucesso.value = ''
-
-  try {
-    const resposta = await fetch(`/api/equipes/vagas/${vaga.id}`, {
-      method: 'DELETE'
-    })
-
-    const dados = await resposta.json()
-
-    if (!resposta.ok || dados.erro) {
-      throw new Error(dados.erro || 'Erro ao excluir a vaga.')
-    }
-
-    sucesso.value = 'Vaga excluída com sucesso.'
-
-    await carregarEquipes()
-  } catch (e) {
-    erro.value = e.message || 'Erro ao excluir a vaga.'
-  }
-}
-
 async function baixarPlanilha() {
   erro.value = ''
   baixandoPlanilha.value = true
 
   try {
     const resposta = await fetch('/api/equipes/planilha')
-
     if (!resposta.ok) {
       const dados = await resposta.json().catch(() => ({}))
       throw new Error(dados.erro || 'Erro ao gerar a planilha.')
     }
-
     const blob = await resposta.blob()
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -1576,10 +1800,8 @@ async function baixarPlanilha() {
 async function enviarPlanilha(rota) {
   const corpo = new FormData()
   corpo.append('arquivo', arquivoPlanilha.value)
-
   const resposta = await fetch(rota, { method: 'POST', body: corpo })
   const dados = await resposta.json()
-
   return { ok: resposta.ok, dados }
 }
 
@@ -1594,16 +1816,16 @@ async function analisarPlanilha() {
 
   try {
     const { ok, dados } = await enviarPlanilha('/api/equipes/planilha/previa')
-
     if (!ok || dados.erro) {
       throw new Error(dados.erro || 'Erro ao analisar a planilha.')
     }
-
     planoPlanilha.value = dados
     resetarOrdenacaoPlanilha()
+    dialogEnvioPlanilha.value = false
     dialogPlanilha.value = true
   } catch (e) {
     erro.value = e.message || 'Erro ao analisar a planilha.'
+    dialogEnvioPlanilha.value = false
   } finally {
     analisandoPlanilha.value = false
   }
@@ -1616,375 +1838,21 @@ async function aplicarPlanilha() {
 
   try {
     const { ok, dados } = await enviarPlanilha('/api/equipes/planilha/aplicar')
-
     if (!ok || dados.erro) {
       throw new Error(dados.erro || 'Erro ao aplicar a planilha.')
     }
-
     sucesso.value =
       `Planilha aplicada: ${dados.criadas} equipe(s) criada(s), ` +
       `${dados.editadas} editada(s), ${dados.excluidas} excluída(s).`
-
     dialogPlanilha.value = false
     planoPlanilha.value = null
     arquivoPlanilha.value = null
-
+    preencherPainel(null, {})
     await carregarEquipes()
   } catch (e) {
     erro.value = e.message || 'Erro ao aplicar a planilha.'
   } finally {
     aplicandoPlanilha.value = false
-  }
-}
-
-// setor/supervisor/coordenador sao por (equipe + disciplina): uma equipe
-// com mais de uma disciplina (ex.: Folguista com CONSTRUÇÃO e PODA) pode
-// legitimamente ter responsaveis diferentes por disciplina. Os formularios
-// de edicao rapida (individual e em massa) so tem UM campo para as tres,
-// entao salvar neles iguala todas as disciplinas ao valor mostrado — esta
-// funcao detecta o caso para avisar antes de deixar isso acontecer sem
-// querer.
-function temResponsavelDivergente(vagasPadrao) {
-  const responsavelPorTipo = new Map()
-  for (const vaga of vagasPadrao) {
-    if (!responsavelPorTipo.has(vaga.tipo)) {
-      responsavelPorTipo.set(
-        vaga.tipo,
-        `${vaga.setor || ''}|${vaga.supervisor || ''}|${vaga.coordenador || ''}`
-      )
-    }
-  }
-  return new Set(responsavelPorTipo.values()).size > 1
-}
-
-function abrirEdicaoEquipe(equipe) {
-  equipeEmEdicao.value = equipe
-  edicaoBase.value = equipe.base
-  edicaoPrefixo.value = equipe.prefixo
-
-  const vagasPadrao = (equipe.vagas || []).filter(vaga => !vaga.eh_extra)
-  edicaoSetor.value = vagasPadrao.find(vaga => vaga.setor)?.setor || null
-  edicaoSupervisor.value = vagasPadrao.find(vaga => vaga.supervisor)?.supervisor || ''
-  edicaoCoordenador.value = vagasPadrao.find(vaga => vaga.coordenador)?.coordenador || ''
-  edicaoResponsavelDivergente.value = temResponsavelDivergente(vagasPadrao)
-
-  const agrupado = new Map()
-  for (const vaga of vagasPadrao) {
-    const chave = `${vaga.tipo}|${vaga.funcao_er}`
-    agrupado.set(chave, (agrupado.get(chave) || 0) + 1)
-  }
-
-  edicaoVagas.value = [...agrupado.entries()].map(([chave, quantidade]) => {
-    const [tipo, funcao] = chave.split('|')
-    return { tipo, funcao, quantidade }
-  })
-
-  dialogEdicao.value = true
-}
-
-// calcula, por (tipo, funcao), quantas vagas OCUPADAS precisariam ser
-// removidas para a nova quantidade pedida caber — o backend bloqueia essa
-// redução sem confirmação explícita, então perguntamos aqui antes de enviar.
-function calcularConflitosReducao() {
-  const vagasPadrao = (equipeEmEdicao.value?.vagas || []).filter(
-    vaga => !vaga.eh_extra
-  )
-  const porChave = new Map()
-
-  for (const vaga of vagasPadrao) {
-    const chave = `${vaga.tipo}|${vaga.funcao_er}`
-    if (!porChave.has(chave)) {
-      porChave.set(chave, [])
-    }
-    porChave.get(chave).push(vaga)
-  }
-
-  const conflitos = []
-
-  for (const linha of edicaoVagas.value) {
-    const chave = `${linha.tipo}|${linha.funcao}`
-    const vagas = porChave.get(chave) || []
-    const livres = vagas.filter(vaga => !vaga.colaborador)
-    const ocupadas = vagas.filter(vaga => vaga.colaborador)
-    const reducao = vagas.length - Number(linha.quantidade || 0)
-
-    if (reducao > livres.length) {
-      const precisaRemover = reducao - livres.length
-      conflitos.push({
-        tipo: linha.tipo,
-        funcao: linha.funcao,
-        vagas: ocupadas.slice(0, precisaRemover)
-      })
-    }
-  }
-
-  return conflitos
-}
-
-async function salvarEdicaoEquipe(confirmarRemocoesIds = null) {
-  erro.value = ''
-  sucesso.value = ''
-
-  if (
-    edicaoResponsavelDivergente.value &&
-    !await confirmar(
-      'Esta equipe tem Setor/Supervisor/Coordenador diferentes entre ' +
-        'disciplinas. Salvar agora vai igualar todas as disciplinas ao ' +
-        'valor preenchido no formulário. Confirma?'
-    )
-  ) {
-    return
-  }
-
-  let confirmarRemocoes = confirmarRemocoesIds
-
-  if (!confirmarRemocoes) {
-    const conflitos = calcularConflitosReducao()
-
-    if (conflitos.length) {
-      const detalhe = conflitos
-        .map(
-          c =>
-            `${c.funcao} (${c.tipo}): ${c.vagas
-              .map(v => `${v.colaborador?.chapa} - ${v.colaborador?.nome}`)
-              .join(', ')}`
-        )
-        .join('\n')
-
-      if (
-        !await confirmar(
-          'Reduzir a quantidade vai remover colaborador(es) já alocado(s):\n\n' +
-            `${detalhe}\n\n` +
-            'Confirma a remoção desses colaboradores?'
-        )
-      ) {
-        return
-      }
-
-      confirmarRemocoes = conflitos.flatMap(c => c.vagas.map(v => v.id))
-    } else {
-      confirmarRemocoes = []
-    }
-  }
-
-  salvandoEdicao.value = true
-
-  try {
-    const resposta = await fetch(`/api/equipes/${equipeEmEdicao.value.id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        base: edicaoBase.value,
-        prefixo: edicaoPrefixo.value,
-        setor: edicaoSetor.value,
-        supervisor: edicaoSupervisor.value,
-        coordenador: edicaoCoordenador.value,
-        vagas: edicaoVagas.value.filter(linha => linha.funcao),
-        confirmar_remocoes: confirmarRemocoes
-      })
-    })
-
-    const dados = await resposta.json()
-
-    if (!resposta.ok || dados.erro) {
-      throw new Error(dados.erro || 'Erro ao atualizar a equipe.')
-    }
-
-    sucesso.value = `Equipe ${dados.equipe.prefixo} atualizada com sucesso.`
-    dialogEdicao.value = false
-
-    await carregarEquipes()
-  } catch (e) {
-    erro.value = e.message || 'Erro ao atualizar a equipe.'
-  } finally {
-    salvandoEdicao.value = false
-  }
-}
-
-// ============================================================
-// EDIÇÃO EM MASSA (várias equipes de uma vez, sem planilha)
-// ============================================================
-
-function linhaEdicaoMassa(equipe) {
-  const vagasPadrao = (equipe.vagas || []).filter(vaga => !vaga.eh_extra)
-
-  const agrupado = new Map()
-  for (const vaga of vagasPadrao) {
-    const chave = `${vaga.tipo}|${vaga.funcao_er}`
-    agrupado.set(chave, (agrupado.get(chave) || 0) + 1)
-  }
-
-  return {
-    base: equipe.base,
-    prefixo: equipe.prefixo,
-    setor: vagasPadrao.find(vaga => vaga.setor)?.setor || null,
-    supervisor: vagasPadrao.find(vaga => vaga.supervisor)?.supervisor || '',
-    coordenador: vagasPadrao.find(vaga => vaga.coordenador)?.coordenador || '',
-    responsavelDivergente: temResponsavelDivergente(vagasPadrao),
-    vagas: [...agrupado.entries()].map(([chave, quantidade]) => {
-      const [tipo, funcao] = chave.split('|')
-      return { tipo, funcao, quantidade }
-    }),
-    mostrarVagas: false
-  }
-}
-
-// inicializa a linha de edicao da equipe na primeira vez que ela aparece na
-// grade, e devolve sempre a MESMA referencia depois — assim os campos que o
-// usuario ja editou nao sao perdidos quando o filtro muda a lista
-function obterLinhaMassa(equipe) {
-  if (!edicaoMassa.value[equipe.id]) {
-    edicaoMassa.value[equipe.id] = linhaEdicaoMassa(equipe)
-  }
-  return edicaoMassa.value[equipe.id]
-}
-
-function aplicarCamposEmMassa() {
-  for (const equipe of equipesFiltradas.value) {
-    const linha = obterLinhaMassa(equipe)
-    if (bulkSetor.value !== null) {
-      linha.setor = bulkSetor.value
-    }
-    if (bulkSupervisor.value.trim()) {
-      linha.supervisor = bulkSupervisor.value
-    }
-    if (bulkCoordenador.value.trim()) {
-      linha.coordenador = bulkCoordenador.value
-    }
-  }
-}
-
-// mesma regra de calcularConflitosReducao, mas para uma equipe qualquer da
-// grade em massa, nao so a que esta no dialog de edicao individual
-function calcularConflitosReducaoEquipe(equipe, linha) {
-  const vagasPadrao = (equipe.vagas || []).filter(vaga => !vaga.eh_extra)
-  const porChave = new Map()
-
-  for (const vaga of vagasPadrao) {
-    const chave = `${vaga.tipo}|${vaga.funcao_er}`
-    if (!porChave.has(chave)) {
-      porChave.set(chave, [])
-    }
-    porChave.get(chave).push(vaga)
-  }
-
-  const conflitos = []
-
-  for (const l of linha.vagas) {
-    const chave = `${l.tipo}|${l.funcao}`
-    const vagas = porChave.get(chave) || []
-    const livres = vagas.filter(vaga => !vaga.colaborador)
-    const ocupadas = vagas.filter(vaga => vaga.colaborador)
-    const reducao = vagas.length - Number(l.quantidade || 0)
-
-    if (reducao > livres.length) {
-      const precisaRemover = reducao - livres.length
-      conflitos.push(...ocupadas.slice(0, precisaRemover))
-    }
-  }
-
-  return conflitos
-}
-
-async function salvarEdicaoMassa() {
-  erro.value = ''
-  sucesso.value = ''
-
-  const equipesDivergentes = equipesFiltradas.value.filter(
-    equipe => obterLinhaMassa(equipe).responsavelDivergente
-  )
-  if (equipesDivergentes.length) {
-    const lista = equipesDivergentes.map(e => `${e.prefixo} / ${e.base}`).join('\n')
-    if (
-      !await confirmar(
-        'Estas equipes têm Setor/Supervisor/Coordenador diferentes entre ' +
-          'disciplinas. Salvar agora vai igualar todas as disciplinas de ' +
-          `cada uma ao valor preenchido na grade:\n\n${lista}\n\nConfirma?`
-      )
-    ) {
-      return
-    }
-  }
-
-  const conflitosPorEquipe = new Map()
-  for (const equipe of equipesFiltradas.value) {
-    const linha = obterLinhaMassa(equipe)
-    const conflitos = calcularConflitosReducaoEquipe(equipe, linha)
-    if (conflitos.length) {
-      conflitosPorEquipe.set(equipe.id, conflitos)
-    }
-  }
-
-  if (conflitosPorEquipe.size) {
-    const detalhe = [...conflitosPorEquipe.entries()]
-      .map(([id, vagas]) => {
-        const equipe = equipesFiltradas.value.find(e => e.id === id)
-        return (
-          `${equipe?.prefixo}: ` +
-          vagas.map(v => `${v.colaborador?.chapa} - ${v.colaborador?.nome}`).join(', ')
-        )
-      })
-      .join('\n')
-
-    if (
-      !await confirmar(
-        'Reduzir a quantidade de vagas vai remover colaborador(es) já alocado(s):\n\n' +
-          `${detalhe}\n\n` +
-          'Confirma a remoção desses colaboradores em todas as equipes listadas?'
-      )
-    ) {
-      return
-    }
-  }
-
-  salvandoMassa.value = true
-
-  try {
-    const equipesPayload = equipesFiltradas.value.map(equipe => {
-      const linha = obterLinhaMassa(equipe)
-      return {
-        equipe_id: equipe.id,
-        base: linha.base,
-        prefixo: linha.prefixo,
-        setor: linha.setor,
-        supervisor: linha.supervisor,
-        coordenador: linha.coordenador,
-        vagas: linha.vagas.filter(v => v.funcao),
-        confirmar_remocoes: (conflitosPorEquipe.get(equipe.id) || []).map(v => v.id)
-      }
-    })
-
-    const resposta = await fetch('/api/equipes/edicao-massa', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ equipes: equipesPayload })
-    })
-
-    const dados = await resposta.json()
-
-    if (!resposta.ok || dados.erro) {
-      if (dados.erros?.length) {
-        erro.value =
-          `${dados.erro} ` +
-          dados.erros.map(e => `${e.equipe}: ${e.erro}`).join(' | ')
-      } else {
-        throw new Error(dados.erro || 'Erro ao salvar a edição em massa.')
-      }
-      return
-    }
-
-    sucesso.value = `${dados.equipes_editadas} equipe(s) atualizada(s) com sucesso.`
-    edicaoMassa.value = {}
-
-    await carregarEquipes()
-  } catch (e) {
-    erro.value = e.message || 'Erro ao salvar a edição em massa.'
-  } finally {
-    salvandoMassa.value = false
   }
 }
 
@@ -1998,126 +1866,73 @@ async function carregarSetoresNegocio() {
   }
 }
 
-async function liberarEquipe(equipe) {
-  const ocupadas = (equipe.vagas || []).filter(vaga => vaga.ocupada)
-
-  if (!ocupadas.length) {
-    return
-  }
-
-  if (
-    !await confirmar(
-      `Remover os ${ocupadas.length} colaboradores da equipe ${equipe.prefixo}?`
-    )
-  ) {
-    return
-  }
-
-  erro.value = ''
-  sucesso.value = ''
-
-  try {
-    const resposta = await fetch(`/api/equipes/${equipe.id}/membros`, {
-      method: 'DELETE'
-    })
-
-    const dados = await resposta.json()
-
-    if (!resposta.ok || dados.erro) {
-      throw new Error(dados.erro || 'Erro ao remover os colaboradores da equipe.')
-    }
-
-    sucesso.value = dados.mensagem
-
-    await carregarEquipes()
-  } catch (e) {
-    erro.value = e.message || 'Erro ao remover os colaboradores da equipe.'
-  }
-}
-
-async function removerEquipe(equipe) {
-  if (
-    !await confirmar(
-      `Deseja realmente excluir a equipe ${equipe.prefixo} e todas as suas vagas?`
-    )
-  ) {
-    return
-  }
-
-  erro.value = ''
-  sucesso.value = ''
-
-  try {
-    const resposta = await fetch(`/api/equipes/${equipe.id}`, {
-      method: 'DELETE'
-    })
-
-    const dados = await resposta.json()
-
-    if (!resposta.ok || dados.erro) {
-      throw new Error(dados.erro || 'Erro ao excluir a equipe.')
-    }
-
-    sucesso.value = `Equipe ${equipe.prefixo} excluída com sucesso.`
-
-    if (vagaEquipe.value === equipe.id) {
-      vagaEquipe.value = null
-    }
-
-    await carregarEquipes()
-  } catch (e) {
-    erro.value = e.message || 'Erro ao excluir a equipe.'
-  }
-}
-
-// ============================================================
-// INICIALIZAÇÃO
-// ============================================================
-
-watch(vagaEquipe, id => {
-  const equipe = equipes.value.find(item => item.id === id)
-
-  if (!equipe) {
-    return
-  }
-
-  vagaEstrutura.value =
-    (equipe.prefixo || '').trim().toUpperCase() === 'FOLGUISTA'
-      ? 'Folguista'
-      : 'Construção'
-})
-
-// Setor/Supervisor/Coordenador seguem a vaga que já existe para a equipe +
-// disciplina escolhidas. Trocar para uma combinação SEM vaga limpa os três:
-// antes eles ficavam com os valores da disciplina anterior, e a vaga nova
-// era criada com metadados de outra disciplina sem ninguém perceber. Só a
-// troca de seleção limpa — recarregar a lista de equipes (depois de criar
-// uma vaga, por exemplo) não apaga o que foi digitado.
-watch(
-  [vagaEquipe, vagaEstrutura, vagaExistenteDoTipo],
-  ([equipe, estrutura, vaga], [equipeAnterior, estruturaAnterior]) => {
-    if (vaga) {
-      vagaSetor.value = vaga.setor || ''
-      vagaSupervisor.value = vaga.supervisor || ''
-      vagaCoordenador.value = vaga.coordenador || ''
-      return
-    }
-
-    if (equipe !== equipeAnterior || estrutura !== estruturaAnterior) {
-      vagaSetor.value = ''
-      vagaSupervisor.value = ''
-      vagaCoordenador.value = ''
-    }
-  }
-)
-
 onMounted(() => {
   carregarSetoresNegocio()
+  carregarContasResponsaveis()
   carregarEquipes()
 })
 </script>
 
 <style scoped>
+.lista-equipes {
+  max-height: 68vh;
+}
+
+.item-ativo {
+  background: var(--realce, rgba(122, 26, 44, 0.08));
+  color: inherit;
+}
+
+.contagem-vagas {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.barra-selecao {
+  border-bottom: 1px solid var(--q-primary);
+}
+
+@media (min-width: 1024px) {
+  .painel-equipe {
+    position: sticky;
+    top: 70px;
+  }
+}
+
+.bloco-disciplina {
+  border: 1px solid var(--linha, rgba(0, 0, 0, 0.12));
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.linha-funcao + .linha-funcao {
+  margin-top: 6px;
+}
+
+.campo-quantidade {
+  width: 58px;
+}
+
+.campo-quantidade :deep(input) {
+  font-variant-numeric: tabular-nums;
+}
+
+.info-ocupadas {
+  width: 96px;
+  white-space: nowrap;
+}
+
+@media (max-width: 599px) {
+  .linha-funcao {
+    flex-wrap: wrap;
+  }
+
+  .info-ocupadas {
+    width: auto;
+  }
+}
+
 .tabela-detalhe :deep(th) {
   font-family: var(--fonte-ui);
   letter-spacing: 0.04em;
@@ -2139,4 +1954,3 @@ onMounted(() => {
   color: var(--q-primary);
 }
 </style>
-

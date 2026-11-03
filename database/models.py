@@ -140,6 +140,10 @@ class ComposicaoEquipe(Base):
     SETOR = Column(String, nullable=True)
     SUPERVISOR = Column(String, nullable=True)
     COORDENADOR = Column(String, nullable=True)
+    # conta de usuário dona do nome acima, quando há uma com esse nome
+    # (preenchido sozinho: ver database/responsaveis_vaga.py) — migrations/024
+    SUPERVISOR_ID = Column(Integer, ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True)
+    COORDENADOR_ID = Column(Integer, ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True)
 
     # None/"PADRAO" = vaga padrao (conta nas vagas da equipe/disciplina).
     # "EXTRA" = Folguista Extra: colaborador alocado sem aumentar a
@@ -218,6 +222,10 @@ class Usuario(Base):
     # dos Supervisores abaixo dele nesta arvore — nao ha nada gravado aqui
     # alem do proprio elo.
     RESPONSAVEL_ID = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+
+    # chapa da pessoa no cadastro de colaboradores (opcional): liga a conta ao
+    # cadastro e aos Indiretos — migrations/024
+    CHAPA = Column(String, nullable=True)
 
     CRIADO_EM = Column(DateTime(timezone=True), server_default=func.now())
     ULTIMO_ACESSO = Column(DateTime(timezone=True), nullable=True)

@@ -791,3 +791,199 @@ def test_lista_de_usuarios_igual_a_descricao_conta_por_conta(Sessao):
     assert em_lote == um_a_um
     gerente = next(d for d in em_lote if d["usuario"] == "gerente")
     assert gerente["vinculos"]["BASE"] == ["PEDREIRAS"]
+
+
+# ------------------------------------------------------------
+# Cadastro de vagas: responsáveis por disciplina
+# ------------------------------------------------------------
+
+def vagas_da_equipe(Sessao, equipe_id):
+    return ler(Sessao, lambda s: [
+        (c.ESTRUTURA, c.FUNÇÃO_ER, c.SETOR, c.SUPERVISOR, c.COORDENADOR, c.membro.CHAPA if c.membro else None)
+        for c in s.query(ComposicaoEquipe).filter_by(equipe_id=equipe_id).order_by(ComposicaoEquipe.id).all()
+    ])
+
+
+def test_criar_equipe_e_vagas_com_responsaveis_por_disciplina(Sessao):
+    admin = cliente(1)
+    r = admin.post("/api/equipes", json={"base": "BACABAL", "prefixo": "NOVA-01"})
+    assert r.status_code == 200, r.get_json()
+    equipe_id = r.get_json()["equipe"]["id"]
+
+    r = admin.put(f"/api/equipes/{equipe_id}", json={"base": "BACABAL", "prefixo": "NOVA-01", "vagas": [
+        {"tipo": "CONSTRUÇÃO", "funcao": "ELETRICISTA", "quantidade": 2, "setor": "GOMAN", "supervisor": "ANA", "coordenador": "BIA"},
+        {"tipo": "PODA", "funcao": "PODADOR", "quantidade": 1, "setor": "GSTC", "supervisor": "CAIO", "coordenador": "DITO"},
+    ]})
+    assert r.status_code == 200, r.get_json()
+    vagas = vagas_da_equipe(Sessao, equipe_id)
+    assert sorted(v[:5] for v in vagas) == sorted([
+        ("CONSTRUÇÃO", "ELETRICISTA", "GOMAN", "ANA", "BIA"),
+        ("CONSTRUÇÃO", "ELETRICISTA", "GOMAN", "ANA", "BIA"),
+        ("PODA", "PODADOR", "GSTC", "CAIO", "DITO"),
+    ])
+
+
+def test_editar_quantidade_mantem_quem_esta_alocado(Sessao):
+    admin = cliente(1)
+    equipe_id = ler(Sessao, lambda s: s.query(Equipe).filter_by(PREFIXO="BCB-01").one().id)
+    r = admin.put(f"/api/equipes/{equipe_id}", json={"base": "BACABAL", "prefixo": "BCB-01", "vagas": [
+        {"tipo": "CONSTRUÇÃO", "funcao": "ELETRICISTA", "quantidade": 3, "setor": "GOMAN", "supervisor": "ANA", "coordenador": ""},
+    ]})
+    assert r.status_code == 200, r.get_json()
+    vagas = vagas_da_equipe(Sessao, equipe_id)
+    assert len(vagas) == 3 and [v[5] for v in vagas].count("10") == 1
+    assert {v[2] for v in vagas} == {"GOMAN"}
+
+
+def test_reduzir_abaixo_das_ocupadas_so_com_confirmacao(Sessao):
+    admin = cliente(1)
+    equipe_id = ler(Sessao, lambda s: s.query(Equipe).filter_by(PREFIXO="BCB-01").one().id)
+    corpo = {"base": "BACABAL", "prefixo": "BCB-01", "vagas": [
+        {"tipo": "CONSTRUÇÃO", "funcao": "ELETRICISTA", "quantidade": 0},
+    ]}
+    admin.put(f"/api/equipes/{equipe_id}", json=corpo)
+    assert ocupante(Sessao, 1) == "10"
+
+    r = admin.put(f"/api/equipes/{equipe_id}", json={**corpo, "confirmar_remocoes": [1]})
+    assert r.status_code == 200, r.get_json()
+    assert all(v[5] is None for v in vagas_da_equipe(Sessao, equipe_id))
+
+
+def test_trocar_o_tipo_da_disciplina_mantem_quem_esta_alocado(Sessao):
+    admin = cliente(1)
+    equipe_id = ler(Sessao, lambda s: s.query(Equipe).filter_by(PREFIXO="BCB-01").one().id)
+    r = admin.put(f"/api/equipes/{equipe_id}", json={"base": "BACABAL", "prefixo": "BCB-01", "vagas": [
+        {"tipo": "PODA", "funcao": "ELETRICISTA", "quantidade": 2, "setor": "", "supervisor": "", "coordenador": ""},
+        {"tipo": "CONSTRUÇÃO", "funcao": "ELETRICISTA", "quantidade": 0},
+    ]})
+    assert r.status_code == 200, r.get_json()
+    vagas = vagas_da_equipe(Sessao, equipe_id)
+    assert {v[0] for v in vagas} == {"PODA"} and [v[5] for v in vagas].count("10") == 1
+
+
+def test_edicao_em_massa_respeita_responsaveis_por_disciplina(Sessao):
+    admin = cliente(1)
+    equipe_id = ler(Sessao, lambda s: s.query(Equipe).filter_by(PREFIXO="PED-01").one().id)
+    r = admin.post("/api/equipes/edicao-massa", json={"equipes": [{
+        "equipe_id": equipe_id, "base": "PEDREIRAS", "prefixo": "PED-01", "confirmar_remocoes": [],
+        "vagas": [{"tipo": "CONSTRUÇÃO", "funcao": "ELETRICISTA", "quantidade": 2,
+                   "setor": "GSTC", "supervisor": "NOVO SUP", "coordenador": ""}],
+    }]})
+    assert r.status_code == 200, r.get_json()
+    vagas = vagas_da_equipe(Sessao, equipe_id)
+    assert {(v[2], v[3]) for v in vagas} == {("GSTC", "NOVO SUP")} and ocupante(Sessao, 3) == "30"
+
+
+# ------------------------------------------------------------
+# Supervisor e coordenador da vaga ligados à conta
+# ------------------------------------------------------------
+
+def test_vaga_com_nome_de_conta_fica_ligada_e_renomear_a_conta_atualiza_a_vaga(Sessao):
+    s = Sessao()
+    s.add(Usuario(id=8, USUARIO="sup.ana", NOME="Ana Paula Souza", SENHA_HASH="x", NIVEL="SUPERVISOR", ATIVO=True))
+    s.commit()
+    vaga = s.query(ComposicaoEquipe).filter_by(id=1).one()
+    vaga.SUPERVISOR = "ANA PAULA SOUZA"
+    vaga.COORDENADOR = "ALGUEM SEM CONTA"
+    s.commit()
+    assert (vaga.SUPERVISOR_ID, vaga.COORDENADOR_ID) == (8, None)
+
+    s.query(Usuario).filter_by(id=8).one().NOME = "Ana Paula Souza Lima"
+    s.commit()
+    assert s.query(ComposicaoEquipe).filter_by(id=1).one().SUPERVISOR == "Ana Paula Souza Lima"
+    s.close()
+
+
+def test_conta_criada_depois_liga_as_vagas_que_ja_tinham_o_nome(Sessao):
+    s = Sessao()
+    s.query(ComposicaoEquipe).filter_by(id=2).one().COORDENADOR = "BRUNO COSTA"
+    s.commit()
+    s.add(Usuario(id=9, USUARIO="coord.bruno", NOME="Bruno Costa", SENHA_HASH="x", NIVEL="COORDENADOR", ATIVO=True))
+    s.commit()
+    assert s.query(ComposicaoEquipe).filter_by(id=2).one().COORDENADOR_ID == 9
+    s.close()
+
+
+def test_nome_de_conta_de_outro_nivel_nao_liga(Sessao):
+    s = Sessao()
+    s.query(ComposicaoEquipe).filter_by(id=1).one().SUPERVISOR = "GER"
+    s.commit()
+    assert s.query(ComposicaoEquipe).filter_by(id=1).one().SUPERVISOR_ID is None
+    s.close()
+
+
+def test_lista_de_contas_para_a_tela_de_vagas(Sessao):
+    r = cliente(1).get("/api/responsaveis-vaga")
+    assert r.status_code == 200
+    assert {c["usuario"] for c in r.get_json()} == {"sup", "semvinculo", "gerente"}
+    assert cliente(2).get("/api/responsaveis-vaga").status_code == 403
+
+
+def test_chapa_da_conta_precisa_existir_e_ser_unica(Sessao):
+    admin = cliente(1)
+    corpo = corpo_usuario("semvinculo", "SEM", "SUPERVISOR")
+    assert admin.put("/api/usuarios/3", json={**corpo, "chapa": "999"}).status_code == 400
+    r = admin.put("/api/usuarios/3", json={**corpo, "chapa": "40"})
+    assert r.status_code == 200 and r.get_json()["usuario"]["chapa"] == "40"
+    r = admin.put("/api/usuarios/2", json={**corpo_usuario("sup", "SUP", "SUPERVISOR"), "chapa": "40"})
+    assert r.status_code == 400 and "semvinculo" in r.get_json()["erro"]
+
+
+def test_script_troca_nome_curto_pelo_da_conta_unica(Sessao, monkeypatch, capsys):
+    from database import ligar_nomes_das_vagas
+    monkeypatch.setattr(ligar_nomes_das_vagas, "SessionLocal", Sessao)
+    s = Sessao()
+    s.add_all([
+        Usuario(id=8, USUARIO="a", NOME="Eddy Carlos Rocha", SENHA_HASH="x", NIVEL="SUPERVISOR", ATIVO=True),
+        Usuario(id=9, USUARIO="b", NOME="Luis Alberto", SENHA_HASH="x", NIVEL="SUPERVISOR", ATIVO=True),
+        Usuario(id=10, USUARIO="c", NOME="Luis Bento", SENHA_HASH="x", NIVEL="SUPERVISOR", ATIVO=True),
+    ])
+    s.flush()
+    s.query(ComposicaoEquipe).filter_by(id=1).one().SUPERVISOR = "EDDY"
+    s.query(ComposicaoEquipe).filter_by(id=2).one().SUPERVISOR = "LUIS"
+    s.commit()
+    s.close()
+
+    ligar_nomes_das_vagas.main(aplicar=False)
+    assert ler(Sessao, lambda s: s.query(ComposicaoEquipe).filter_by(id=1).one().SUPERVISOR) == "EDDY"
+
+    ligar_nomes_das_vagas.main(aplicar=True)
+    s = Sessao()
+    v1, v2 = s.query(ComposicaoEquipe).filter_by(id=1).one(), s.query(ComposicaoEquipe).filter_by(id=2).one()
+    assert (v1.SUPERVISOR, v1.SUPERVISOR_ID) == ("Eddy Carlos Rocha", 8)
+    assert (v2.SUPERVISOR, v2.SUPERVISOR_ID) == ("LUIS", None)
+    s.close()
+    assert "mais de uma conta" in capsys.readouterr().out
+
+
+def test_gerente_com_todos_mostra_so_todos_e_o_formulario_recebe_so_o_vinculo_dele(Sessao):
+    s = Sessao()
+    s.add_all([
+        Usuario(id=6, USUARIO="coord", NOME="COORD", SENHA_HASH="x", NIVEL="COORDENADOR", ATIVO=True, RESPONSAVEL_ID=4),
+        Usuario(id=7, USUARIO="sup2", NOME="SUP 2", SENHA_HASH="x", NIVEL="SUPERVISOR", ATIVO=True, RESPONSAVEL_ID=6),
+    ])
+    s.flush()
+    s.add_all([
+        VinculoUsuario(usuario_id=7, TIPO="BASE", VALOR="PEDREIRAS"),
+        VinculoUsuario(usuario_id=7, TIPO="SETOR", VALOR="GSTC"),
+        VinculoUsuario(usuario_id=4, TIPO="BASE", VALOR="TODOS"),
+    ])
+    s.commit()
+    s.close()
+    gerente = next(u for u in cliente(1).get("/api/usuarios").get_json() if u["usuario"] == "gerente")
+    assert gerente["vinculos"]["BASE"] == ["TODOS"]
+    assert gerente["vinculos"]["SETOR"] == ["GSTC"]
+    assert gerente["vinculos_proprios"] == {"BASE": ["TODOS"]}
+
+
+def test_coordenador_da_vaga_aceita_conta_de_gerente(Sessao):
+    s = Sessao()
+    s.query(Usuario).filter_by(id=4).one().NOME = "Cesar Augusto Leal"
+    s.commit()
+    vaga = s.query(ComposicaoEquipe).filter_by(id=1).one()
+    vaga.COORDENADOR = "CESAR AUGUSTO LEAL"
+    vaga.SUPERVISOR = "CESAR AUGUSTO LEAL"
+    s.commit()
+    assert (vaga.COORDENADOR_ID, vaga.SUPERVISOR_ID) == (4, None)
+    s.close()
+    assert "gerente" in {c["usuario"] for c in cliente(1).get("/api/responsaveis-vaga").get_json()}
