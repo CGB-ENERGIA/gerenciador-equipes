@@ -366,6 +366,10 @@ def _uniao_dos_escopos(escopos):
     for escopo in escopos:
         for tipo, valores in escopo.items():
             uniao.setdefault(tipo, set()).update(valores)
+    # TODOS já cobre o resto: listar as bases junto só repete
+    for tipo, valores in uniao.items():
+        if VALOR_TODOS in valores:
+            uniao[tipo] = {VALOR_TODOS}
 
     resultado = {
         VINCULO_BASE: sorted(uniao.get(VINCULO_BASE, ())),
@@ -392,7 +396,14 @@ def descrever_usuario(usuario, incluir_vinculos=True, session=None):
         ),
         "responsavel_id": usuario.RESPONSAVEL_ID,
         "responsavel_nome": usuario.responsavel.NOME if usuario.responsavel else None,
+        "chapa": usuario.CHAPA,
     }
+    # só os da própria conta: é o que o formulário de edição mostra e grava.
+    # Em Gerente/Coordenador, "vinculos" é a soma com os de quem responde a
+    # ele (só para exibir); gravar a soma prenderia na conta o vínculo dos
+    # supervisores, mesmo depois que eles saíssem.
+    if incluir_vinculos:
+        dados["vinculos_proprios"] = _vinculos_por_tipo(usuario)
 
     if incluir_vinculos:
         if usuario.NIVEL in NIVEIS_HIERARQUICOS and session is not None:
@@ -458,7 +469,9 @@ def descrever_usuarios(session, usuarios):
             "ignora_vinculos": bool(NIVEIS.get(usuario.NIVEL, {}).get("ignora_vinculos", False)),
             "responsavel_id": usuario.RESPONSAVEL_ID,
             "responsavel_nome": responsavel.NOME if responsavel else None,
+            "chapa": usuario.CHAPA,
         }
+        dados["vinculos_proprios"] = _vinculos_por_tipo(usuario)
         if usuario.NIVEL in NIVEIS_HIERARQUICOS:
             pessoas = [usuario] + supervisores_abaixo(usuario.id, set())
             dados["escopos"] = [_vinculos_por_tipo(p) for p in pessoas]

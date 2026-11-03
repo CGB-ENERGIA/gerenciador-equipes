@@ -487,6 +487,14 @@
                 :options="opcoesResponsaveis"
               />
 
+              <q-input
+                v-model="formulario.chapa"
+                outlined
+                dense
+                label="Chapa no cadastro (opcional)"
+                hint="Liga a conta à pessoa no cadastro de colaboradores e nos Indiretos"
+              />
+
               <q-toggle
                 v-model="formulario.ativo"
                 label="Usuário ativo"
@@ -1022,7 +1030,8 @@ const formulario = reactive({
   nivel: '',
   ativo: true,
   vinculos: {},
-  responsavel_id: null
+  responsavel_id: null,
+  chapa: ''
 })
 
 const opcoesNiveis = computed(() =>
@@ -1235,11 +1244,11 @@ function preencher(pessoa) {
   formulario.nivel = pessoa?.nivel || niveis.value[0]?.valor || ''
   formulario.ativo = pessoa ? pessoa.ativo : true
   formulario.responsavel_id = pessoa?.responsavel_id ?? null
+  formulario.chapa = pessoa?.chapa || ''
+  // os da própria conta, não a soma com os subordinados que a lista mostra
+  const proprios = pessoa?.vinculos_proprios || pessoa?.vinculos || {}
   formulario.vinculos = Object.fromEntries(
-    Object.keys(tiposVinculo.value).map(tipo => [
-      tipo,
-      [...(pessoa?.vinculos?.[tipo] || [])]
-    ])
+    Object.keys(tiposVinculo.value).map(tipo => [tipo, [...(proprios[tipo] || [])]])
   )
 }
 
@@ -1268,7 +1277,8 @@ async function salvar() {
       nivel: formulario.nivel,
       ativo: formulario.ativo,
       vinculos: nivelIgnoraVinculos.value ? {} : formulario.vinculos,
-      responsavel_id: nivelDoResponsavel.value ? formulario.responsavel_id : null
+      responsavel_id: nivelDoResponsavel.value ? formulario.responsavel_id : null,
+      chapa: (formulario.chapa || '').trim()
     }
 
     if (formulario.senha) {

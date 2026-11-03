@@ -46,6 +46,9 @@ from database.models import (
 
 app = Flask(__name__, static_folder=None, template_folder=None)
 
+# liga supervisor/coordenador das vagas às contas a cada gravação
+import database.responsaveis_vaga  # noqa: E402,F401
+
 # rotas da página Indiretos (alocação nominal do pessoal indireto)
 from indiretos import bp as bp_indiretos, subsetor_efetivo  # noqa: E402
 
@@ -1276,6 +1279,8 @@ def obter_equipes():
                     "setor": composicao.SETOR or "",
                     "supervisor": composicao.SUPERVISOR or "",
                     "coordenador": composicao.COORDENADOR or "",
+                    "supervisor_id": composicao.SUPERVISOR_ID,
+                    "coordenador_id": composicao.COORDENADOR_ID,
                     "eh_extra": eh_extra(composicao),
                     "ocupada": colaborador is not None,
                     "colaborador": {
@@ -1319,6 +1324,33 @@ def obter_equipes():
 # API - CADASTRO DE EQUIPES E VAGAS
 # ============================================================
 
+@app.route("/api/responsaveis-vaga", methods=["GET"])
+@exige_permissao(auth.GERENCIAR_VAGAS)
+def listar_responsaveis_vaga():
+    """Contas que podem ser escolhidas como supervisor ou coordenador de uma
+    vaga, na tela de Cadastro de Vagas (ver database/responsaveis_vaga.py)."""
+    session = SessionLocal()
+    try:
+        contas = (
+            session.query(Usuario)
+            .filter(Usuario.NIVEL.in_([auth.NIVEL_SUPERVISOR, auth.NIVEL_COORDENADOR, auth.NIVEL_GERENTE]))
+            .order_by(Usuario.NOME)
+            .all()
+        )
+        return jsonify([
+            {
+                "id": conta.id,
+                "nome": conta.NOME,
+                "usuario": conta.USUARIO,
+                "nivel": conta.NIVEL,
+                "ativo": bool(conta.ATIVO),
+            }
+            for conta in contas
+        ])
+    finally:
+        session.close()
+
+
 @app.route("/api/equipes", methods=["POST"])
 @exige_permissao(auth.GERENCIAR_VAGAS)
 def criar_equipe():
@@ -1361,6 +1393,25 @@ def criar_equipe():
         return jsonify({"erro": "Não foi possível criar a equipe."}), 500
     finally:
         session.close()
+
+
+def responsaveis_por_tipo(vagas, padrao):
+    """Setor, supervisor e coordenador de cada disciplina, para a planilha
+    virtual de criar_equipe/atualizar_equipe e da edição em massa.
+
+    São por equipe + disciplina: uma vaga do corpo que traz qualquer um dos
+    três define os da disciplina dela; sem eles, vale 'padrao' (os campos da
+    equipe inteira, que é como a edição em massa manda)."""
+    por_tipo = {}
+    for vaga in vagas or []:
+        if not any(chave in vaga for chave in ("setor", "supervisor", "coordenador")):
+            continue
+        tipo = str(vaga.get("tipo", "")).strip().upper() or TIPO_EQUIPE_PADRAO
+        por_tipo.setdefault(tipo, tuple(
+            str(vaga.get(chave) or "").strip()
+            for chave in ("setor", "supervisor", "coordenador")
+        ))
+    return lambda tipo: por_tipo.get(tipo, padrao)
 
 
 @app.route("/api/equipes/<int:equipe_id>", methods=["PUT"])
@@ -1436,15 +1487,19 @@ def atualizar_equipe(equipe_id):
             if not por_tipo or not funcoes:
                 return jsonify({"erro": "Informe ao menos uma vaga."}), 400
 
+            responsaveis = responsaveis_por_tipo(
+                dados.get("vagas"), (setor or "", supervisor or "", coordenador or "")
+            )
             linhas = []
             for tipo, vagas_tipo in por_tipo.items():
+                setor_tipo, supervisor_tipo, coordenador_tipo = responsaveis(tipo)
                 linha = {
                     "BASE": equipe.BASE,
                     "PREFIXO": equipe.PREFIXO,
                     COLUNA_TIPO_EQUIPE: tipo,
-                    COLUNA_SETOR: setor or "",
-                    COLUNA_SUPERVISOR: supervisor or "",
-                    COLUNA_COORDENADOR: coordenador or "",
+                    COLUNA_SETOR: setor_tipo,
+                    COLUNA_SUPERVISOR: supervisor_tipo,
+                    COLUNA_COORDENADOR: coordenador_tipo,
                     "AÇÃO": "editar",
                 }
                 for funcao in funcoes:
@@ -1588,14 +1643,16 @@ def editar_equipes_em_massa():
             equipe.BASE = base
             equipe.PREFIXO = prefixo
 
+            responsaveis = responsaveis_por_tipo(item.get("vagas"), (setor, supervisor, coordenador))
             for tipo, vagas_tipo in por_tipo.items():
+                setor_tipo, supervisor_tipo, coordenador_tipo = responsaveis(tipo)
                 linha = {
                     "BASE": base,
                     "PREFIXO": prefixo,
                     COLUNA_TIPO_EQUIPE: tipo,
-                    COLUNA_SETOR: setor,
-                    COLUNA_SUPERVISOR: supervisor,
-                    COLUNA_COORDENADOR: coordenador,
+                    COLUNA_SETOR: setor_tipo,
+                    COLUNA_SUPERVISOR: supervisor_tipo,
+                    COLUNA_COORDENADOR: coordenador_tipo,
                     "AÇÃO": "editar",
                 }
                 for funcao, quantidade in vagas_tipo.items():
@@ -4961,6 +5018,10 @@ def dados_do_formulario_usuario(dados):
     except (TypeError, ValueError):
         return None, "Responsável inválido."
 
+    chapa = str(dados.get("chapa") or "").strip()
+    if chapa.endswith(".0"):
+        chapa = chapa[:-2]
+
     return {
         "usuario": nome_usuario,
         "nome": nome,
@@ -4968,7 +5029,25 @@ def dados_do_formulario_usuario(dados):
         "ativo": bool(dados.get("ativo", True)),
         "vinculos": dados.get("vinculos") or {},
         "responsavel_id": responsavel_id,
+        "chapa": chapa or None,
     }, None
+
+
+def validar_chapa_usuario(session, chapa, usuario_id=None):
+    """A chapa da conta (opcional) precisa existir no cadastro e não estar em
+    outra conta. Devolve a mensagem de erro, ou None."""
+    if not chapa:
+        return None
+    if not session.query(Colaborador.id).filter(Colaborador.CHAPA == chapa).first():
+        return f"A chapa {chapa} não está no cadastro de colaboradores."
+    outra = (
+        session.query(Usuario)
+        .filter(Usuario.CHAPA == chapa, Usuario.id != usuario_id)
+        .first()
+    )
+    if outra:
+        return f"A chapa {chapa} já está na conta {outra.USUARIO}."
+    return None
 
 
 def validar_responsavel(session, nivel, responsavel_id, usuario_id=None):
@@ -5069,7 +5148,7 @@ def criar_usuario():
 
         problema_responsavel = validar_responsavel(
             session, campos["nivel"], campos["responsavel_id"]
-        )
+        ) or validar_chapa_usuario(session, campos["chapa"])
         if problema_responsavel:
             return jsonify({"erro": problema_responsavel}), 400
 
@@ -5080,6 +5159,7 @@ def criar_usuario():
             ATIVO=campos["ativo"],
             SENHA_HASH=auth.gerar_hash_senha(senha),
             RESPONSAVEL_ID=campos["responsavel_id"],
+            CHAPA=campos["chapa"],
         )
         session.add(usuario)
         session.flush()
@@ -5172,7 +5252,7 @@ def atualizar_usuario(usuario_id):
 
         problema_responsavel = validar_responsavel(
             session, campos["nivel"], campos["responsavel_id"], usuario_id=usuario_id
-        )
+        ) or validar_chapa_usuario(session, campos["chapa"], usuario_id)
         if problema_responsavel:
             return jsonify({"erro": problema_responsavel}), 400
 
@@ -5181,6 +5261,7 @@ def atualizar_usuario(usuario_id):
         usuario.NIVEL = campos["nivel"]
         usuario.ATIVO = campos["ativo"]
         usuario.RESPONSAVEL_ID = campos["responsavel_id"]
+        usuario.CHAPA = campos["chapa"]
 
         if senha:
             usuario.SENHA_HASH = auth.gerar_hash_senha(senha)
