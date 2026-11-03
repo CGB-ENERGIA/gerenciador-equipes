@@ -214,6 +214,14 @@ def _corpo():
     return dados if isinstance(dados, dict) else {}
 
 
+def problema_da_base(setor, base):
+    """Base digitada errado viraria uma base nova sem ninguém perceber. Só as
+    siglas conhecidas valem; GERAL só na Gerência (gerente sem base)."""
+    if base in BASES_PADRAO or (setor == SETOR_GERENCIA and base == BASE_GERENCIA):
+        return None
+    return f"BASE '{base}' não existe. Use uma destas: {', '.join(BASES_PADRAO)}."
+
+
 def _colaborador(session, chapa):
     return session.query(Colaborador).filter(Colaborador.CHAPA == chapa).first()
 
@@ -253,6 +261,9 @@ def alocar_indireto():
 
     if not (chapa and setor and base and responsavel):
         return jsonify({"erro": "Informe indireto, setor, base e responsável."}), 400
+    problema_base = problema_da_base(setor, base)
+    if problema_base:
+        return jsonify({"erro": problema_base}), 400
 
     session = SessionLocal()
     try:
@@ -819,6 +830,10 @@ def analisar_planilha_indiretos(arquivo, session):
         if faltam:
             erro(f"Falta preencher: {', '.join(faltam)}.")
             continue
+        problema_base = problema_da_base(setor, base)
+        if problema_base:
+            erro(problema_base)
+            continue
         pessoa = colaboradores.get(chapa)
         if not pessoa:
             erro("CHAPA INDIRETO não encontrada no cadastro.")
@@ -885,6 +900,9 @@ def analisar_planilha_indiretos(arquivo, session):
 
 
 def _arquivo_enviado():
+    """Chamada fora do try das rotas de propósito: arquivo acima do limite de
+    upload estoura aqui (413), e o except genérico da rota o transformaria em
+    erro 500 sem explicação, em vez da mensagem do limite (ver app.py)."""
     arquivo = request.files.get("arquivo")
     if not arquivo:
         raise ValueError("Arquivo não enviado.")
@@ -894,9 +912,13 @@ def _arquivo_enviado():
 @bp.route("/api/indiretos/planilha/previa", methods=["POST"])
 @auth.exige_administrador
 def prever_planilha_indiretos():
+    try:
+        arquivo = _arquivo_enviado()
+    except ValueError as erro:
+        return jsonify({"erro": str(erro)}), 400
     session = SessionLocal()
     try:
-        return jsonify(analisar_planilha_indiretos(_arquivo_enviado(), session))
+        return jsonify(analisar_planilha_indiretos(arquivo, session))
     except ValueError as erro:
         return jsonify({"erro": str(erro)}), 400
     except Exception as erro:
@@ -911,9 +933,13 @@ def prever_planilha_indiretos():
 def aplicar_planilha_indiretos():
     """Reanalisa (o banco pode ter mudado desde a prévia) e grava. Com
     qualquer erro na planilha, não grava nada."""
+    try:
+        arquivo = _arquivo_enviado()
+    except ValueError as erro:
+        return jsonify({"erro": str(erro)}), 400
     session = SessionLocal()
     try:
-        plano = analisar_planilha_indiretos(_arquivo_enviado(), session)
+        plano = analisar_planilha_indiretos(arquivo, session)
         if plano["erros"]:
             return jsonify({"erro": "Corrija os erros da planilha antes de aplicar.", **plano}), 400
 

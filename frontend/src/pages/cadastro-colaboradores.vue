@@ -708,7 +708,9 @@ async function salvar() {
     }
 
     dialogAberto.value = false
-    sucesso.value = editando.value ? 'Colaborador atualizado.' : 'Colaborador cadastrado.'
+    sucesso.value = editando.value
+      ? dados.mensagem || 'Colaborador atualizado.'
+      : 'Colaborador cadastrado.'
     await carregarColaboradores()
   } catch (e) {
     erroFormulario.value = e.message || 'Não foi possível salvar o colaborador.'

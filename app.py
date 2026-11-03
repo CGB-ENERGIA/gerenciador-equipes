@@ -3869,13 +3869,13 @@ def editar_colaborador_cadastro(chapa):
         nova_chapa = campos.pop("chapa")
         alocacao = session.query(MembroEquipe).filter(MembroEquipe.CHAPA == chapa).first()
 
-        # mesma regra de /api/colaboradores/tipo-funcao: a alocação nunca é
-        # desfeita em silêncio
+        # virou indireto: sai da vaga e fica livre para o setor (ver liberar_vagas)
+        liberadas = []
         if campos["TIPO_FUNÇÃO"] == "INDIRETO" and alocacao:
-            return jsonify({
-                "erro": "Este colaborador está alocado em uma equipe. "
-                        "Remova a alocação antes de marcá-lo como indireto."
-            }), 409
+            liberadas = liberar_vagas(session, [chapa])
+            alocacao = None
+        if campos["TIPO_FUNÇÃO"] == "DIRETO":
+            apagar_alocacao_de_indireto(session, [chapa])
 
         if nova_chapa != chapa:
             if session.query(Colaborador).filter(Colaborador.CHAPA == nova_chapa).first():
@@ -3932,7 +3932,8 @@ def editar_colaborador_cadastro(chapa):
 
         return jsonify({
             "sucesso": True,
-            "mensagem": "Colaborador atualizado.",
+            "mensagem": "Colaborador atualizado." + texto_vagas_liberadas(liberadas),
+            "vagas_liberadas": liberadas,
             "colaborador": _json_cadastro_colaborador(colaborador, rateios, bool(alocacao)),
         })
     except IntegrityError:
@@ -4121,16 +4122,12 @@ def editar_colaboradores_massa():
         if len(colaboradores) != len(chapas):
             return jsonify({"erro": "Algum colaborador selecionado não existe mais. Atualize a lista."}), 404
 
-        # mesma regra da edição individual: alocação nunca é desfeita em silêncio
+        # mesma regra da edição individual: quem vira indireto sai da vaga
+        liberadas = []
         if alteracoes.get("TIPO_FUNÇÃO") == "INDIRETO":
-            alocadas = chapas_alocadas_do_banco(session)
-            bloqueados = [c.NOME for c in colaboradores if str(c.CHAPA).strip() in alocadas]
-            if bloqueados:
-                return jsonify({
-                    "erro": f"{len(bloqueados)} colaborador(es) selecionado(s) estão alocados e "
-                            "não podem virar indiretos: remova a alocação antes. "
-                            f"Ex.: {', '.join(bloqueados[:3])}."
-                }), 409
+            liberadas = liberar_vagas(session, chapas)
+        elif alteracoes.get("TIPO_FUNÇÃO") == "DIRETO":
+            apagar_alocacao_de_indireto(session, chapas)
 
         # só a seção mudou: o TIPO_CCUSTO continua vindo dos rateios atuais
         rateios_atuais = {}
@@ -4164,7 +4161,9 @@ def editar_colaboradores_massa():
         session.commit()
         return jsonify({
             "sucesso": True,
-            "mensagem": f"{len(colaboradores)} colaborador(es) atualizado(s).",
+            "mensagem": f"{len(colaboradores)} colaborador(es) atualizado(s)."
+                        + texto_vagas_liberadas(liberadas),
+            "vagas_liberadas": liberadas,
             "total": len(colaboradores),
         })
     except Exception as erro:
@@ -4237,6 +4236,53 @@ def excluir_colaboradores_massa():
 # ============================================================
 # ALOCAR COLABORADOR
 # ============================================================
+
+def liberar_vagas(session, chapas):
+    """Tira estas chapas das vagas que ocupam e devolve onde cada uma estava
+    ({chapa, nome, equipe, base}), para avisar quem fez a mudança. Usada quando
+    alguém vira INDIRETO: indireto não ocupa vaga, então a vaga fica livre e a
+    pessoa fica livre para ser alocada no setor dela, na página Indiretos."""
+    membros = (
+        session.query(MembroEquipe)
+        .options(
+            joinedload(MembroEquipe.composicao).joinedload(ComposicaoEquipe.equipe),
+            joinedload(MembroEquipe.colaborador),
+        )
+        .filter(MembroEquipe.CHAPA.in_(list(chapas)))
+        .all()
+    )
+    liberadas = []
+    for membro in membros:
+        equipe = membro.composicao.equipe if membro.composicao else None
+        liberadas.append({
+            "chapa": membro.CHAPA,
+            "nome": membro.colaborador.NOME if membro.colaborador else "",
+            "equipe": equipe.PREFIXO if equipe else "",
+            "base": equipe.BASE if equipe else "",
+        })
+        session.delete(membro)
+    session.flush()
+    return liberadas
+
+
+def apagar_alocacao_de_indireto(session, chapas):
+    """Quem vira DIRETO deixa de ter setor nos Indiretos. Guardar a alocação
+    fazia a pessoa voltar ao setor antigo se um dia voltasse a ser indireta;
+    assim ela volta como "sem setor", com a base do cadastro, para ser alocada
+    de novo. Quem respondia a ela nos Indiretos continua respondendo."""
+    session.query(AlocacaoIndireto).filter(
+        AlocacaoIndireto.CHAPA.in_(list(chapas))
+    ).delete(synchronize_session=False)
+
+
+def texto_vagas_liberadas(liberadas):
+    if not liberadas:
+        return ""
+    if len(liberadas) == 1:
+        vaga = liberadas[0]
+        return f" A vaga na equipe {vaga['equipe']} ({vaga['base']}) foi liberada."
+    return f" {len(liberadas)} vagas foram liberadas."
+
 
 def retirar_afastamento(colaborador):
     """Quem ocupa uma vaga volta a estar ativo: vale para qualquer caminho que
@@ -4600,8 +4646,8 @@ def reativar_colaborador():
 # base/equipe/vaga, editável na tela Banco de Dados > Colaboradores. Quem
 # vira INDIRETO sai do conjunto disponível pra alocação (ver
 # obter_colaboradores, obter_pessoas_nao_alocadas e alocar_colaborador) --
-# por isso, se estiver ocupando uma vaga no momento, a troca é recusada
-# (a alocação não é desfeita em silêncio).
+# por isso, se estiver ocupando uma vaga no momento, a vaga é liberada e a
+# resposta diz qual era (ver liberar_vagas).
 
 @app.route("/api/colaboradores/tipo-funcao", methods=["POST"])
 @exige_permissao(auth.VER_EQUIPES)
@@ -4633,20 +4679,17 @@ def alterar_tipo_funcao_colaborador():
             if erro_acesso:
                 return jsonify({"erro": erro_acesso}), 403
 
+            liberadas = []
             if (colaborador.TIPO_FUNÇÃO or "").strip().upper() != tipo_funcao:
                 if tipo_funcao == "INDIRETO":
-                    # alocacao existente e respeitada: nunca e desfeita em
-                    # silencio; a pessoa precisa ser desalocada antes
-                    alocacao_existente = (
-                        session.query(MembroEquipe)
-                        .filter(MembroEquipe.CHAPA == chapa)
-                        .first()
-                    )
-                    if alocacao_existente:
-                        return jsonify({
-                            "erro": "Este colaborador está alocado em uma equipe. "
-                                    "Remova a alocação antes de marcá-lo como indireto."
-                        }), 409
+                    # indireto não ocupa vaga: ela é liberada, o que exige o
+                    # mesmo acesso que remover alguém dela
+                    erro_acesso = erro_de_acesso_ao_colaborador(session, chapa, auth.OPERACAO_REMOVER)
+                    if erro_acesso:
+                        return jsonify({"erro": erro_acesso}), 403
+                    liberadas = liberar_vagas(session, [chapa])
+                else:
+                    apagar_alocacao_de_indireto(session, [chapa])
 
                 colaborador.TIPO_FUNÇÃO = tipo_funcao
                 # login, e nao o nome completo: cabe melhor nas tabelas
@@ -4658,7 +4701,8 @@ def alterar_tipo_funcao_colaborador():
 
         return jsonify({
             "sucesso": True,
-            "mensagem": "Tipo de função atualizado.",
+            "mensagem": "Tipo de função atualizado." + texto_vagas_liberadas(liberadas),
+            "vagas_liberadas": liberadas,
             "colaborador": {
                 "chapa": chapa,
                 "nome": colaborador.NOME or "",
@@ -4749,9 +4793,8 @@ def remover_colaborador():
 # ============================================================
 #
 # Diferente de alocar/remover: aqui a vaga já está ocupada e o colaborador
-# atual é substituído por outro, numa única operação. Existe para o Analista
-# poder ajustar alocações dentro das equipes vinculadas a ele (vinculo
-# OPERACAO=EDITAR) sem precisar das permissões de ALOCAR/REMOVER separadas.
+# atual é substituído por outro, numa única operação. Pede a permissão
+# EDITAR_ALOCACAO (não ALOCAR + REMOVER) e o vínculo com a vaga.
 
 @app.route("/api/equipes/editar-alocacao", methods=["POST"])
 @exige_permissao(auth.VER_EQUIPES)
@@ -4971,14 +5014,13 @@ def listar_usuarios():
 
         bloqueadas = chaves_bloqueadas(session)
 
-        resposta = []
-        for u in usuarios:
-            dados_usuario = auth.descrever_usuario(u, session=session)
+        # todos de uma vez: conta por conta eram mais de 80 consultas ao banco
+        resposta = auth.descrever_usuarios(session, usuarios)
+        for u, dados_usuario in zip(usuarios, resposta):
             dados_usuario["bloqueado"] = (
                 u.USUARIO.upper() in bloqueadas
                 or chave_troca_senha(u.id) in bloqueadas
             )
-            resposta.append(dados_usuario)
 
         return jsonify(resposta)
     except Exception as erro:

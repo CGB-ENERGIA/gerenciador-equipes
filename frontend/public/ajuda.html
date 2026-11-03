@@ -280,8 +280,9 @@
       <div class="nav-group-label">Uso do dia a dia</div>
       <a class="nav-item" href="#resumo" data-alvo="resumo">3. Resumo</a>
       <a class="nav-item" href="#banco-dados" data-alvo="banco-dados">4. Banco de Dados</a>
+      <a class="nav-item" href="#indiretos" data-alvo="indiretos">5. Indiretos</a>
       <div class="nav-group-label">Administração</div>
-      <a class="nav-item" href="#administracao" data-alvo="administracao">5. Vagas, Usuários e Colaboradores</a>
+      <a class="nav-item" href="#administracao" data-alvo="administracao">6. Vagas, Usuários e Colaboradores</a>
       <div class="nav-group-label">Referência</div>
       <a class="nav-item" href="#legenda" data-alvo="legenda">Legenda de cores</a>
     </nav>
@@ -292,7 +293,7 @@
 
     <!-- 1. INÍCIO -->
     <section class="bloco" id="inicio">
-      <div class="kicker">1 de 5</div>
+      <div class="kicker">1 de 6</div>
       <h1>Início</h1>
       <p class="lede">Antes de conhecer as telas, entenda o que é o sistema, para quem ele foi feito e qual problema resolve.</p>
 
@@ -332,7 +333,7 @@
 
       <div class="linha-cartoes" style="margin-top:16px;">
         <div class="cartao"><h5>O que é</h5><p style="margin:0;font-size:.9rem;color:var(--tinta-fraca);">Um sistema web para gerenciar as equipes técnicas de campo da CGB Energia — eletricistas, podadores, técnicos de linha viva e outras funções.</p></div>
-        <div class="cartao"><h5>Para quem é</h5><p style="margin:0;font-size:.9rem;color:var(--tinta-fraca);">Gestores, coordenadores, supervisores e analistas — cada um enxergando apenas as bases, equipes e setores pelos quais é responsável.</p></div>
+        <div class="cartao"><h5>Para quem é</h5><p style="margin:0;font-size:.9rem;color:var(--tinta-fraca);">Gerentes, coordenadores e supervisores — cada um atuando apenas nas bases, equipes e setores do seu vínculo. O Administrador vê e altera tudo.</p></div>
       </div>
 
       <p style="margin-top:16px;">O que ele faz: antes, o controle de quem está em qual equipe, quais vagas existem e onde falta ou sobra gente era feito em planilhas soltas. O sistema centraliza tudo isso e adiciona uma camada de controle de acesso — cada usuário só enxerga as bases, equipes e setores pelos quais é responsável.</p>
@@ -349,6 +350,7 @@
               <li>Clique em <b>LOGIN</b>.</li>
               <li>O sistema abre direto na tela <b>Resumo</b> — as demais opções do menu aparecem de acordo com a permissão de cada usuário.</li>
             </ol>
+            <p class="muted" style="font-size:.9rem;">Conta ainda sem vínculo (sem base, equipe ou setor definidos) entra, mas vê só um aviso: os dados aparecem depois que o Administrador definir o vínculo. Trocar a senha encerra a sessão nos outros computadores em que a conta estiver aberta.</p>
           </div>
         </div>
         <div class="lado-visual">
@@ -372,7 +374,7 @@
 
     <!-- 2. VISÃO GERAL -->
     <section class="bloco" id="visao-geral">
-      <div class="kicker">2 de 5</div>
+      <div class="kicker">2 de 6</div>
       <h1>Visão geral do sistema</h1>
       <p class="lede">Com o que o sistema faz em mente, veja como as telas se encaixam e por que este guia segue essa ordem.</p>
 
@@ -394,7 +396,7 @@
         <div class="camadas">
           <div class="camada dia-a-dia">
             <h4>Uso do dia a dia</h4>
-            <ul><li><b>Resumo</b> — consultar a situação das equipes</li><li><b>Banco de Dados</b> — alocar e trocar pessoas</li></ul>
+            <ul><li><b>Resumo</b> — consultar a situação das equipes</li><li><b>Banco de Dados</b> — alocar e trocar pessoas</li><li><b>Indiretos</b> — consultar setores, responsáveis e o organograma</li></ul>
           </div>
           <div class="camada admin">
             <h4>Administração do sistema</h4>
@@ -406,7 +408,7 @@
 
     <!-- 3. RESUMO -->
     <section class="bloco" id="resumo">
-      <div class="kicker">3 de 5 · uso do dia a dia</div>
+      <div class="kicker">3 de 6 · uso do dia a dia</div>
       <h1>Resumo</h1>
       <p class="lede">A tela de consulta gerencial. Responde à pergunta "como estão as equipes agora?" sem que o gestor precise mexer em nada.</p>
 
@@ -494,7 +496,7 @@
 
     <!-- 4. BANCO DE DADOS -->
     <section class="bloco" id="banco-dados">
-      <div class="kicker">4 de 5 · uso do dia a dia</div>
+      <div class="kicker">4 de 6 · uso do dia a dia</div>
       <h1>Banco de Dados</h1>
       <p class="lede">A tela operacional principal. Enquanto o Resumo só mostra números, é aqui que de fato se aloca, troca ou remove um colaborador de uma vaga.</p>
 
@@ -518,6 +520,16 @@
               <li>Confirme no diálogo que abre.</li>
               <li>A vaga passa de "LIVRE" para "ALOCADO".</li>
             </ol>
+          </div>
+
+          <div class="section-block">
+            <h3>Regras que valem ao alocar e trocar</h3>
+            <ul class="elementos">
+              <li>Você só altera as vagas cobertas pelo seu vínculo. Pode trazer ou substituir alguém que está em outra base ou equipe: o sistema mostra de onde a pessoa sai e pede confirmação.</li>
+              <li>Na lista de pessoas, quem está afastado aparece como <b>Afastado</b>. Ao confirmar a alocação ou a troca, o afastamento é retirado.</li>
+              <li>Afastar alguém que ocupa uma vaga tira a pessoa dela, por isso exige a mesma permissão de remover.</li>
+              <li>Indiretos não entram em vagas de equipe: eles ficam na página Indiretos.</li>
+            </ul>
           </div>
         </div>
         <div class="lado-visual">
@@ -568,14 +580,85 @@
             <tr><td>Função cadastrada</td><td>Cargo dela no RH</td></tr>
             <tr><td>Vaga</td><td>Função que a vaga exige</td></tr>
             <tr><td>Status</td><td><span class="selo selo-verde">ALOCADO</span> vaga ocupada · <span class="selo selo-cinza">LIVRE</span> sem ninguém · <span class="selo selo-ambar">EXTRA</span> além da vaga prevista</td></tr>
+            <tr><td>Na escolha da pessoa</td><td><b>Livre</b> sem vaga · <b>Afastado</b> afastado (o afastamento sai ao confirmar) · <b>Alocado em…</b> está em outra equipe (pede confirmação para trazer)</td></tr>
           </table>
         </div>
       </div>
     </section>
 
-    <!-- 5. ADMINISTRAÇÃO DO SISTEMA -->
+    <!-- 5. INDIRETOS -->
+    <section class="bloco" id="indiretos">
+      <div class="kicker">5 de 6 · uso do dia a dia</div>
+      <h1>Indiretos</h1>
+      <p class="lede">O pessoal que não ocupa vaga de equipe — administrativo, almoxarifado, frota, SESMT e outros — organizado por setor, base e responsável.</p>
+
+      <div class="split">
+        <div class="lado-texto">
+          <h3>O que você vê nessa tela</h3>
+          <ul class="elementos">
+            <li>Um cartão por setor, com as pessoas separadas por base e por responsável</li>
+            <li>Subsetores (por exemplo, Oficina dentro da Frota), cada um com sua cor</li>
+            <li>Quem ainda está <b>sem setor</b>, com a base que vem do cadastro</li>
+            <li>O <b>organograma</b> de cada setor e o <b>Organograma geral</b>, com os gerentes no topo e os setores abaixo de cada um</li>
+            <li>Botão de exportar o organograma como imagem em alta resolução (4K)</li>
+          </ul>
+          <p class="muted" style="font-size:.9rem;">Todos com vínculo podem consultar. Alocar, mover, trocar responsável, arrastar no organograma e usar a planilha são ações do Administrador.</p>
+
+          <div class="section-block">
+            <h3>Passo a passo: organizar o organograma</h3>
+            <ol class="passos">
+              <li>Abra o organograma do setor, ou o Organograma geral.</li>
+              <li>Arraste uma pessoa sobre outra: no meio ou embaixo, ela passa a responder a essa pessoa; em cima, fica acima dela; no lado direito, vira assessoria.</li>
+              <li>No Organograma geral, arraste um setor inteiro, ou só um responsável e sua equipe, para baixo de um gerente ou ao lado dele (apoio).</li>
+              <li>Clique em uma pessoa para marcar as bases pelas quais ela responde.</li>
+            </ol>
+          </div>
+
+          <div class="section-block">
+            <h3>Regras</h3>
+            <ul class="elementos">
+              <li>A cadeia de responsáveis não pode fechar um ciclo (A responde a B e B responde a A): o sistema recusa, no arraste, no formulário e na planilha.</li>
+              <li>Na planilha, a BASE precisa ser uma das siglas conhecidas (BCB, BDC, ITM, PDS, PDT, STI, SPOT STI). GERAL vale só para a Gerência.</li>
+              <li>Quem vira <b>Direto</b> deixa de ter setor nos Indiretos. Se voltar a ser Indireto, aparece como "sem setor", para ser alocado de novo.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="lado-visual">
+          <div class="janela">
+            <div class="janela-barra"><span class="bolinha"></span><span class="bolinha"></span><span class="bolinha"></span></div>
+            <div class="cabecalho-app">Indiretos<div class="cab-spacer"></div>
+              <span class="cab-icone">⟳</span><span class="cab-icone">◐</span><span class="cab-icone">☰</span>
+              <span class="cab-usuario">Pedro Lima</span>
+            </div>
+            <div class="janela-corpo">
+              <div class="barra-filtros">
+                <span class="chip">Base</span><span class="chip">Setor</span><span class="chip">Subsetor</span><span class="chip">Responsável</span>
+                <button class="btn" style="margin-left:8px;">Organograma geral</button>
+              </div>
+              <div class="cartao">
+                <h5>FROTA · 24 pessoas</h5>
+                <div class="tabela-scroll">
+                  <table class="tabela">
+                    <tr><th>Base</th><th>Responsável</th><th>Pessoas</th></tr>
+                    <tr><td>BCB</td><td>Supervisor de frota</td><td>14</td></tr>
+                    <tr><td>PDT</td><td>Encarregado de oficina</td><td>6</td></tr>
+                    <tr><td>ITM</td><td>Encarregado de oficina</td><td>4</td></tr>
+                  </table>
+                </div>
+              </div>
+              <div class="cartao">
+                <h5>Sem setor</h5>
+                <span class="chip">3 pessoas aguardando alocação</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. ADMINISTRAÇÃO DO SISTEMA -->
     <section class="bloco" id="administracao">
-      <div class="kicker">5 de 5</div>
+      <div class="kicker">6 de 6</div>
       <h1>Administração do sistema</h1>
       <div class="faixa-restrita">
         <span class="selo-restrito">Acesso restrito</span>
@@ -583,7 +666,7 @@
       </div>
 
       <div class="subtela" id="vagas">
-        <h2>5.1 Vagas</h2>
+        <h2>6.1 Vagas</h2>
         <div class="split">
           <div class="lado-texto">
             <p>É aqui que a estrutura das equipes nasce. Antes de qualquer alocação ser possível no Banco de Dados, alguém precisa ter passado por aqui e criado a equipe com suas vagas.</p>
@@ -615,10 +698,18 @@
       </div>
 
       <div class="subtela" id="usuarios">
-        <h2>5.2 Usuários</h2>
+        <h2>6.2 Usuários</h2>
         <div class="split">
           <div class="lado-texto">
             <p>Aqui se controla quem pode entrar no sistema, o que cada nível de acesso pode fazer, e sobre quais bases, equipes ou setores cada pessoa tem permissão de atuar — o "vínculo" dela.</p>
+            <ul class="elementos">
+              <li>Cada vínculo preenchido (Base, Tipo de equipe, Setor, Equipe) restringe uma dimensão; os que ficam em branco não restringem.</li>
+              <li><b>TODOS</b> em Base, Tipo de equipe ou Setor libera aquela dimensão inteira. Com TODOS nos três, a pessoa vê a empresa toda sem ser Administrador.</li>
+              <li>Sem nenhum vínculo, a conta não vê dados.</li>
+              <li>Gerente e Coordenador herdam o alcance de quem responde a eles (campo "Responde a").</li>
+              <li>Só um Administrador altera, exclui ou libera outro Administrador, e só ele muda as permissões dos níveis.</li>
+              <li>Ao excluir alguém que tem pessoas respondendo a ela, o sistema avisa quantas ficam sem responsável.</li>
+            </ul>
           </div>
           <div class="lado-visual">
             <div class="janela">
@@ -635,7 +726,7 @@
                       <tr><th>Nível</th><th>Ver resumo</th><th>Alocar</th><th>Cadastrar vagas</th><th>Gerenciar usuários</th></tr>
                       <tr><td>Administrador</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
                       <tr><td>Coordenador</td><td>✓</td><td>✓</td><td>—</td><td>—</td></tr>
-                      <tr><td>Supervisor</td><td>✓</td><td>—</td><td>—</td><td>—</td></tr>
+                      <tr><td>Supervisor</td><td>✓</td><td>✓</td><td>—</td><td>—</td></tr>
                     </table>
                   </div>
                 </div>
@@ -654,13 +745,14 @@
       </div>
 
       <div class="subtela" id="colaboradores">
-        <h2>5.3 Colaboradores</h2>
+        <h2>6.3 Colaboradores</h2>
         <div class="split">
           <div class="lado-texto">
             <p>Aqui o Administrador mantém o cadastro das pessoas: <b>incluir</b> um colaborador novo, <b>editar</b> qualquer informação (inclusive a chapa) ou <b>remover</b>. Chapa, nome, tipo de função (direto ou indireto) e ao menos um rateio são obrigatórios; função, seção, situação e admissão são opcionais.</p>
-            <p>Ao editar, os rateios informados substituem os anteriores, e um colaborador alocado só pode ser marcado como indireto depois de ser retirado da vaga. Ao remover alguém alocado, o sistema avisa que a vaga será liberada.</p>
+            <p>Ao editar, os rateios informados substituem os anteriores. Marcar como <b>indireto</b> alguém que ocupa uma vaga libera a vaga, e a mensagem diz qual era; a pessoa fica livre para ser alocada no setor dela, na página Indiretos. Marcar como <b>direto</b> tira a pessoa do setor de indiretos. Ao remover alguém alocado, o sistema avisa que a vaga será liberada.</p>
+            <p>Trocar só a <b>chapa</b>, com o nome igual, mantém a vaga, o setor nos Indiretos e quem responde à pessoa. Trocar chapa e nome ao mesmo tempo é recusado: se for outra pessoa, faça um novo cadastro. Ao excluir quem tem pessoas respondendo a ele nos Indiretos, o sistema avisa quantas ficam sem responsável antes de confirmar.</p>
             <p>Na pesquisa dá para colar <b>várias chapas de uma vez</b> (separadas por espaço, vírgula ou quebra de linha); o sistema mostra só essas pessoas e avisa as que não existem. Marcando vários colaboradores, aparece uma barra para <b>editar em massa</b> (só o que for preenchido é alterado) ou <b>excluir selecionados</b> (as vagas de quem estiver alocado são liberadas).</p>
-            <p>No topo da página fica a <b>importação por planilha</b>: baixe o modelo, preencha uma linha por colaborador e envie. O sistema mostra uma prévia (novos, atualizados, rateios e erros) antes de aplicar, e quem não está na planilha <b>não é alterado nem excluído</b>.</p>
+            <p>No topo da página fica a <b>importação por planilha</b>: baixe o modelo, preencha uma linha por colaborador e envie. O sistema mostra uma prévia (novos, atualizados, rateios, vagas liberadas e erros) antes de aplicar, e quem não está na planilha <b>não é alterado nem excluído</b>.</p>
             <p class="muted" style="font-size:.9rem;">O afastamento continua sendo marcado no Banco de Dados, porque exige justificativa.</p>
           </div>
           <div class="lado-visual">
@@ -697,7 +789,7 @@
       <div class="legenda-grid">
         <div class="legenda-item"><span class="amostra" style="background:var(--positivo);"></span><div><b>Verde</b><span>Alocado, ocupado, completo ou superávit</span></div></div>
         <div class="legenda-item"><span class="amostra" style="background:var(--neutro);"></span><div><b>Cinza</b><span>Livre ou vago</span></div></div>
-        <div class="legenda-item"><span class="amostra" style="background:var(--folguista);"></span><div><b>Âmbar</b><span>Extra (folguista)</span></div></div>
+        <div class="legenda-item"><span class="amostra" style="background:var(--folguista);"></span><div><b>Âmbar</b><span>Extra (folguista) ou afastado</span></div></div>
         <div class="legenda-item"><span class="amostra" style="background:var(--negativo);"></span><div><b>Vermelho</b><span>Déficit ou erro</span></div></div>
         <div class="legenda-item"><span class="amostra" style="background:var(--marca);"></span><div><b>Vinho</b><span>Ações principais e cabeçalhos</span></div></div>
       </div>

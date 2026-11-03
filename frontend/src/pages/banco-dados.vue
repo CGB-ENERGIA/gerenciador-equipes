@@ -2733,7 +2733,7 @@ async function salvarTipoFuncao() {
     }
 
     // virou indireto: o diálogo de alocar/afastar deixa de fazer sentido
-    // pra essa pessoa (o backend recusa a troca se ela estiver alocada)
+    // pra essa pessoa (se estava numa vaga, o backend libera a vaga)
     if (dados.colaborador.tipo_funcao === 'INDIRETO') {
       dialogAlocacao.value = false
     }

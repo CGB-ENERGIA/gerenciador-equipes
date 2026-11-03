@@ -358,8 +358,12 @@ def escopo_efetivo(session, usuario):
     tela de Usuarios o alcance de um Gerente/Coordenador de forma legivel —
     quem decide o que ele ve e escopos_efetivos, nao isto aqui.
     """
+    return _uniao_dos_escopos(escopos_efetivos(session, usuario))
+
+
+def _uniao_dos_escopos(escopos):
     uniao = {}
-    for escopo in escopos_efetivos(session, usuario):
+    for escopo in escopos:
         for tipo, valores in escopo.items():
             uniao.setdefault(tipo, set()).update(valores)
 
@@ -404,6 +408,67 @@ def descrever_usuario(usuario, incluir_vinculos=True, session=None):
     return dados
 
 
+def descrever_usuarios(session, usuarios):
+    """descrever_usuario para a lista inteira de uma vez (tela de Usuários).
+
+    Chamar descrever_usuario conta por conta fazia uma consulta de permissões
+    por pessoa, outra para o nome do responsável e, para cada Gerente e
+    Coordenador, uma por nível da árvore abaixo dele: mais de 80 idas ao banco
+    com ~40 contas. Aqui as permissões vêm numa consulta só e a hierarquia é
+    montada com a própria lista. 'usuarios' precisa ser a lista completa, com
+    os vínculos já carregados, para a árvore sair certa.
+    """
+    personalizadas = {}
+    for nivel, permissao in session.query(NivelPermissao.NIVEL, NivelPermissao.PERMISSAO).all():
+        personalizadas.setdefault(nivel, set()).add(permissao)
+
+    por_id = {u.id: u for u in usuarios}
+    filhos = {}
+    for u in sorted(usuarios, key=lambda x: x.id):
+        if u.RESPONSAVEL_ID is not None:
+            filhos.setdefault(u.RESPONSAVEL_ID, []).append(u)
+
+    # mesma regra de _supervisores_subordinados, sem ir ao banco
+    def supervisores_abaixo(usuario_id, visitados):
+        if usuario_id in visitados:
+            return []
+        visitados.add(usuario_id)
+        achados = []
+        for filho in filhos.get(usuario_id, []):
+            if filho.NIVEL == NIVEL_SUPERVISOR:
+                achados.append(filho)
+            else:
+                achados.extend(supervisores_abaixo(filho.id, visitados))
+        return achados
+
+    resultado = []
+    for usuario in usuarios:
+        responsavel = por_id.get(usuario.RESPONSAVEL_ID)
+        permissoes = personalizadas.get(usuario.NIVEL)
+        if permissoes is None:
+            permissoes = set(NIVEIS.get(usuario.NIVEL, {}).get("permissoes", ()))
+        dados = {
+            "id": usuario.id,
+            "usuario": usuario.USUARIO,
+            "nome": usuario.NOME,
+            "nivel": usuario.NIVEL,
+            "nivel_rotulo": NIVEIS.get(usuario.NIVEL, {}).get("rotulo", usuario.NIVEL),
+            "ativo": bool(usuario.ATIVO),
+            "permissoes": sorted(permissoes),
+            "ignora_vinculos": bool(NIVEIS.get(usuario.NIVEL, {}).get("ignora_vinculos", False)),
+            "responsavel_id": usuario.RESPONSAVEL_ID,
+            "responsavel_nome": responsavel.NOME if responsavel else None,
+        }
+        if usuario.NIVEL in NIVEIS_HIERARQUICOS:
+            pessoas = [usuario] + supervisores_abaixo(usuario.id, set())
+            dados["escopos"] = [_vinculos_por_tipo(p) for p in pessoas]
+            dados["vinculos"] = _uniao_dos_escopos(dados["escopos"])
+        else:
+            dados["vinculos"] = _vinculos_por_tipo(usuario)
+        resultado.append(dados)
+    return resultado
+
+
 def descrever_sessao(usuario, session):
     """A conta logada, com o que ela pode de fato nesta sessao.
 
@@ -419,11 +484,6 @@ def descrever_sessao(usuario, session):
         dados["permissoes"] = [p for p in dados["permissoes"] if p == GERENCIAR_USUARIOS]
 
     return dados
-
-
-def tem_permissao(permissao, usuario=None):
-    usuario = usuario or usuario_logado()
-    return bool(usuario) and permissao in usuario["permissoes"]
 
 
 def pode_atuar_na_base_e_tipo(usuario, base, tipo_equipe, setor=None, equipe_id=None):
@@ -475,17 +535,23 @@ def _escopo_cobre(vinculos, base, tipo_equipe, setor, equipe_id):
     if not (bases or tipos or setores or equipes):
         return False
 
+    # "Construção" e "CONSTRUÇÃO" são a mesma disciplina: compara sem
+    # diferença de maiúsculas, como a tela já mostra
+    def maiusculas(valores):
+        return {str(v).strip().upper() for v in valores}
+
     bases, tipos, setores = (
-        set() if VALOR_TODOS in valores else valores for valores in (bases, tipos, setores)
+        set() if VALOR_TODOS in maiusculas(valores) else maiusculas(valores)
+        for valores in (bases, tipos, setores)
     )
 
-    if bases and base not in bases:
+    if bases and str(base or "").strip().upper() not in bases:
         return False
 
-    if tipos and tipo_equipe not in tipos:
+    if tipos and str(tipo_equipe or "").strip().upper() not in tipos:
         return False
 
-    if setores and setor not in setores:
+    if setores and str(setor or "").strip().upper() not in setores:
         return False
 
     if equipes and (equipe_id is None or str(equipe_id) not in equipes):

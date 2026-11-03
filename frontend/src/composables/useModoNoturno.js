@@ -6,14 +6,27 @@ const CHAVE_ARMAZENAMENTO = 'gerenciadorEquipes_modoNoturno'
 export function useModoNoturno() {
   const modoNoturno = ref(Dark.isActive)
 
+  // Navegador que bloqueia o armazenamento local (aba anônima, política da
+  // empresa) faz o localStorage dar erro. Isto roda antes da primeira tela
+  // (boot/tema.js): sem o try, o sistema inteiro deixava de abrir. Sem
+  // armazenamento, o modo escolhido só não fica salvo.
   function alternarModoNoturno() {
     modoNoturno.value = !modoNoturno.value
     Dark.set(modoNoturno.value)
-    localStorage.setItem(CHAVE_ARMAZENAMENTO, String(modoNoturno.value))
+    try {
+      localStorage.setItem(CHAVE_ARMAZENAMENTO, String(modoNoturno.value))
+    } catch {
+      // segue no modo escolhido, só não lembra na próxima visita
+    }
   }
 
   function restaurarModoNoturno() {
-    const modoSalvo = localStorage.getItem(CHAVE_ARMAZENAMENTO)
+    let modoSalvo = null
+    try {
+      modoSalvo = localStorage.getItem(CHAVE_ARMAZENAMENTO)
+    } catch {
+      return
+    }
 
     if (modoSalvo !== null) {
       modoNoturno.value = modoSalvo === 'true'

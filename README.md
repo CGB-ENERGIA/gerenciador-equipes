@@ -27,7 +27,7 @@ Sistema para administrar equipes, vagas, colaboradores e alocações.
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
 2. Copie `.env.example` para `.env` e preencha `DATABASE_URL` e `SECRET_KEY`.

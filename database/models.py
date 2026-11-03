@@ -9,7 +9,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import backref, relationship
+from sqlalchemy.orm import backref, relationship, validates
 
 from database.base import Base
 
@@ -131,6 +131,8 @@ class ComposicaoEquipe(Base):
 
     FUNÇÃO_ER = Column(String, nullable=False)
 
+    # disciplina da vaga (TIPO EQUIPE). Gravada sempre em maiúsculas: havia
+    # "Construção" e "CONSTRUÇÃO" convivendo — ver migrations/023
     ESTRUTURA = Column(String, nullable=False)
 
     # informados por disciplina (equipe + TIPO EQUIPE), nao por equipe inteira.
@@ -155,6 +157,10 @@ class ComposicaoEquipe(Base):
         uselist=False,
         cascade="all, delete-orphan"
     )
+
+    @validates("ESTRUTURA")
+    def _estrutura_em_maiusculas(self, _chave, valor):
+        return str(valor).strip().upper() if valor is not None else valor
 
 
 class MembroEquipe(Base):

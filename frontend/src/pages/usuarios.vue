@@ -115,10 +115,10 @@
               <template #avatar>
                 <q-icon name="info" color="primary" />
               </template>
-              O <strong>Analista</strong> (e o Supervisor) só ganham as
-              operações de Alocar/Editar/Remover marcadas aqui de fato dentro
-              do escopo definido nos vínculos de cada usuário (Setor, Equipe,
-              Base), no formulário abaixo.
+              Gerente, Coordenador e Supervisor só fazem as operações de
+              Alocar/Editar/Remover marcadas aqui nas vagas cobertas pelos
+              vínculos de cada usuário (Base, Tipo de equipe, Setor, Equipe),
+              no formulário abaixo. Sem nenhum vínculo, a conta não vê dados.
             </q-banner>
           </q-card-section>
         </q-card>
