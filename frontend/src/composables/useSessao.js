@@ -162,8 +162,6 @@ export function useSessao() {
 // Permissões, iguais às do auth.py
 export const PODE_VER_RESUMO = 'ver_resumo'
 export const PODE_VER_EQUIPES = 'ver_equipes'
-export const PODE_ALOCAR = 'alocar'
-export const PODE_EDITAR_ALOCACAO = 'editar_alocacao'
 export const PODE_REMOVER_ALOCACAO = 'remover_alocacao'
 export const PODE_GERENCIAR_VAGAS = 'gerenciar_vagas'
 export const PODE_GERENCIAR_USUARIOS = 'gerenciar_usuarios'

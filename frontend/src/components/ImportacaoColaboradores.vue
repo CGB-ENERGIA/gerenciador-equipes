@@ -277,6 +277,44 @@
                     />
                   </th>
                 </tr>
+                <tr v-else-if="detalheImportacao === 'vagas'">
+                  <th class="text-left col-ordenavel" @click="ordenarDetalhe('chapa')">
+                    Chapa
+                    <q-icon
+                      v-if="ordenacaoDetalhe.coluna === 'chapa'"
+                      :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                      size="14px"
+                      class="q-ml-xs"
+                    />
+                  </th>
+                  <th class="text-left col-ordenavel" @click="ordenarDetalhe('nome')">
+                    Nome
+                    <q-icon
+                      v-if="ordenacaoDetalhe.coluna === 'nome'"
+                      :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                      size="14px"
+                      class="q-ml-xs"
+                    />
+                  </th>
+                  <th class="text-left col-ordenavel" @click="ordenarDetalhe('equipe')">
+                    Equipe
+                    <q-icon
+                      v-if="ordenacaoDetalhe.coluna === 'equipe'"
+                      :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                      size="14px"
+                      class="q-ml-xs"
+                    />
+                  </th>
+                  <th class="text-left col-ordenavel" @click="ordenarDetalhe('base')">
+                    Base
+                    <q-icon
+                      v-if="ordenacaoDetalhe.coluna === 'base'"
+                      :name="ordenacaoDetalhe.direcao === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+                      size="14px"
+                      class="q-ml-xs"
+                    />
+                  </th>
+                </tr>
                 <tr v-else>
                   <th class="text-left col-ordenavel" @click="ordenarDetalhe('linha')">
                     Linha
@@ -405,6 +443,15 @@
                 </tr>
               </tbody>
 
+              <tbody v-else-if="detalheImportacao === 'vagas'">
+                <tr v-for="(item, indice) in vagasOrdenadas" :key="indice">
+                  <td>{{ item.chapa }}</td>
+                  <td>{{ item.nome || '—' }}</td>
+                  <td>{{ item.equipe || '—' }}</td>
+                  <td>{{ item.base || '—' }}</td>
+                </tr>
+              </tbody>
+
               <tbody v-else>
                 <tr
                   v-for="(item, indice) in errosOrdenados"
@@ -471,6 +518,12 @@ const chipsImportacao = computed(() => {
       total: resumo.rateios_novos || 0
     },
     {
+      tipo: 'vagas',
+      cor: resumo.vagas_liberadas ? 'warning' : 'grey-5',
+      rotulo: 'vaga(s) liberada(s)',
+      total: resumo.vagas_liberadas || 0
+    },
+    {
       tipo: 'erros',
       cor: resumo.erros?.length ? 'negative' : 'grey-5',
       rotulo: 'com erro',
@@ -483,6 +536,7 @@ const TITULOS_DETALHE_IMPORTACAO = {
   criados: 'Colaboradores novos',
   atualizados: 'Colaboradores atualizados (de → para)',
   rateios: 'Rateios novos',
+  vagas: 'Viraram indiretos e saem da vaga',
   erros: 'Linhas com erro'
 }
 
@@ -531,6 +585,12 @@ const EXTRATORES_DETALHE = {
     nome: item => item.nome,
     rateio: item => item.rateio,
     grpccusto: item => item.grpccusto
+  },
+  vagas: {
+    chapa: item => item.chapa,
+    nome: item => item.nome,
+    equipe: item => item.equipe,
+    base: item => item.base
   },
   erros: {
     linha: item => item.linha,
@@ -606,6 +666,10 @@ const atualizadosLinhasFlatOrdenadas = computed(() => {
 
 const rateiosOrdenados = computed(() =>
   ordenarDetalheImportacao(resumoColaboradores.value?.detalhes_rateios || [])
+)
+
+const vagasOrdenadas = computed(() =>
+  ordenarDetalheImportacao(resumoColaboradores.value?.detalhes_vagas_liberadas || [])
 )
 
 const errosOrdenados = computed(() =>
@@ -700,7 +764,8 @@ async function aplicarPlanilhaColaboradores() {
     sucesso.value =
       `Cadastro atualizado: ${dados.criados} novo(s), ` +
       `${dados.atualizados} atualizado(s), ${dados.rateios_novos} rateio(s) novo(s), ` +
-      `${dados.rateios_removidos || 0} rateio(s) removido(s).`
+      `${dados.rateios_removidos || 0} rateio(s) removido(s)` +
+      (dados.vagas_liberadas ? `, ${dados.vagas_liberadas} vaga(s) liberada(s).` : '.')
     arquivoColaboradores.value = null
     resumoColaboradores.value = null
     emit('importado')

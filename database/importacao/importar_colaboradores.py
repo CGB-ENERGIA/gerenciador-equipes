@@ -5,7 +5,15 @@ import pandas as pd
 
 from database.database import SessionLocal
 from database.depara import secao_tratada, tipos_ccusto_dos_rateios
-from database.models import Colaborador, Rateio
+from sqlalchemy.orm import joinedload
+
+from database.models import (
+    AlocacaoIndireto,
+    Colaborador,
+    ComposicaoEquipe,
+    MembroEquipe,
+    Rateio,
+)
 
 
 ARQUIVO_EXCEL = Path(__file__).resolve().parent / "cadastro.xlsx"
@@ -165,6 +173,10 @@ def processar_planilha_colaboradores(arquivo, session, aplicar):
         "detalhes_atualizados": [],
         "detalhes_rateios": [],
         "detalhes_rateios_removidos": [],
+        # quem virou INDIRETO ocupando uma vaga: a vaga é liberada, como na
+        # edição pela tela (ver liberar_vagas em app.py)
+        "vagas_liberadas": 0,
+        "detalhes_vagas_liberadas": [],
     }
 
     def _celula(linha, coluna):
@@ -303,6 +315,39 @@ def processar_planilha_colaboradores(arquivo, session, aplicar):
                     "rateio": dados["rateio_funcionario"],
                     "grpccusto": dados["grpccusto"] or "—",
                 })
+
+    indiretos = [
+        chapa for chapa in chapas_ja_contadas
+        if colaboradores_existentes[chapa].TIPO_FUNÇÃO == "INDIRETO"
+    ]
+    if indiretos:
+        membros = (
+            session.query(MembroEquipe)
+            .options(joinedload(MembroEquipe.composicao).joinedload(ComposicaoEquipe.equipe))
+            .filter(MembroEquipe.CHAPA.in_(indiretos))
+            .all()
+        )
+        for membro in membros:
+            equipe = membro.composicao.equipe if membro.composicao else None
+            resumo["detalhes_vagas_liberadas"].append({
+                "chapa": membro.CHAPA,
+                "nome": colaboradores_existentes[membro.CHAPA].NOME or "",
+                "equipe": equipe.PREFIXO if equipe else "",
+                "base": equipe.BASE if equipe else "",
+            })
+            session.delete(membro)
+        resumo["vagas_liberadas"] = len(membros)
+
+    # quem virou DIRETO perde a alocação de indireto (ver
+    # apagar_alocacao_de_indireto em app.py)
+    diretos = [
+        chapa for chapa in chapas_ja_contadas
+        if colaboradores_existentes[chapa].TIPO_FUNÇÃO == "DIRETO"
+    ]
+    if diretos:
+        session.query(AlocacaoIndireto).filter(
+            AlocacaoIndireto.CHAPA.in_(diretos)
+        ).delete(synchronize_session=False)
 
     # SEÇÃO_TRATADA e TIPO_CCUSTO por último, com TODOS os rateios de cada
     # colaborador já resolvidos (os que a planilha trouxe + os que já

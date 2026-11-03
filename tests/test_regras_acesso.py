@@ -634,3 +634,160 @@ def test_salvar_todos_descarta_os_valores_avulsos(Sessao):
     assert r.status_code == 200, r.get_json()
     assert r.get_json()["usuario"]["vinculos"] == {"BASE": ["TODOS"], "SETOR": ["GSTC"]}
     assert cliente(3).get("/api/colaboradores").status_code == 200
+
+
+# ------------------------------------------------------------
+# Virar indireto libera a vaga
+# ------------------------------------------------------------
+
+def test_cadastro_virar_indireto_libera_a_vaga(Sessao):
+    r = cliente(1).put("/api/colaboradores/cadastro/10", json={
+        **corpo_cadastro("10", "ANA DA MINHA EQUIPE"), "tipo_funcao": "INDIRETO",
+    })
+    assert r.status_code == 200, r.get_json()
+    assert ocupante(Sessao, 1) is None
+    assert colaborador(Sessao, "10").TIPO_FUNÇÃO == "INDIRETO"
+    assert r.get_json()["vagas_liberadas"][0]["equipe"] == "BCB-01"
+    assert "liberada" in r.get_json()["mensagem"]
+
+
+def test_edicao_em_massa_virar_indireto_libera_as_vagas(Sessao):
+    r = cliente(1).post("/api/colaboradores/cadastro/editar-massa", json={
+        "chapas": ["10", "30", "40"], "tipo_funcao": "INDIRETO",
+    })
+    assert r.status_code == 200, r.get_json()
+    assert ocupante(Sessao, 1) is None and ocupante(Sessao, 3) is None
+    assert len(r.get_json()["vagas_liberadas"]) == 2
+
+
+def test_botao_direto_indireto_libera_a_vaga_so_com_acesso_a_ela(Sessao):
+    sup = cliente(2)
+    assert sup.post("/api/colaboradores/tipo-funcao", json={"chapa": "30", "tipo_funcao": "INDIRETO"}).status_code == 403
+    assert ocupante(Sessao, 3) == "30"
+    r = sup.post("/api/colaboradores/tipo-funcao", json={"chapa": "10", "tipo_funcao": "INDIRETO"})
+    assert r.status_code == 200, r.get_json()
+    assert ocupante(Sessao, 1) is None and r.get_json()["colaborador"]["alocado"] is False
+
+
+def test_planilha_do_cadastro_virar_indireto_libera_a_vaga(Sessao):
+    from database.importacao.importar_colaboradores import processar_planilha_colaboradores
+    arquivo = io.BytesIO()
+    pd.DataFrame([{
+        "CHAPA": "10", "NOME": "ANA DA MINHA EQUIPE", "FUNÇÃO": "AUX", "ADMISSÃO": "",
+        "SEÇÃO": "", "SITUAÇÃO": "ATIVO", "TIPO_FUNÇÃO": "INDIRETO",
+    }]).to_excel(arquivo, index=False)
+    arquivo.seek(0)
+    s = Sessao()
+    resumo = processar_planilha_colaboradores(arquivo, s, aplicar=True)
+    s.commit()
+    s.close()
+    assert resumo["vagas_liberadas"] == 1
+    assert resumo["detalhes_vagas_liberadas"][0]["chapa"] == "10"
+    assert ocupante(Sessao, 1) is None
+
+
+# ------------------------------------------------------------
+# Base errada nos Indiretos e arquivo grande
+# ------------------------------------------------------------
+
+def test_planilha_de_indiretos_recusa_base_que_nao_existe(Sessao):
+    indireto_com_equipe(Sessao)
+    s = Sessao()
+    plano = indiretos.analisar_planilha_indiretos(planilha_indiretos([
+        ["FROTA", "BCBB", 70, 71],
+        ["FROTA", "PDT", 70, 70],
+    ]), s)
+    s.close()
+    assert [e["chapa"] for e in plano["erros"]] == ["71"]
+    assert "BCBB" in plano["erros"][0]["erro"]
+
+
+def test_gerencia_aceita_base_geral_e_os_outros_setores_nao(Sessao):
+    assert indiretos.problema_da_base("GERÊNCIA", "GERAL") is None
+    assert indiretos.problema_da_base("FROTA", "GERAL")
+    assert indiretos.problema_da_base("FROTA", "BCB") is None
+
+
+def test_arquivo_grande_na_planilha_de_indiretos_explica_o_limite(Sessao):
+    grande = io.BytesIO(b"0" * (5 * 1024 * 1024))
+    r = cliente(1).post("/api/indiretos/planilha/previa", data={"arquivo": (grande, "x.xlsx")})
+    assert r.status_code == 413
+    assert "4 MB" in r.get_json()["erro"]
+
+
+# ------------------------------------------------------------
+# "Construção" e "CONSTRUÇÃO" iguais
+# ------------------------------------------------------------
+
+def test_tipo_de_equipe_gravado_em_maiusculas_e_vinculo_sem_diferenca(Sessao):
+    s = Sessao()
+    vaga = s.query(ComposicaoEquipe).filter_by(id=2).one()
+    vaga.ESTRUTURA = "Construção"
+    s.commit()
+    assert s.query(ComposicaoEquipe).filter_by(id=2).one().ESTRUTURA == "CONSTRUÇÃO"
+    s.close()
+    usuario = {"vinculos": {"BASE": ["bacabal"], "TIPO_EQUIPE": ["Construção"]}}
+    assert auth.pode_atuar_na_base_e_tipo(usuario, "BACABAL", "CONSTRUÇÃO") is True
+
+
+# ------------------------------------------------------------
+# Virar Direto não guarda a alocação de indireto
+# ------------------------------------------------------------
+
+def alocacao_de_indireto(Sessao, chapa):
+    return ler(Sessao, lambda s: s.query(AlocacaoIndireto).filter_by(CHAPA=chapa).first())
+
+
+def test_virar_direto_apaga_a_alocacao_e_ao_voltar_fica_sem_setor(Sessao):
+    indireto_com_equipe(Sessao)  # 71 é indireto da FROTA e responde a 70
+    admin = cliente(1)
+    r = admin.post("/api/colaboradores/tipo-funcao", json={"chapa": "71", "tipo_funcao": "DIRETO"})
+    assert r.status_code == 200, r.get_json()
+    assert alocacao_de_indireto(Sessao, "71") is None
+
+    r = admin.post("/api/colaboradores/tipo-funcao", json={"chapa": "71", "tipo_funcao": "INDIRETO"})
+    assert r.status_code == 200
+    assert alocacao_de_indireto(Sessao, "71") is None
+
+
+def test_responsavel_que_vira_direto_mantem_quem_responde_a_ele(Sessao):
+    indireto_com_equipe(Sessao)
+    r = cliente(1).put("/api/colaboradores/cadastro/70", json={
+        **corpo_cadastro("70", "FABIO CHEFE"), "tipo_funcao": "DIRETO",
+    })
+    assert r.status_code == 200, r.get_json()
+    assert alocacao_de_indireto(Sessao, "70") is None
+    assert alocacao_de_indireto(Sessao, "71").RESPONSAVEL_CHAPA == "70"
+
+
+def test_edicao_em_massa_virar_direto_apaga_a_alocacao(Sessao):
+    indireto_com_equipe(Sessao)
+    r = cliente(1).post("/api/colaboradores/cadastro/editar-massa", json={
+        "chapas": ["70", "71"], "tipo_funcao": "DIRETO",
+    })
+    assert r.status_code == 200, r.get_json()
+    assert alocacao_de_indireto(Sessao, "70") is None and alocacao_de_indireto(Sessao, "71") is None
+
+
+# ------------------------------------------------------------
+# Lista de usuários montada de uma vez
+# ------------------------------------------------------------
+
+def test_lista_de_usuarios_igual_a_descricao_conta_por_conta(Sessao):
+    from sqlalchemy.orm import joinedload
+    s = Sessao()
+    s.add_all([
+        Usuario(id=6, USUARIO="coord", NOME="COORD", SENHA_HASH="x", NIVEL="COORDENADOR", ATIVO=True, RESPONSAVEL_ID=4),
+        Usuario(id=7, USUARIO="sup2", NOME="SUP 2", SENHA_HASH="x", NIVEL="SUPERVISOR", ATIVO=True, RESPONSAVEL_ID=6),
+        NivelPermissao(NIVEL="SUPERVISOR", PERMISSAO=auth.VER_EQUIPES),
+    ])
+    s.flush()
+    s.add(VinculoUsuario(usuario_id=7, TIPO="BASE", VALOR="PEDREIRAS"))
+    s.commit()
+    usuarios = s.query(Usuario).options(joinedload(Usuario.vinculos)).order_by(Usuario.id).all()
+    um_a_um = [auth.descrever_usuario(u, session=s) for u in usuarios]
+    em_lote = auth.descrever_usuarios(s, usuarios)
+    s.close()
+    assert em_lote == um_a_um
+    gerente = next(d for d in em_lote if d["usuario"] == "gerente")
+    assert gerente["vinculos"]["BASE"] == ["PEDREIRAS"]
