@@ -987,3 +987,16 @@ def test_coordenador_da_vaga_aceita_conta_de_gerente(Sessao):
     assert (vaga.COORDENADOR_ID, vaga.SUPERVISOR_ID) == (4, None)
     s.close()
     assert "gerente" in {c["usuario"] for c in cliente(1).get("/api/responsaveis-vaga").get_json()}
+
+
+def test_supervisor_pode_responder_direto_ao_gerente_e_herda_o_escopo(Sessao):
+    admin = cliente(1)
+    r = admin.put("/api/usuarios/2", json={**corpo_usuario("sup", "SUP", "SUPERVISOR"), "responsavel_id": 4,
+                                            "vinculos": {"BASE": ["BACABAL"], "TIPO_EQUIPE": ["CONSTRUÇÃO"]}})
+    assert r.status_code == 200, r.get_json()
+    gerente = next(u for u in admin.get("/api/usuarios").get_json() if u["usuario"] == "gerente")
+    assert gerente["vinculos"]["BASE"] == ["BACABAL"]
+    r = admin.put("/api/usuarios/2", json={**corpo_usuario("sup", "SUP", "SUPERVISOR"), "responsavel_id": 5})
+    assert r.status_code == 400 and "Coordenador ou Gerente" in r.get_json()["erro"]
+    niveis = {n["valor"]: n for n in admin.get("/api/sessao").get_json()["niveis"]}
+    assert niveis["SUPERVISOR"]["niveis_do_responsavel"] == ["COORDENADOR", "GERENTE"]

@@ -60,13 +60,19 @@ NIVEL_SUPERVISOR = "SUPERVISOR"
 # Supervisores abaixo deles (ver escopo_efetivo). Nao tem vinculo proprio.
 NIVEIS_HIERARQUICOS = (NIVEL_GERENTE, NIVEL_COORDENADOR)
 
-# Nivel que cada um destes pode escolher como RESPONSAVEL_ID (o superior
-# direto): um Coordenador responde a um Gerente, um Supervisor a um
-# Coordenador. Gerente nao tem responsavel (topo da arvore).
-NIVEL_DO_RESPONSAVEL = {
-    NIVEL_COORDENADOR: NIVEL_GERENTE,
-    NIVEL_SUPERVISOR: NIVEL_COORDENADOR,
+# Niveis que cada um destes pode escolher como RESPONSAVEL_ID (o superior
+# direto): um Coordenador responde a um Gerente; um Supervisor a um
+# Coordenador ou direto a um Gerente (equipes sem coordenador). Gerente nao
+# tem responsavel (topo da arvore). O escopo herdado segue a arvore do jeito
+# que ela estiver (ver _supervisores_subordinados).
+NIVEIS_DO_RESPONSAVEL = {
+    NIVEL_COORDENADOR: (NIVEL_GERENTE,),
+    NIVEL_SUPERVISOR: (NIVEL_COORDENADOR, NIVEL_GERENTE),
 }
+
+
+def rotulos_dos_niveis(niveis):
+    return " ou ".join(NIVEIS[nivel]["rotulo"] for nivel in niveis)
 
 # ------------------------------------------------------------
 # NIVEIS

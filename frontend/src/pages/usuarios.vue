@@ -483,7 +483,7 @@
                 emit-value
                 map-options
                 label="Responde a (responsável direto)"
-                :hint="`Escolha um usuário do nível ${rotuloDoNivel(nivelDoResponsavel)}`"
+                :hint="`Escolha um usuário do nível ${niveisDoResponsavel.map(rotuloDoNivel).join(' ou ')}`"
                 :options="opcoesResponsaveis"
               />
 
@@ -1044,12 +1044,13 @@ const nivelIgnoraVinculos = computed(
       ?.ignora_vinculos ?? false
 )
 
-// Este campo diz de QUE NIVEL e o responsavel de quem esta sendo editado.
-const nivelDoResponsavel = computed(
-  () =>
-    niveis.value.find(nivel => nivel.valor === formulario.nivel)
-      ?.nivel_do_responsavel || null
+// De QUAIS NIVEIS pode ser o responsavel de quem esta sendo editado: o
+// Supervisor responde a um Coordenador ou direto a um Gerente.
+const niveisDoResponsavel = computed(
+  () => niveis.value.find(nivel => nivel.valor === formulario.nivel)?.niveis_do_responsavel || []
 )
+
+const nivelDoResponsavel = computed(() => niveisDoResponsavel.value.length > 0)
 
 // Gerente/Coordenador: o alcance soma o vinculo da propria conta com o de
 // todo Supervisor (ou Coordenador) que responde a ela — ver
@@ -1065,12 +1066,16 @@ const opcoesResponsaveis = computed(() => {
     return []
   }
 
+  const variosNiveis = niveisDoResponsavel.value.length > 1
   return usuarios.value
     .filter(
       pessoa =>
-        pessoa.nivel === nivelDoResponsavel.value && pessoa.id !== formulario.id
+        niveisDoResponsavel.value.includes(pessoa.nivel) && pessoa.id !== formulario.id
     )
-    .map(pessoa => ({ label: pessoa.nome, value: pessoa.id }))
+    .map(pessoa => ({
+      label: variosNiveis ? `${pessoa.nome} · ${rotuloDoNivel(pessoa.nivel)}` : pessoa.nome,
+      value: pessoa.id
+    }))
     .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
 })
 

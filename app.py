@@ -485,7 +485,7 @@ def niveis_para_tela(session=None):
             "permissoes": sorted(auth.permissoes_do_nivel(nome, session)),
             "ignora_vinculos": bool(dados.get("ignora_vinculos", False)),
             "personalizavel": nome not in auth.NIVEIS_PERMISSOES_FIXAS,
-            "nivel_do_responsavel": auth.NIVEL_DO_RESPONSAVEL.get(nome),
+            "niveis_do_responsavel": list(auth.NIVEIS_DO_RESPONSAVEL.get(nome, ())),
             # Gerente/Coordenador: o alcance soma o vinculo da propria conta
             # com o de todo Supervisor (ou Coordenador) que responde a ela —
             # ver auth.escopo_efetivo. A tela usa isto pra avisar sobre essa
@@ -5052,12 +5052,12 @@ def validar_chapa_usuario(session, chapa, usuario_id=None):
 
 def validar_responsavel(session, nivel, responsavel_id, usuario_id=None):
     """Confere o responsavel (superior direto) informado no formulario de
-    usuario: Coordenador precisa de um Gerente, Supervisor precisa de um
-    Coordenador. Devolve a mensagem de erro, ou None se estiver tudo certo.
+    usuario: Coordenador precisa de um Gerente, Supervisor de um Coordenador
+    ou Gerente. Devolve a mensagem de erro, ou None se estiver tudo certo.
     """
-    nivel_esperado = auth.NIVEL_DO_RESPONSAVEL.get(nivel)
+    niveis_aceitos = auth.NIVEIS_DO_RESPONSAVEL.get(nivel)
 
-    if not nivel_esperado:
+    if not niveis_aceitos:
         if responsavel_id:
             return "Este nível não tem responsável (Administrador e Gerente ficam no topo da hierarquia)."
         return None
@@ -5071,10 +5071,12 @@ def validar_responsavel(session, nivel, responsavel_id, usuario_id=None):
     responsavel = session.query(Usuario).filter(Usuario.id == responsavel_id).first()
     if not responsavel:
         return "Responsável não encontrado."
-    if responsavel.NIVEL != nivel_esperado:
+    if responsavel.NIVEL not in niveis_aceitos:
         rotulo_nivel = auth.NIVEIS[nivel]["rotulo"]
-        rotulo_esperado = auth.NIVEIS[nivel_esperado]["rotulo"]
-        return f"O responsável de um {rotulo_nivel} precisa ser do nível {rotulo_esperado}."
+        return (
+            f"O responsável de um {rotulo_nivel} precisa ser do nível "
+            f"{auth.rotulos_dos_niveis(niveis_aceitos)}."
+        )
 
     return None
 
@@ -5522,9 +5524,9 @@ def montar_aba_opcoes_usuarios(session):
 
     valores = []
     for nome, dados in auth.NIVEIS.items():
-        acima = auth.NIVEL_DO_RESPONSAVEL.get(nome)
+        acima = auth.NIVEIS_DO_RESPONSAVEL.get(nome)
         observacao = (
-            f"RESPONSAVEL precisa ser um {auth.NIVEIS[acima]['rotulo']}"
+            f"RESPONSAVEL precisa ser {auth.rotulos_dos_niveis(acima)}"
             if acima else "fica no topo — deixe RESPONSAVEL em branco"
         )
         if dados.get("ignora_vinculos"):
@@ -5699,9 +5701,9 @@ def analisar_planilha_usuarios(arquivo, session):
             vinculos = {}
 
         login_responsavel = _texto_celula(linha, "RESPONSAVEL", colunas)
-        nivel_esperado = auth.NIVEL_DO_RESPONSAVEL.get(nivel)
+        niveis_aceitos = auth.NIVEIS_DO_RESPONSAVEL.get(nivel)
 
-        if login_responsavel and not nivel_esperado:
+        if login_responsavel and not niveis_aceitos:
             registrar_erro(
                 numero, login,
                 f"{auth.NIVEIS[nivel]['rotulo']} fica no topo da hierarquia e não tem responsável."
@@ -5814,12 +5816,12 @@ def analisar_planilha_usuarios(arquivo, session):
             )
             continue
 
-        esperado = auth.NIVEL_DO_RESPONSAVEL.get(item["nivel"])
-        if nivel_responsavel != esperado:
+        aceitos = auth.NIVEIS_DO_RESPONSAVEL.get(item["nivel"], ())
+        if nivel_responsavel not in aceitos:
             registrar_erro(
                 item["linha"], item["usuario"],
                 f"O responsável de um {auth.NIVEIS[item['nivel']]['rotulo']} precisa ser "
-                f"do nível {auth.NIVEIS[esperado]['rotulo']}."
+                f"do nível {auth.rotulos_dos_niveis(aceitos)}."
             )
 
     if plano["erros"]:
@@ -5885,7 +5887,7 @@ def baixar_planilha_usuarios():
                     ("Editar", "Mude a linha de quem já existe. Coluna em branco limpa aquele campo (por exemplo, um vínculo); SENHA em branco mantém a senha atual."),
                     ("Cadastrar", "Acrescente uma linha no fim com USUARIO, NOME, NIVEL e SENHA (obrigatória para usuário novo, mínimo de 6 caracteres)."),
                     ("Nunca apaga", "Quem sumir da planilha continua como está. Para tirar o acesso, escreva NAO em ATIVO; para excluir de vez, use o botão na tela de Usuários."),
-                    ("NIVEL e RESPONSAVEL", "Escolha o nível na lista. RESPONSAVEL é o login do superior direto (Supervisor responde a Coordenador, Coordenador a Gerente)."),
+                    ("NIVEL e RESPONSAVEL", "Escolha o nível na lista. RESPONSAVEL é o login do superior direto (Supervisor responde a Coordenador ou Gerente, Coordenador a Gerente)."),
                     ("Vínculos", "BASE, TIPO_EQUIPE, SETOR e EQUIPE dizem o que a pessoa enxerga. Vários valores na mesma célula separados por \" / \". A aba Opções lista tudo que pode ser usado."),
                     ("Antes de aplicar", "Envie o arquivo na tela de Usuários: o sistema mostra uma prévia e só grava quando você confirmar."),
                 ],
