@@ -5408,6 +5408,9 @@ def montar_aba_opcoes_usuarios(session):
             observacao = "vê tudo — deixe as colunas de vínculo em branco"
         valores.append(("NIVEL", dados["rotulo"], observacao))
 
+    for coluna in ("SETOR", "BASE", "TIPO_EQUIPE"):
+        valores.append((coluna, auth.VALOR_TODOS, "sem restrição nesta coluna"))
+
     for setor in SETORES_NEGOCIO:
         valores.append(("SETOR", setor, "todas as equipes desse setor"))
 

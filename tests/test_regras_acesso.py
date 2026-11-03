@@ -612,3 +612,25 @@ def test_administrador_altera_administrador_e_niveis(Sessao):
     r = admin.put("/api/niveis/GERENTE/permissoes", json={"permissoes": [auth.VER_EQUIPES]})
     assert r.status_code == 200
     assert admin.delete("/api/usuarios/5").status_code == 200
+
+
+# ------------------------------------------------------------
+# Vínculo TODOS
+# ------------------------------------------------------------
+
+def test_todos_libera_a_dimensao_e_conta_como_vinculo():
+    usuario = {"vinculos": {"BASE": ["TODOS"], "TIPO_EQUIPE": ["CONSTRUÇÃO"]}}
+    assert auth.pode_atuar_na_base_e_tipo(usuario, "PEDREIRAS", "CONSTRUÇÃO") is True
+    assert auth.pode_atuar_na_base_e_tipo(usuario, "BACABAL", "PODA") is False
+    assert auth.tem_algum_vinculo({"vinculos": {"SETOR": ["TODOS"]}}) is True
+    tudo = {"vinculos": {"BASE": ["TODOS"], "TIPO_EQUIPE": ["TODOS"], "SETOR": ["TODOS"]}}
+    assert auth.pode_atuar_na_base_e_tipo(tudo, "QUALQUER", "PODA", setor="GSTC") is True
+
+
+def test_salvar_todos_descarta_os_valores_avulsos(Sessao):
+    r = cliente(1).put("/api/usuarios/3", json=corpo_usuario(
+        "semvinculo", "SEM", "SUPERVISOR", vinculos={"BASE": ["BACABAL", "todos"], "SETOR": ["GSTC"]},
+    ))
+    assert r.status_code == 200, r.get_json()
+    assert r.get_json()["usuario"]["vinculos"] == {"BASE": ["TODOS"], "SETOR": ["GSTC"]}
+    assert cliente(3).get("/api/colaboradores").status_code == 200

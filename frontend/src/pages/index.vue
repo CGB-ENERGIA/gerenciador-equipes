@@ -2103,23 +2103,23 @@ watch(
   min-width: 0;
 }
 
-/* grid-auto-flow:column preenche coluna a coluna, entao com 2 linhas
-   fixas o numero de colunas cresce sozinho conforme sobram chips —
-   nunca passa de 2 linhas, independente de quantas disciplinas a base
-   tiver. Largura de coluna fixa deixa todos os chips do mesmo tamanho. */
+/* Ao lado do nome da base quando cabe; sem espaço, desce para baixo dele e
+   quebra em quantas linhas precisar. Com 2 linhas fixas, base com muitas
+   disciplinas vazava pela direita do card. Largura fixa deixa todos os chips
+   do mesmo tamanho. */
 .cabecalho-base-chips {
-  flex: 0 0 auto;
-  max-width: 100%;
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(2, auto);
-  grid-auto-columns: 92px;
+  flex: 1 1 400px;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-content: flex-start;
   gap: 4px;
 }
 
 .cabecalho-base-chips :deep(.q-chip) {
   margin: 0;
-  width: 100%;
+  width: 92px;
   justify-content: center;
 }
 

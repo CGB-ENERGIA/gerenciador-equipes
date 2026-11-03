@@ -145,6 +145,12 @@ VINCULO_EQUIPE = "EQUIPE"          # id de uma equipe especifica
 # dimensao correspondente nao restringe nada, pra nao quebrar quem so usa
 # BASE+TIPO_EQUIPE. O valor de SETOR casa com o campo SETOR da vaga (editavel
 # na tela de vagas e na planilha de equipes, ver ComposicaoEquipe.SETOR).
+# "TODOS" numa dimensao libera ela inteira e ainda conta como vinculo: e o
+# jeito de dar a alguem a empresa toda sem o nivel de Administrador (sem
+# vinculo nenhum a conta nao ve nada, ver descrever_sessao).
+VALOR_TODOS = "TODOS"
+VINCULOS_COM_TODOS = (VINCULO_BASE, VINCULO_TIPO_EQUIPE, VINCULO_SETOR)
+
 TIPOS_VINCULO = {
     VINCULO_BASE: "Base",
     VINCULO_TIPO_EQUIPE: "Tipo de equipe",
@@ -469,6 +475,10 @@ def _escopo_cobre(vinculos, base, tipo_equipe, setor, equipe_id):
     if not (bases or tipos or setores or equipes):
         return False
 
+    bases, tipos, setores = (
+        set() if VALOR_TODOS in valores else valores for valores in (bases, tipos, setores)
+    )
+
     if bases and base not in bases:
         return False
 
@@ -627,7 +637,12 @@ def substituir_vinculos(sessao_banco, usuario, vinculos):
         if tipo not in TIPOS_VINCULO:
             continue
 
-        for valor in dict.fromkeys(valores or []):
+        valores = [str(v).strip() for v in valores or []]
+        # TODOS junto com valores avulsos: os avulsos nao restringiriam nada
+        if tipo in VINCULOS_COM_TODOS and any(v.upper() == VALOR_TODOS for v in valores):
+            valores = [VALOR_TODOS]
+
+        for valor in dict.fromkeys(valores):
             texto = str(valor).strip()
 
             if texto:

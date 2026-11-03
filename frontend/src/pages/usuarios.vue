@@ -512,7 +512,8 @@
                   <template v-else>
                     Cada vínculo preenchido filtra uma dimensão; os que ficam
                     em branco não restringem. Só SETOR = todas as equipes
-                    daquele setor, em qualquer base.
+                    daquele setor, em qualquer base. TODOS em uma dimensão
+                    libera todas as opções dela.
                     <strong>Sem nenhum vínculo a pessoa não enxerga equipe alguma</strong>
 
                     <template v-if="nivelSomaVinculoDeSubordinados">
@@ -552,6 +553,7 @@
                       input-debounce="0"
                       :label="rotulo"
                       :options="opcoesVinculo[tipo] || []"
+                      @update:model-value="valores => ajustarTodos(tipo, valores)"
                     />
                   </template>
                 </div>
@@ -1098,10 +1100,29 @@ const opcoesVinculo = computed(() => {
   return Object.fromEntries(
     Object.entries(mapa).map(([tipo, valores]) => [
       tipo,
-      [...valores].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+      [
+        ...(VINCULOS_COM_TODOS.includes(tipo) ? [VALOR_TODOS] : []),
+        ...[...valores].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+      ]
     ])
   )
 })
+
+// "TODOS" libera a dimensão inteira (mesmo valor de auth.VALOR_TODOS): não
+// convive com valores avulsos. Escolher TODOS limpa os outros; escolher um
+// valor avulso depois tira o TODOS.
+const VALOR_TODOS = 'TODOS'
+const VINCULOS_COM_TODOS = ['BASE', 'TIPO_EQUIPE', 'SETOR']
+
+function ajustarTodos(tipo, valores) {
+  if (!VINCULOS_COM_TODOS.includes(tipo)) {
+    return
+  }
+  const lista = (valores || []).map(v => (String(v).trim().toUpperCase() === VALOR_TODOS ? VALOR_TODOS : v))
+  const ultimo = lista[lista.length - 1]
+  formulario.vinculos[tipo] =
+    ultimo === VALOR_TODOS ? [VALOR_TODOS] : lista.filter(v => v !== VALOR_TODOS)
+}
 
 const opcoesEquipeVinculo = computed(() =>
   [...equipes.value]
