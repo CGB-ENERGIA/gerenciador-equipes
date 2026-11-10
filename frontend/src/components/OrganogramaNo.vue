@@ -15,6 +15,8 @@
       :class="{
         'org-cartao--base': no.tipo === 'base',
         'org-cartao--grupo': no.tipo === 'grupo',
+        'org-cartao--vaga': no.tipo === 'vaga',
+        'org-cartao--extra': no.extra,
         'org-cartao--com-base': no.baseTitulo,
         'org-cartao--clicavel': clicavel,
         'org-cartao--externo': no.externo,
@@ -42,6 +44,14 @@
         </div>
         <div class="org-cartao__rodape org-cartao__rodape--base">{{ no.subtitulo }}</div>
       </template>
+      <!-- vagas do BID sem ninguém, desta função -->
+      <template v-else-if="no.tipo === 'vaga'">
+        <div class="org-cartao__cargo">{{ no.cargo }}</div>
+        <div class="org-vaga">
+          <q-icon name="event_seat" size="14px" />
+          {{ no.quantidade === 1 ? 'vaga vazia' : `${no.quantidade} vagas vazias` }}
+        </div>
+      </template>
       <!-- mesma função, mesmo chefe: um cartão com a lista de nomes -->
       <template v-else-if="no.tipo === 'grupo'">
         <div class="org-cartao__cargo">{{ no.cargo || 'Sem função' }}</div>
@@ -49,11 +59,12 @@
           <li
             v-for="pessoa in no.pessoas"
             :key="pessoa.chapa"
-            :title="pessoa.nomeCompleto"
+            :title="[pessoa.nomeCompleto, pessoa.extra ? 'extra (sem vaga no BID)' : pessoa.detalhe].filter(Boolean).join(' · ')"
             :draggable="podeEditar"
             :class="{
               'org-grupo__nome--editavel': podeEditar,
-              'org-grupo__nome--alvo': nomeAlvo === pessoa.chapa
+              'org-grupo__nome--alvo': nomeAlvo === pessoa.chapa,
+              'org-grupo__nome--extra': pessoa.extra
             }"
             @dragstart.stop="evento => iniciarArrastePessoa(evento, pessoa)"
             @dragend.stop="encerrarArraste"
@@ -63,6 +74,7 @@
             @click.stop="podeEditar && arraste.abrirBases(pessoa.chapa)"
           >
             {{ pessoa.nome }}
+            <span v-if="pessoa.extra" class="org-grupo__extra">extra</span>
           </li>
         </ul>
       </template>
@@ -75,6 +87,7 @@
         </div>
         <div class="org-cartao__cargo">{{ no.cargo || 'Sem função' }}</div>
         <div class="org-cartao__nome">{{ no.nome }}</div>
+        <div v-if="no.extra" class="org-selo-extra">extra</div>
         <div v-if="no.externo" class="org-cartao__rodape">{{ no.externo }}</div>
         <div v-else-if="no.detalhe" class="org-cartao__rodape org-cartao__rodape--detalhe">{{ no.detalhe }}</div>
       </template>
@@ -122,7 +135,10 @@ const props = defineProps({
   // pessoa: { id, tipo: 'pessoa', chapa, cargo, nome, nomeCompleto, externo, semAlocacao,
   //           baseTitulo (responde por uma base), filhos, assessores }
   // base:   { id, tipo: 'base', titulo, subtitulo, filhos, assessores: [] }
-  // grupo:  { id, tipo: 'grupo', cargo, chefe, chefeNome, pessoas: [{ chapa, nome }], filhos: [] }
+  // grupo:  { id, tipo: 'grupo', cargo, chefe, chefeNome, pessoas: [{ chapa, nome, extra }], filhos: [] }
+  // vaga:   { id, tipo: 'vaga', cargo, quantidade, vagaIds, base } (vagas vazias do BID desta função)
+  // recebeVagas: caixa "Vagas vazias" (soltar uma vaga nela a tira da cadeia)
+  // extra:  alocado no setor sem vaga no BID (selo laranja)
   // cor:    { fundo, borda, fundoEscuro, bordaEscura } do subsetor, ou null (Geral)
   // externo: false, ou o motivo ("fora do setor" / "fora do filtro")
   // visão geral: arrastarComo (o que vai no arraste), aoClicar, naoRecebe, icone,
@@ -146,17 +162,24 @@ const ehGrupo = computed(() => props.no.tipo === 'grupo')
 const nomeAlvo = ref(null)
 // sem alocação (ex.: chefe que não está em setor nenhum) não dá para mover
 // o cartão de grupo também se arrasta inteiro (todas as pessoas juntas)
+// vaga vazia do BID: arrasta para pôr abaixo de alguém ou numa base
+const ehVaga = computed(() => props.no.tipo === 'vaga')
 const arrastavel = computed(
   () =>
     podeEditar.value &&
     (Boolean(props.no.arrastarComo) ||
       ehGrupo.value ||
+      ehVaga.value ||
       (ehPessoa.value && !props.no.externo && !props.no.semAlocacao))
 )
 // clicar na pessoa: escolher as bases pelas quais ela responde. Na visão
 // geral, setor e responsável abrem o organograma (também para quem só consulta)
+// vaga vazia: escolher quem ocupa
 const clicavel = computed(
-  () => Boolean(props.no.aoClicar) || (arrastavel.value && ehPessoa.value)
+  () =>
+    Boolean(props.no.aoClicar) ||
+    (arrastavel.value && ehPessoa.value) ||
+    (ehVaga.value && podeEditar.value)
 )
 
 // dos dois lados, a lista não empurra os níveis abaixo
@@ -169,6 +192,7 @@ const assessoresDaDireita = computed(() =>
 
 function clicar() {
   if (props.no.aoClicar) props.no.aoClicar()
+  else if (clicavel.value && ehVaga.value) arraste.abrirVaga(props.no.vagaIds[0])
   else if (clicavel.value) arraste.abrirBases(props.no.chapa)
 }
 
@@ -197,9 +221,21 @@ watch(
 
 function podeReceber() {
   const origem = arraste?.emArraste.value
+  // vagas arrastadas: abaixo de uma pessoa (ou de um cartão de grupo), numa
+  // base, ou de volta à caixa "Vagas vazias"
+  if (origem?.vagaIds) {
+    if (!podeEditar.value) return false
+    if (props.no.recebeVagas) return true
+    if (props.no.naoRecebe || ehVaga.value) return false
+    if (props.no.tipo === 'base') return Boolean(props.no.chefe || props.no.titulo)
+    if (ehGrupo.value) return Boolean(props.no.chefe)
+    return ehPessoa.value && !props.no.externo
+  }
   if (props.no.naoRecebe) return false
   // "Sem gerente": só recebe o que veio de um setor
   if (props.no.semGerente) return Boolean(origem?.setor && podeEditar.value)
+  // vaga vazia: recebe uma pessoa (a página avisa se vier um grupo)
+  if (ehVaga.value) return Boolean(origem && podeEditar.value && (origem.chapa || origem.chapas))
   // grupo sobre ele mesmo não faz sentido
   if (ehGrupo.value) return Boolean(origem && podeEditar.value && origem.grupo !== props.no.id)
   // caixa da base: volta a responder a quem está acima da base
@@ -208,7 +244,7 @@ function podeReceber() {
 }
 
 function posicaoDoPonteiro(evento) {
-  if (props.no.externo || ehGrupo.value || props.no.tipo === 'base') return 'abaixo'
+  if (props.no.externo || ehGrupo.value || ehVaga.value || props.no.tipo === 'base') return 'abaixo'
   const caixa = evento.currentTarget.getBoundingClientRect()
   const x = (evento.clientX - caixa.left) / caixa.width
   const y = (evento.clientY - caixa.top) / caixa.height
@@ -221,7 +257,9 @@ function iniciarArraste(evento) {
   if (!arrastavel.value) return
   arrastando.value = true
   if (props.no.arrastarComo) arraste.emArraste.value = props.no.arrastarComo
-  else if (ehGrupo.value) {
+  else if (ehVaga.value) {
+    arraste.emArraste.value = { vagaIds: props.no.vagaIds, nome: props.no.cargo, cargo: props.no.cargo }
+  } else if (ehGrupo.value) {
     arraste.emArraste.value = {
       grupo: props.no.id,
       chapas: props.no.pessoas.map(p => p.chapa),
@@ -277,14 +315,26 @@ function soltarAqui(evento) {
   evento.preventDefault()
   const posicao = posicaoDoPonteiro(evento)
   posicaoAlvo.value = null
+  if (props.no.recebeVagas && arraste.emArraste.value?.vagaIds) {
+    arraste.soltar(arraste.emArraste.value, { limparVagas: true }, 'abaixo')
+    return
+  }
   if (props.no.semGerente) {
     arraste.soltar(arraste.emArraste.value, { semGerente: true, nome: props.no.titulo }, 'abaixo')
+    return
+  }
+  if (ehVaga.value) {
+    arraste.soltar(arraste.emArraste.value, { vaga: true, cargo: props.no.cargo, vagaIds: props.no.vagaIds }, 'vaga')
     return
   }
   // soltar na caixa da base: responde a quem está acima dela (ex.: tirar
   // alguém de baixo de um colega e devolver ao nível da base)
   if (props.no.tipo === 'base') {
-    arraste.soltar(arraste.emArraste.value, { chapa: props.no.chefe, nome: props.no.chefeNome }, 'abaixo')
+    arraste.soltar(
+      arraste.emArraste.value,
+      { chapa: props.no.chefe, nome: props.no.chefeNome, base: props.no.titulo },
+      'abaixo'
+    )
     return
   }
   // soltar no cartão do grupo (fora de um nome): a página decide — mesma
@@ -696,5 +746,58 @@ function soltarAqui(evento) {
 
 .org-assessoria--uniforme > .org-assessoria__lista > .org-assessoria__item > .org-no > .org-cartao {
   width: 100%;
+}
+
+/* ---------- vagas do BID ---------- */
+/* vaga vazia: tracejada, no azul da planilha do BID */
+.org-cartao--vaga {
+  border: 1px dashed var(--vaga-vazia);
+  background: var(--vaga-vazia-fundo);
+  box-shadow: none;
+}
+
+.org-cartao--vaga::before {
+  background: var(--vaga-vazia);
+  opacity: 0.6;
+}
+
+.org-vaga {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--vaga-vazia);
+  white-space: nowrap;
+}
+
+/* extra: alocado no setor sem vaga no BID */
+.org-cartao--extra {
+  border-color: var(--folguista);
+}
+
+.org-selo-extra {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--folguista-fundo);
+  color: var(--folguista);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.org-grupo__extra {
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--folguista-fundo);
+  color: var(--folguista);
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 </style>

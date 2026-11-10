@@ -1,18 +1,24 @@
 """Alocação do pessoal INDIRETO (página "Indiretos").
 
-Controle nominal, sem vagas: cada indireto fica num SETOR, numa BASE (que
-quem aloca escolhe, independente do cadastro) e sob um RESPONSÁVEL — por
-pessoa, então no mesmo setor e base pode haver mais de um. Tabela
-alocacoes_indiretos (migrations/018), uma linha por indireto.
+Cada indireto fica num SETOR, numa BASE (que quem aloca escolhe,
+independente do cadastro) e sob um RESPONSÁVEL — por pessoa, então no mesmo
+setor e base pode haver mais de um. Tabela alocacoes_indiretos
+(migrations/018), uma linha por indireto.
+
+Vagas (BID, migrations/025): o previsto de cada setor, uma linha por vaga
+(SETOR + FUNÇÃO). A pessoa alocada ocupa uma vaga do setor dela (VAGA_ID),
+mesmo com outra função real; sem vaga, é EXTRA. Sem setor = livre.
 
 Rotas num Blueprint próprio para não engordar o app.py. Todos que veem
 equipes consultam a página (GET /api/indiretos); alterar — alocar, mover,
 trocar responsável, planilha — continua só com o Administrador
 (auth.exige_administrador).
 
-A planilha segue o padrão das outras (baixar -> preencher -> prévia ->
-aplicar) e, como a de usuários, NUNCA tira ninguém: quem não aparece na
-planilha continua onde está. Para tirar alguém do setor, use a tela.
+A planilha é uma só, no formato do BID da área (previsto à esquerda, real à
+direita): segue o padrão das outras (baixar -> preencher -> prévia ->
+aplicar) e, como a de usuários, NUNCA tira ninguém do setor: quem não
+aparece nela continua onde está (para tirar, use a tela). Já o BID de cada
+setor que aparece fica exatamente com as vagas da planilha.
 """
 
 import io
@@ -24,13 +30,13 @@ from flask import Blueprint, jsonify, request, send_file
 from openpyxl import Workbook
 from openpyxl.comments import Comment
 from openpyxl.formatting.rule import FormulaRule
-from openpyxl.styles import Alignment, Font
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
 import auth
 import planilhas_estilo as estilo
 from database.database import SessionLocal
-from database.models import AlocacaoIndireto, Colaborador, SetorGerencia
+from database.models import AlocacaoIndireto, Colaborador, SetorGerencia, VagaIndireto
 
 bp = Blueprint("indiretos", __name__)
 
@@ -50,10 +56,15 @@ COL_RESPONSAVEL = "CHAPA RESPONSÁVEL"
 COL_INDIRETO = "CHAPA INDIRETO"
 COL_OBSERVACAO = "OBSERVAÇÃO"
 COL_SUBSETOR = "SUBSETOR"
+# função prevista da vaga (BID). Coluna opcional: planilha sem ela não mexe
+# no BID de ninguém
+COL_FUNCAO_BID = "FUNÇÃO (BID)"
 COLUNAS_OBRIGATORIAS = (COL_SETOR, COL_BASE, COL_RESPONSAVEL, COL_INDIRETO)
+# como o BID da área: o previsto (setor e função do BID) e depois o real
 COLUNAS_PLANILHA = (
-    COL_SETOR, COL_BASE, COL_RESPONSAVEL, "NOME RESPONSÁVEL",
-    COL_INDIRETO, "NOME INDIRETO", "FUNÇÃO INDIRETO", COL_OBSERVACAO, COL_SUBSETOR,
+    COL_SETOR, COL_FUNCAO_BID,
+    COL_INDIRETO, "NOME INDIRETO", "FUNÇÃO INDIRETO",
+    COL_BASE, COL_RESPONSAVEL, "NOME RESPONSÁVEL", COL_OBSERVACAO, COL_SUBSETOR,
 )
 LINHAS_EXTRAS_PLANILHA = 600
 
@@ -119,6 +130,7 @@ def descrever_pessoa(colaborador, alocacao):
             "subsetor": alocacao.SUBSETOR or "",
             "bases_responsavel": bases_da_coluna(alocacao.BASES_RESPONSAVEL),
             "abaixo_de_funcao": alocacao.ABAIXO_DE_FUNCAO or "",
+            "vaga_id": alocacao.VAGA_ID,
             "alocado_por": alocacao.ALOCADO_POR or "",
             "alocado_em": alocacao.ALOCADO_EM.isoformat() if alocacao.ALOCADO_EM else "",
         },
@@ -197,6 +209,16 @@ def obter_indiretos():
                 }
                 for v in session.query(SetorGerencia).all()
             ],
+            # quem ocupa cada vaga vem em pessoas[].alocacao.vaga_id
+            "vagas": [
+                {
+                    "id": v.id, "setor": v.SETOR, "funcao": v.FUNCAO, "ordem": v.ORDEM,
+                    "base": v.BASE or "", "responsavel_chapa": v.RESPONSAVEL_CHAPA or "",
+                }
+                for v in session.query(VagaIndireto)
+                .order_by(VagaIndireto.SETOR, VagaIndireto.ORDEM, VagaIndireto.id)
+                .all()
+            ],
         })
     except Exception as erro:
         print(f"[ERRO] obter_indiretos: {erro}")
@@ -242,6 +264,38 @@ def funcao_para_gravar(session, pessoa, funcao):
     return funcao
 
 
+class VagaInvalida(ValueError):
+    pass
+
+
+def vaga_para_gravar(session, chapa, setor, vaga_id):
+    """Vaga escolhida na página para a pessoa: precisa ser do setor dela e
+    estar livre (ou já ser dela). Vazio = sem vaga (EXTRA)."""
+    if vaga_id in (None, ""):
+        return None
+    try:
+        vaga = session.get(VagaIndireto, int(vaga_id))
+    except (TypeError, ValueError):
+        vaga = None
+    if not vaga or vaga.SETOR != setor:
+        raise VagaInvalida("Essa vaga não é do setor escolhido.")
+    ocupante = (
+        session.query(AlocacaoIndireto)
+        .filter(AlocacaoIndireto.VAGA_ID == vaga.id, AlocacaoIndireto.CHAPA != chapa)
+        .first()
+    )
+    if ocupante:
+        outro = _colaborador(session, ocupante.CHAPA)
+        raise VagaInvalida(f"Essa vaga já está ocupada por {outro.NOME if outro else ocupante.CHAPA}.")
+    return vaga.id
+
+
+def vaga_no_setor(session, vaga_id, setor):
+    """A vaga que a pessoa já ocupava continua dela só se for do setor."""
+    vaga = session.get(VagaIndireto, vaga_id) if vaga_id else None
+    return vaga.id if vaga and vaga.SETOR == setor else None
+
+
 @bp.route("/api/indiretos/alocar", methods=["POST"])
 @auth.exige_administrador
 def alocar_indireto():
@@ -285,9 +339,18 @@ def alocar_indireto():
             return jsonify({"erro": str(erro)}), 400
 
         alocacao = session.query(AlocacaoIndireto).filter(AlocacaoIndireto.CHAPA == chapa).first()
+        try:
+            vaga = (
+                vaga_para_gravar(session, chapa, setor, dados.get("vaga_id"))
+                if "vaga_id" in dados
+                else vaga_no_setor(session, alocacao.VAGA_ID if alocacao else None, setor)
+            )
+        except VagaInvalida as erro:
+            return jsonify({"erro": str(erro)}), 400
         if not alocacao:
             alocacao = AlocacaoIndireto(CHAPA=chapa)
             session.add(alocacao)
+        alocacao.VAGA_ID = vaga
         # outro responsável: deixa de ser assessoria do anterior e de ficar
         # abaixo de um bloco da equipe dele
         if alocacao.RESPONSAVEL_CHAPA != responsavel:
@@ -600,18 +663,38 @@ def remover_alocacao_indireto(chapa):
 # PLANILHA: GERAR
 # ============================================================
 
-def montar_planilha_indiretos(session):
-    """Planilha de cadastro já com as alocações de hoje, mais as abas de apoio
-    (Indiretos, com quem falta; Colaboradores, para achar o responsável;
-    Bases). As colunas de nome são fórmulas só para conferência: a análise
-    lê apenas SETOR, BASE, as duas chapas, a observação e o subsetor."""
-    colaboradores = session.query(Colaborador).order_by(Colaborador.NOME).all()
+def linhas_da_planilha(session):
+    """[(setor, função do BID, AlocacaoIndireto ou None)] como o BID da área:
+    setor a setor, as vagas na ordem do BID (com quem ocupa ou vazias) e, no
+    fim do setor, os extras com a função do BID em branco."""
+    vagas = session.query(VagaIndireto).order_by(VagaIndireto.SETOR, VagaIndireto.ORDEM, VagaIndireto.id).all()
+    ocupantes = _ocupantes(session, [v.id for v in vagas])
     alocacoes = (
         session.query(AlocacaoIndireto)
         .order_by(AlocacaoIndireto.SETOR, AlocacaoIndireto.BASE, AlocacaoIndireto.CHAPA)
         .all()
     )
+    por_setor = {}
+    for vaga in vagas:
+        por_setor.setdefault(vaga.SETOR, []).append((vaga.SETOR, vaga.FUNCAO, ocupantes.get(vaga.id)))
+    ocupadas = {a.CHAPA for a in ocupantes.values()}
+    for alocacao in alocacoes:
+        if alocacao.CHAPA not in ocupadas:
+            por_setor.setdefault(alocacao.SETOR, []).append((alocacao.SETOR, "", alocacao))
+    return [linha for setor in sorted(por_setor) for linha in por_setor[setor]]
+
+
+def montar_planilha_indiretos(session):
+    """Planilha única dos indiretos, no formato do BID: à esquerda o
+    previsto (SETOR e FUNÇÃO (BID)), à direita o real (quem ocupa, base,
+    responsável). Uma linha por vaga e os extras no fim de cada setor. Mais
+    as abas de apoio (Indiretos, com quem falta; Colaboradores, para achar o
+    responsável; Bases). As colunas de nome e função são fórmulas só para
+    conferência."""
+    colaboradores = session.query(Colaborador).order_by(Colaborador.NOME).all()
+    linhas = linhas_da_planilha(session)
     indiretos = [c for c in colaboradores if (c.TIPO_FUNÇÃO or "").upper() == TIPO_INDIRETO]
+    alocacoes = [a for _, _, a in linhas if a]
     bases = list(BASES_PADRAO) + sorted({a.BASE for a in alocacoes} - set(BASES_PADRAO))
 
     livro = Workbook()
@@ -620,8 +703,10 @@ def montar_planilha_indiretos(session):
     for i, titulo in enumerate(COLUNAS_PLANILHA, start=1):
         aba.cell(row=1, column=i, value=titulo)
 
-    preencher = {1, 2, 3, 5, 8, 9}
-    ultima = len(alocacoes) + LINHAS_EXTRAS_PLANILHA + 1
+    # colunas: A SETOR | B FUNÇÃO (BID) | C CHAPA INDIRETO | D NOME | E FUNÇÃO |
+    # F BASE | G CHAPA RESPONSÁVEL | H NOME RESPONSÁVEL | I OBSERVAÇÃO | J SUBSETOR
+    preencher = {1, 2, 3, 6, 7, 9, 10}
+    ultima = len(linhas) + LINHAS_EXTRAS_PLANILHA + 1
 
     def busca(celula, coluna):
         return (
@@ -629,13 +714,15 @@ def montar_planilha_indiretos(session):
             f'MATCH({celula}&"",Colaboradores!$A:$A,0)),"CHAPA NÃO ENCONTRADA"))'
         )
 
-    for n, alocacao in enumerate(alocacoes, start=2):
-        aba.cell(row=n, column=1, value=alocacao.SETOR)
-        aba.cell(row=n, column=2, value=alocacao.BASE)
-        aba.cell(row=n, column=3, value=alocacao.RESPONSAVEL_CHAPA or "")
-        aba.cell(row=n, column=5, value=alocacao.CHAPA)
-        aba.cell(row=n, column=8, value=alocacao.OBSERVACAO or "")
-        aba.cell(row=n, column=9, value=alocacao.SUBSETOR or "")
+    for n, (setor, funcao_bid, alocacao) in enumerate(linhas, start=2):
+        aba.cell(row=n, column=1, value=setor)
+        aba.cell(row=n, column=2, value=funcao_bid)
+        if alocacao:
+            aba.cell(row=n, column=3, value=alocacao.CHAPA)
+            aba.cell(row=n, column=6, value=alocacao.BASE)
+            aba.cell(row=n, column=7, value=alocacao.RESPONSAVEL_CHAPA or "")
+            aba.cell(row=n, column=9, value=alocacao.OBSERVACAO or "")
+            aba.cell(row=n, column=10, value=alocacao.SUBSETOR or "")
     # só o que veio do banco: as colunas de busca logo abaixo são fórmula de verdade
     estilo.gravar_formulas_como_texto(aba)
 
@@ -646,12 +733,13 @@ def montar_planilha_indiretos(session):
             celula.font = Font(name=estilo.FONTE, size=10, color="0000FF" if c in preencher else "000000")
             celula.fill = estilo.FUNDO_PREENCHER if c in preencher else estilo.FUNDO_CONSULTA
         aba.cell(row=n, column=3).number_format = "@"
-        aba.cell(row=n, column=5).number_format = "@"
+        aba.cell(row=n, column=7).number_format = "@"
         aba.cell(row=n, column=4, value=busca(f"C{n}", "B"))
-        aba.cell(row=n, column=6, value=busca(f"E{n}", "B"))
-        aba.cell(row=n, column=7, value=busca(f"E{n}", "C"))
+        aba.cell(row=n, column=5, value=busca(f"C{n}", "C"))
+        aba.cell(row=n, column=8, value=busca(f"G{n}", "B"))
 
-    for c, (titulo, largura) in enumerate(zip(COLUNAS_PLANILHA, (26, 12, 18, 34, 16, 34, 30, 30, 18)), start=1):
+    larguras = (24, 34, 15, 34, 30, 10, 18, 32, 28, 16)
+    for c, (titulo, largura) in enumerate(zip(COLUNAS_PLANILHA, larguras), start=1):
         celula = aba.cell(row=1, column=c)
         celula.font, celula.fill, celula.border = estilo.FONTE_CABECALHO, estilo.FUNDO_CABECALHO, estilo.BORDA
         celula.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
@@ -661,9 +749,12 @@ def montar_planilha_indiretos(session):
             "Gerenciador de Equipes",
         )
         aba.column_dimensions[celula.column_letter].width = largura
+    # BID (previsto) no azul do BID; o resto é o real
+    for c in (1, 2):
+        aba.cell(row=1, column=c).fill = PatternFill("solid", fgColor="2F5D8A")
     aba.row_dimensions[1].height = 30
-    aba.freeze_panes = "A2"
-    aba.auto_filter.ref = f"A1:I{ultima}"
+    aba.freeze_panes = "C2"
+    aba.auto_filter.ref = f"A1:J{ultima}"
     aba.sheet_properties.tabColor = estilo.BORDO
 
     lista_bases = DataValidation(
@@ -672,18 +763,31 @@ def montar_planilha_indiretos(session):
         error="Essa sigla não está na lista de bases. Confirme se está certa.",
     )
     aba.add_data_validation(lista_bases)
-    lista_bases.add(f"B2:B{ultima}")
+    lista_bases.add(f"F2:F{ultima}")
 
+    # vaga vazia (BID sem ninguém): azul. Extra (alguém sem BID, num setor
+    # que tem BID): laranja. Como no BID da área.
+    aba.conditional_formatting.add(
+        f"A2:J{ultima}",
+        FormulaRule(formula=['AND($A2<>"",$B2<>"",$C2="")'], fill=estilo.fundo_condicional("DCE6F0")),
+    )
+    aba.conditional_formatting.add(
+        f"A2:J{ultima}",
+        FormulaRule(
+            formula=[f'AND($A2<>"",$B2="",$C2<>"",COUNTIFS($A$2:$A${ultima},$A2,$B$2:$B${ultima},"<>")>0)'],
+            fill=estilo.fundo_condicional("FBE3C7"),
+        ),
+    )
     vermelho = estilo.fundo_condicional("FBE9E7")
     fonte_vermelha = Font(name=estilo.FONTE, size=10, bold=True, color="B3261E")
-    for faixa, ref in ((f"D2:D{ultima}", "D2"), (f"F2:G{ultima}", "F2")):
+    for faixa, ref in ((f"D2:E{ultima}", "D2"), (f"H2:H{ultima}", "H2")):
         aba.conditional_formatting.add(
             faixa, FormulaRule(formula=[f'{ref}="CHAPA NÃO ENCONTRADA"'], fill=vermelho, font=fonte_vermelha)
         )
     aba.conditional_formatting.add(
-        f"E2:E{ultima}",
+        f"C2:C{ultima}",
         FormulaRule(
-            formula=[f'AND(E2<>"",COUNTIF($E$2:$E${ultima},E2)>1)'],
+            formula=[f'AND(C2<>"",COUNTIF($C$2:$C${ultima},C2)>1)'],
             fill=estilo.fundo_condicional("FDF0CD"), font=estilo.FONTE_ALERTA,
         ),
     )
@@ -697,9 +801,9 @@ def montar_planilha_indiretos(session):
         valores = [c.CHAPA, c.NOME or "", c.FUNÇÃO or "", base_do_cadastro(c), c.SITUAÇÃO or ""]
         for i, v in enumerate(valores, start=1):
             aba_ind.cell(row=n, column=i, value=v)
-        aba_ind.cell(row=n, column=6, value=f'=IF(COUNTIF({ABA_ALOCACAO}!$E$2:$E${ultima},A{n}&"")>0,"SIM","FALTA")')
+        aba_ind.cell(row=n, column=6, value=f'=IF(COUNTIF({ABA_ALOCACAO}!$C$2:$C${ultima},A{n}&"")>0,"SIM","FALTA")')
     estilo.estilizar_aba(aba_ind, consulta=True, colunas_com_formula=("JÁ NA PLANILHA?",))
-    fim = len(indiretos) + 1
+    fim = max(len(indiretos) + 1, 2)
     aba_ind.conditional_formatting.add(f"F2:F{fim}", FormulaRule(
         formula=['F2="FALTA"'], fill=estilo.fundo_condicional("FDF0CD"), font=estilo.FONTE_ALERTA))
     aba_ind.conditional_formatting.add(f"F2:F{fim}", FormulaRule(
@@ -733,17 +837,19 @@ def montar_planilha_indiretos(session):
 
     estilo.adicionar_instrucoes(
         livro,
-        "Planilha de alocação de indiretos",
+        "Planilha dos indiretos (BID e alocação)",
         [
-            ("Para que serve", "Informar em qual SETOR e BASE cada indireto trabalha e quem é o RESPONSÁVEL dele. Uma linha por indireto. O arquivo já vem com as alocações de hoje."),
-            ("Onde preencher", "Aba ALOCAÇÃO, nas colunas amarelas: SETOR, BASE, CHAPA RESPONSÁVEL, CHAPA INDIRETO, OBSERVAÇÃO (opcional) e SUBSETOR (opcional)."),
-            ("Colunas automáticas", "NOME RESPONSÁVEL, NOME INDIRETO e FUNÇÃO INDIRETO (cinza) se preenchem pela chapa, só para conferir. \"CHAPA NÃO ENCONTRADA\" em vermelho = chapa errada ou fora do cadastro."),
-            ("SETOR", "Escreva sempre do mesmo jeito (o sistema guarda em maiúsculas). O mesmo setor em várias bases aparece na tela num cartão só, com uma seção por base."),
+            ("Para que serve", "Uma planilha só para o BID (as vagas previstas de cada setor) e para a alocação (quem ocupa, base e responsável). O arquivo já vem com tudo de hoje."),
+            ("Como é organizada", "Como o BID da área: à esquerda o previsto (SETOR e FUNÇÃO (BID)), à direita o real (CHAPA INDIRETO, nome, função, BASE, RESPONSÁVEL). Uma linha por vaga, na ordem do BID, e no fim de cada setor os extras."),
+            ("Onde preencher", "Aba ALOCAÇÃO, nas colunas amarelas: SETOR, FUNÇÃO (BID), CHAPA INDIRETO, BASE, CHAPA RESPONSÁVEL, OBSERVAÇÃO (opcional) e SUBSETOR (opcional)."),
+            ("Vaga vazia", "SETOR e FUNÇÃO (BID) preenchidos e o resto em branco (fica azul)."),
+            ("Extra", "Pessoa no setor sem vaga: FUNÇÃO (BID) em branco (fica laranja). Para pôr numa vaga, preencha a FUNÇÃO (BID) da linha dela ou leve a chapa para a linha de uma vaga vazia."),
+            ("FUNÇÃO (BID)", "A função prevista para a vaga. Quem ocupa pode ter outra função real (ex.: vaga de SUPERVISOR OPERACIONAL ocupada por um SUPERVISOR DE CONSTRUÇÃO II). A ordem das linhas é a ordem do BID."),
+            ("BID dos setores", "Cada setor que aparece na planilha fica exatamente com as vagas dela: linha a mais cria vaga, linha a menos apaga. Setor que não aparece fica como está."),
+            ("Alocação", "Quem tem CHAPA INDIRETO precisa de SETOR, BASE e CHAPA RESPONSÁVEL. Cada indireto uma vez só (repetido fica laranja). Quem não estiver na planilha continua onde está; para tirar alguém do setor, use a tela."),
+            ("Colunas automáticas", "NOME INDIRETO, FUNÇÃO INDIRETO e NOME RESPONSÁVEL (cinza) se preenchem pela chapa, só para conferir. \"CHAPA NÃO ENCONTRADA\" em vermelho = chapa errada ou fora do cadastro."),
             ("BASE", "Escolha na lista. Você decide a base, independente da seção do cadastro da pessoa."),
-            ("RESPONSÁVEL", "Chapa de quem responde pelo indireto. É por pessoa: no mesmo setor e base pode haver responsáveis diferentes. Pode ser qualquer colaborador (aba COLABORADORES)."),
-            ("CHAPA INDIRETO", "Cada indireto uma vez só (repetido fica laranja). A aba INDIRETOS mostra quem ainda falta."),
-            ("Nunca tira ninguém", "Quem não estiver na planilha continua onde está. Para tirar alguém do setor, use o menu da pessoa na tela Indiretos."),
-            ("Antes de aplicar", "Envie o arquivo em Indiretos > Planilha de cadastro: o sistema mostra uma prévia do que muda e só grava quando você confirmar."),
+            ("Antes de aplicar", "Envie o arquivo em Indiretos > Planilha: o sistema mostra uma prévia do que muda (pessoas e vagas) e só grava quando você confirmar."),
         ],
     )
     livro.active = 0
@@ -776,23 +882,23 @@ def baixar_planilha_indiretos():
 # PLANILHA: ANALISAR / APLICAR
 # ============================================================
 
-def _ler_aba(arquivo):
-    """Aba "Alocação" pelo nome (o modelo antigo tinha Instruções primeiro);
-    se não houver, a primeira aba que tenha as colunas."""
+def _ler_aba(arquivo, nome_aba=ABA_ALOCACAO, obrigatorias=COLUNAS_OBRIGATORIAS):
+    """Aba pelo nome (o modelo antigo tinha Instruções primeiro); se não
+    houver, a primeira aba que tenha as colunas."""
     try:
         abas = pd.read_excel(arquivo, sheet_name=None, dtype=object)
     except Exception as erro:
         raise ValueError(f"Não foi possível ler a planilha: {erro}")
-    df = abas.get(ABA_ALOCACAO)
+    df = abas.get(nome_aba)
     if df is None:
         df = next(
-            (d for d in abas.values() if set(COLUNAS_OBRIGATORIAS) <= {str(c).strip() for c in d.columns}),
+            (d for d in abas.values() if set(obrigatorias) <= {str(c).strip() for c in d.columns}),
             None,
         )
     if df is None:
-        raise ValueError(f"A planilha precisa da aba \"{ABA_ALOCACAO}\" com as colunas {', '.join(COLUNAS_OBRIGATORIAS)}.")
+        raise ValueError(f"A planilha precisa da aba \"{nome_aba}\" com as colunas {', '.join(obrigatorias)}.")
     df.columns = [str(c).strip() for c in df.columns]
-    faltando = [c for c in COLUNAS_OBRIGATORIAS if c not in df.columns]
+    faltando = [c for c in obrigatorias if c not in df.columns]
     if faltando:
         raise ValueError(f"A planilha precisa das colunas {', '.join(faltando)}.")
     return df
@@ -800,12 +906,19 @@ def _ler_aba(arquivo):
 
 def analisar_planilha_indiretos(arquivo, session):
     """Monta o plano sem gravar nada: alocar (novos), mover (setor ou base
-    mudou), atualizar (só responsável/observação/subsetor mudou), sem mudança e erros."""
+    mudou), atualizar (só responsável/observação/subsetor mudou), sem mudança e
+    erros. Com a coluna FUNÇÃO (BID), também as vagas de cada setor da planilha
+    em _vagas_por_setor {setor: [(linha, função, chapa)]}: linha só com setor e
+    função = vaga vazia; pessoa sem função do BID = extra."""
     df = _ler_aba(arquivo)
+    tem_bid = COL_FUNCAO_BID in df.columns
     colaboradores = {c.CHAPA: c for c in session.query(Colaborador).all()}
     atuais = {a.CHAPA: a for a in session.query(AlocacaoIndireto).all()}
 
     plano = {"alocar": [], "mover": [], "atualizar": [], "sem_mudanca": 0, "erros": []}
+    vagas_por_setor = {}
+    if tem_bid:
+        plano["_vagas_por_setor"] = vagas_por_setor
     vistos = {}
 
     for indice, linha in df.iterrows():
@@ -818,12 +931,23 @@ def analisar_planilha_indiretos(arquivo, session):
         # coluna opcional: planilha sem ela não mexe no subsetor de ninguém
         tem_subsetor = COL_SUBSETOR in df.columns
         subsetor = (texto_padrao(linha.get(COL_SUBSETOR)) or None) if tem_subsetor else None
+        funcao_bid = texto_padrao(linha.get(COL_FUNCAO_BID)) if tem_bid else ""
 
-        if not (setor or base or responsavel or chapa):
-            continue  # linha preparada e não usada
+        if not (base or responsavel or chapa or funcao_bid):
+            continue  # linha preparada e não usada (ou só com o setor)
 
         def erro(mensagem):
             plano["erros"].append({"linha": numero, "chapa": chapa or "—", "erro": mensagem})
+
+        # vaga vazia: só o previsto (setor e função do BID)
+        if funcao_bid and not chapa:
+            if not setor:
+                erro("Falta preencher: SETOR.")
+            elif base or responsavel:
+                erro("Falta preencher: CHAPA INDIRETO (ou apague BASE e RESPONSÁVEL para deixar a vaga vazia).")
+            else:
+                vagas_por_setor.setdefault(setor, []).append((numero, funcao_bid, ""))
+            continue
 
         faltam = [n for n, v in (("SETOR", setor), ("BASE", base),
                                  ("CHAPA RESPONSÁVEL", responsavel), ("CHAPA INDIRETO", chapa)) if not v]
@@ -849,6 +973,11 @@ def analisar_planilha_indiretos(arquivo, session):
             erro(f"Indireto repetido: já aparece na linha {vistos[chapa]}.")
             continue
         vistos[chapa] = numero
+        if tem_bid:
+            # sem função do BID: extra (o setor entra no BID da planilha do mesmo jeito)
+            vagas_do_setor = vagas_por_setor.setdefault(setor, [])
+            if funcao_bid:
+                vagas_do_setor.append((numero, funcao_bid, chapa))
 
         item = {
             "linha": numero, "chapa": chapa, "nome": pessoa.NOME,
@@ -909,6 +1038,50 @@ def _arquivo_enviado():
     return arquivo
 
 
+def gravar_plano(session, plano):
+    """Grava na sessão (sem commit) o que a análise montou: primeiro as
+    alocações, depois o BID dos setores da planilha. Devolve o resumo das
+    vagas por setor; quem chama faz o commit (aplicar) ou o rollback
+    (prévia)."""
+    agora = datetime.now(timezone.utc)
+    quem = quem_esta_logado()
+    atuais = {a.CHAPA: a for a in session.query(AlocacaoIndireto).all()}
+    for item in plano["alocar"] + plano["mover"] + plano["atualizar"]:
+        alocacao = atuais.get(item["chapa"])
+        if not alocacao:
+            alocacao = AlocacaoIndireto(CHAPA=item["chapa"])
+            session.add(alocacao)
+        # mudou de setor: a vaga era do setor anterior
+        alocacao.VAGA_ID = vaga_no_setor(session, alocacao.VAGA_ID, item["setor"])
+        alocacao.SETOR = item["setor"]
+        alocacao.BASE = item["base"]
+        if alocacao.RESPONSAVEL_CHAPA != item["responsavel_chapa"]:
+            alocacao.ASSESSORIA = False
+        alocacao.RESPONSAVEL_CHAPA = item["responsavel_chapa"]
+        alocacao.OBSERVACAO = item["observacao"]
+        alocacao.SUBSETOR = item["subsetor"]
+        alocacao.ALOCADO_POR = quem
+        alocacao.ALOCADO_EM = agora
+    session.flush()
+
+    vagas, sem_mudanca = [], 0
+    for setor, linhas in sorted((plano.get("_vagas_por_setor") or {}).items()):
+        resumo = aplicar_vagas_do_setor(session, setor, linhas, quem)
+        if resumo["mudou"]:
+            vagas.append(resumo)
+        else:
+            sem_mudanca += 1
+    return vagas, sem_mudanca
+
+
+def _resposta_do_plano(plano, vagas=None, vagas_sem_mudanca=0):
+    publico = {k: v for k, v in plano.items() if not k.startswith("_")}
+    publico["vagas"] = vagas or []
+    publico["vagas_sem_mudanca"] = vagas_sem_mudanca
+    publico["tem_bid"] = "_vagas_por_setor" in plano
+    return publico
+
+
 @bp.route("/api/indiretos/planilha/previa", methods=["POST"])
 @auth.exige_administrador
 def prever_planilha_indiretos():
@@ -918,13 +1091,21 @@ def prever_planilha_indiretos():
         return jsonify({"erro": str(erro)}), 400
     session = SessionLocal()
     try:
-        return jsonify(analisar_planilha_indiretos(arquivo, session))
+        plano = analisar_planilha_indiretos(arquivo, session)
+        if plano["erros"]:
+            return jsonify(_resposta_do_plano(plano))
+        # o BID só dá para resumir com as alocações da planilha aplicadas: aplica
+        # na sessão e desfaz
+        vagas, sem_mudanca = gravar_plano(session, plano)
+        return jsonify(_resposta_do_plano(plano, vagas, sem_mudanca))
     except ValueError as erro:
         return jsonify({"erro": str(erro)}), 400
     except Exception as erro:
         print(f"[ERRO] prever_planilha_indiretos: {erro}")
         return jsonify({"erro": "Não foi possível analisar a planilha."}), 500
     finally:
+        # a prévia nunca grava
+        session.rollback()
         session.close()
 
 
@@ -941,25 +1122,8 @@ def aplicar_planilha_indiretos():
     try:
         plano = analisar_planilha_indiretos(arquivo, session)
         if plano["erros"]:
-            return jsonify({"erro": "Corrija os erros da planilha antes de aplicar.", **plano}), 400
-
-        agora = datetime.now(timezone.utc)
-        quem = quem_esta_logado()
-        atuais = {a.CHAPA: a for a in session.query(AlocacaoIndireto).all()}
-        for item in plano["alocar"] + plano["mover"] + plano["atualizar"]:
-            alocacao = atuais.get(item["chapa"])
-            if not alocacao:
-                alocacao = AlocacaoIndireto(CHAPA=item["chapa"])
-                session.add(alocacao)
-            alocacao.SETOR = item["setor"]
-            alocacao.BASE = item["base"]
-            if alocacao.RESPONSAVEL_CHAPA != item["responsavel_chapa"]:
-                alocacao.ASSESSORIA = False
-            alocacao.RESPONSAVEL_CHAPA = item["responsavel_chapa"]
-            alocacao.OBSERVACAO = item["observacao"]
-            alocacao.SUBSETOR = item["subsetor"]
-            alocacao.ALOCADO_POR = quem
-            alocacao.ALOCADO_EM = agora
+            return jsonify({"erro": "Corrija os erros da planilha antes de aplicar.", **_resposta_do_plano(plano)}), 400
+        vagas, sem_mudanca = gravar_plano(session, plano)
         session.commit()
         return jsonify({
             "sucesso": True,
@@ -967,6 +1131,8 @@ def aplicar_planilha_indiretos():
             "movidos": len(plano["mover"]),
             "atualizados": len(plano["atualizar"]),
             "sem_mudanca": plano["sem_mudanca"],
+            "vagas": vagas,
+            "vagas_sem_mudanca": sem_mudanca,
         })
     except ValueError as erro:
         session.rollback()
@@ -977,3 +1143,287 @@ def aplicar_planilha_indiretos():
         return jsonify({"erro": "Não foi possível aplicar a planilha."}), 500
     finally:
         session.close()
+
+
+# ============================================================
+# VAGAS (BID)
+# ============================================================
+
+MAXIMO_VAGAS_POR_FUNCAO = 200
+
+
+def _ocupantes(session, vaga_ids):
+    """{vaga_id: AlocacaoIndireto} de quem ocupa estas vagas."""
+    if not vaga_ids:
+        return {}
+    return {
+        a.VAGA_ID: a
+        for a in session.query(AlocacaoIndireto).filter(AlocacaoIndireto.VAGA_ID.in_(list(vaga_ids))).all()
+    }
+
+
+def _quantidade(valor):
+    try:
+        quantidade = int(valor)
+    except (TypeError, ValueError):
+        return None
+    return quantidade if 0 <= quantidade <= MAXIMO_VAGAS_POR_FUNCAO else None
+
+
+def ajustar_quantidade(session, setor, funcao, quantidade, quem, ordem=0):
+    """Deixa o setor com `quantidade` vagas da função: cria vagas vazias ou
+    apaga só vagas vazias (as mais novas primeiro)."""
+    atuais = (
+        session.query(VagaIndireto)
+        .filter(VagaIndireto.SETOR == setor, VagaIndireto.FUNCAO == funcao)
+        .order_by(VagaIndireto.id)
+        .all()
+    )
+    if quantidade > len(atuais):
+        for _ in range(quantidade - len(atuais)):
+            session.add(VagaIndireto(SETOR=setor, FUNCAO=funcao, ORDEM=ordem, CRIADO_POR=quem))
+    elif quantidade < len(atuais):
+        ocupantes = _ocupantes(session, [v.id for v in atuais])
+        vazias = [v for v in reversed(atuais) if v.id not in ocupantes]
+        sobrando = len(atuais) - quantidade
+        if sobrando > len(vazias):
+            raise VagaInvalida(
+                f"{funcao} tem {len(ocupantes)} vaga(s) ocupada(s): para ficar com menos que "
+                "isso, tire as pessoas dessas vagas antes."
+            )
+        for vaga in vazias[:sobrando]:
+            session.delete(vaga)
+
+
+@bp.route("/api/indiretos/vagas/definir", methods=["POST"])
+@auth.exige_administrador
+def definir_vagas_do_setor():
+    """BID de um setor pela tela, várias funções de uma vez. Cada linha:
+    {"atual": nome de hoje (vazio = função nova), "funcao": nome do cargo,
+    "quantidade": vagas}, na ordem do BID. Trocar o nome mantém quem ocupa;
+    quantidade 0 apaga as vagas da função (só as vazias). A ordem das linhas
+    vira a ordem do BID. Tudo ou nada."""
+    dados = _corpo()
+    setor = texto_padrao(dados.get("setor"))
+    linhas = dados.get("linhas")
+    if not setor or not isinstance(linhas, list) or not linhas:
+        return jsonify({"erro": "Informe o setor e as vagas."}), 400
+
+    pedidas = []
+    for linha in linhas:
+        linha = linha if isinstance(linha, dict) else {}
+        atual = texto_padrao(linha.get("atual"))
+        funcao = texto_padrao(linha.get("funcao"))
+        quantidade = _quantidade(linha.get("quantidade"))
+        if not funcao:
+            return jsonify({"erro": "Preencha o nome do cargo de todas as linhas."}), 400
+        if quantidade is None:
+            return jsonify({"erro": f"{funcao}: a quantidade precisa ser de 0 a {MAXIMO_VAGAS_POR_FUNCAO}."}), 400
+        pedidas.append((atual, funcao, quantidade))
+    finais = [funcao for _, funcao, _ in pedidas]
+    repetida = next((f for f in finais if finais.count(f) > 1), None)
+    if repetida:
+        return jsonify({"erro": f"{repetida} aparece em mais de uma linha: junte numa só."}), 400
+
+    session = SessionLocal()
+    try:
+        existentes = {
+            f for (f,) in session.query(VagaIndireto.FUNCAO).filter(VagaIndireto.SETOR == setor).distinct()
+        }
+        # nome trocado para um que já existe e não está sendo trocado também
+        renomeadas = {atual for atual, funcao, _ in pedidas if atual and atual != funcao}
+        for atual, funcao, _ in pedidas:
+            if atual and atual not in existentes:
+                return jsonify({"erro": f"{setor} não tem vagas de {atual}."}), 404
+            if funcao != atual and funcao in existentes and funcao not in renomeadas:
+                return jsonify({"erro": f"{setor} já tem vagas de {funcao}: ajuste a quantidade naquela linha."}), 400
+
+        # nomes: primeiro para um provisório, para A->B e B->A funcionarem
+        provisorio = {}
+        for indice, (atual, funcao, _) in enumerate(pedidas):
+            if atual and atual != funcao:
+                provisorio[atual] = f"__RENOMEANDO_{indice}__"
+                session.query(VagaIndireto).filter(
+                    VagaIndireto.SETOR == setor, VagaIndireto.FUNCAO == atual
+                ).update({VagaIndireto.FUNCAO: provisorio[atual]}, synchronize_session=False)
+        for atual, funcao, _ in pedidas:
+            if atual in provisorio:
+                session.query(VagaIndireto).filter(
+                    VagaIndireto.SETOR == setor, VagaIndireto.FUNCAO == provisorio[atual]
+                ).update({VagaIndireto.FUNCAO: funcao}, synchronize_session=False)
+        session.flush()
+
+        quem = quem_esta_logado()
+        for ordem, (_, funcao, quantidade) in enumerate(pedidas):
+            ajustar_quantidade(session, setor, funcao, quantidade, quem, ordem)
+        session.flush()
+        for ordem, (_, funcao, _) in enumerate(pedidas):
+            session.query(VagaIndireto).filter(
+                VagaIndireto.SETOR == setor, VagaIndireto.FUNCAO == funcao
+            ).update({VagaIndireto.ORDEM: ordem}, synchronize_session=False)
+        session.commit()
+        return jsonify({"sucesso": True})
+    except VagaInvalida as erro:
+        session.rollback()
+        return jsonify({"erro": str(erro)}), 400
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] definir_vagas_do_setor: {erro}")
+        return jsonify({"erro": "Não foi possível salvar as vagas."}), 500
+    finally:
+        session.close()
+
+
+@bp.route("/api/indiretos/vagas/posicao", methods=["POST"])
+@auth.exige_administrador
+def posicionar_vagas():
+    """Arrastar vagas no organograma: em qual base e abaixo de quem elas
+    ficam (os dois opcionais). Sem base e sem responsável, voltam para a caixa
+    "Vagas vazias". Só mexe no desenho: quem ocupar a vaga continua com a base
+    e o responsável que escolher."""
+    dados = _corpo()
+    try:
+        ids = [int(i) for i in (dados.get("vaga_ids") or [])]
+    except (TypeError, ValueError):
+        ids = []
+    base = texto_padrao(dados.get("base"))
+    responsavel = chapa_da_celula(dados.get("responsavel_chapa"))
+    if not ids:
+        return jsonify({"erro": "Informe as vagas."}), 400
+    if base and base not in BASES_PADRAO:
+        return jsonify({"erro": problema_da_base("", base)}), 400
+
+    session = SessionLocal()
+    try:
+        vagas = session.query(VagaIndireto).filter(VagaIndireto.id.in_(ids)).all()
+        if len(vagas) != len(set(ids)):
+            return jsonify({"erro": "Vaga não encontrada."}), 404
+        if len({v.SETOR for v in vagas}) > 1:
+            return jsonify({"erro": "As vagas precisam ser do mesmo setor."}), 400
+        if responsavel and not _colaborador(session, responsavel):
+            return jsonify({"erro": "Responsável não encontrado no cadastro."}), 404
+        for vaga in vagas:
+            vaga.BASE = base or None
+            vaga.RESPONSAVEL_CHAPA = responsavel or None
+        session.commit()
+        return jsonify({"sucesso": True})
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] posicionar_vagas: {erro}")
+        return jsonify({"erro": "Não foi possível posicionar as vagas."}), 500
+    finally:
+        session.close()
+
+
+@bp.route("/api/indiretos/vagas/ocupar", methods=["POST"])
+@auth.exige_administrador
+def ocupar_vaga():
+    """Põe na vaga uma pessoa já alocada no setor dela (quem estava na vaga
+    vira extra; a vaga anterior da pessoa fica vazia). Sem chapa: esvazia a
+    vaga."""
+    dados = _corpo()
+    chapa = chapa_da_celula(dados.get("chapa"))
+    try:
+        vaga_id = int(dados.get("vaga_id"))
+    except (TypeError, ValueError):
+        return jsonify({"erro": "Informe a vaga."}), 400
+
+    session = SessionLocal()
+    try:
+        vaga = session.get(VagaIndireto, vaga_id)
+        if not vaga:
+            return jsonify({"erro": "Vaga não encontrada."}), 404
+        pessoa = None
+        if chapa:
+            pessoa = session.query(AlocacaoIndireto).filter(AlocacaoIndireto.CHAPA == chapa).first()
+            if not pessoa or pessoa.SETOR != vaga.SETOR:
+                return jsonify({"erro": f"Aloque a pessoa em {vaga.SETOR} antes de pôr na vaga."}), 400
+        atual = _ocupantes(session, [vaga.id]).get(vaga.id)
+        if atual and atual is not pessoa:
+            atual.VAGA_ID = None
+            session.flush()
+        if pessoa:
+            pessoa.VAGA_ID = vaga.id
+        session.commit()
+        return jsonify({"sucesso": True})
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] ocupar_vaga: {erro}")
+        return jsonify({"erro": "Não foi possível ocupar a vaga."}), 500
+    finally:
+        session.close()
+
+
+def aplicar_vagas_do_setor(session, setor, linhas, quem):
+    """Deixa o setor exatamente com as vagas das linhas [(linha, funcao,
+    chapa)] e devolve o resumo do que mudou. Reaproveita as vagas que já
+    existem: a mesma pessoa na vaga da mesma função continua nela."""
+    existentes = (
+        session.query(VagaIndireto)
+        .filter(VagaIndireto.SETOR == setor)
+        .order_by(VagaIndireto.ORDEM, VagaIndireto.id)
+        .all()
+    )
+    ocupantes = _ocupantes(session, [v.id for v in existentes])
+    ocupante_de = {v.id: (ocupantes[v.id].CHAPA if v.id in ocupantes else "") for v in existentes}
+    antes = sorted((v.FUNCAO, ocupante_de[v.id]) for v in existentes)
+    ordem_antes = list(dict.fromkeys(v.FUNCAO for v in existentes))
+    # a ordem do BID é a da planilha: a posição em que cada função aparece primeiro
+    ordem_da_funcao = {f: i for i, f in enumerate(dict.fromkeys(funcao for _, funcao, _ in linhas))}
+
+    sobrando = list(existentes)
+    escolhida = {}
+    # 1) mesma função e mesmo ocupante (vaga vazia que continua vazia também)
+    for i, (_, funcao, chapa) in enumerate(linhas):
+        vaga = next((v for v in sobrando if v.FUNCAO == funcao and ocupante_de[v.id] == chapa), None)
+        if vaga:
+            escolhida[i] = vaga
+            sobrando.remove(vaga)
+    # 2) mesma função, outro ocupante
+    for i, (_, funcao, _) in enumerate(linhas):
+        if i in escolhida:
+            continue
+        vaga = next((v for v in sobrando if v.FUNCAO == funcao), None)
+        if vaga:
+            escolhida[i] = vaga
+            sobrando.remove(vaga)
+    # 3) o resto é vaga nova
+    criadas = 0
+    for i, (_, funcao, _) in enumerate(linhas):
+        if i not in escolhida:
+            escolhida[i] = VagaIndireto(SETOR=setor, FUNCAO=funcao, CRIADO_POR=quem)
+            session.add(escolhida[i])
+            criadas += 1
+
+    # em etapas: uma pessoa por vaga precisa valer a cada gravação
+    alocacoes = {
+        a.CHAPA: a
+        for a in session.query(AlocacaoIndireto).filter(AlocacaoIndireto.SETOR == setor).all()
+    }
+    for alocacao in alocacoes.values():
+        alocacao.VAGA_ID = None
+    session.flush()
+    for vaga in sobrando:
+        session.delete(vaga)
+    session.flush()
+    for i, (_, funcao, chapa) in enumerate(linhas):
+        escolhida[i].ORDEM = ordem_da_funcao[funcao]
+        if chapa:
+            alocacoes[chapa].VAGA_ID = escolhida[i].id
+    session.flush()
+
+    ocupadas = {chapa for _, _, chapa in linhas if chapa}
+    return {
+        "setor": setor,
+        "mudou": (
+            antes != sorted((funcao, chapa) for _, funcao, chapa in linhas)
+            or ordem_antes != list(ordem_da_funcao)
+        ),
+        "antes": len(existentes),
+        "depois": len(linhas),
+        "criadas": criadas,
+        "removidas": len(sobrando),
+        "ocupadas": len(ocupadas),
+        "vazias": len(linhas) - len(ocupadas),
+        "extras": sum(1 for c in alocacoes if c not in ocupadas),
+    }

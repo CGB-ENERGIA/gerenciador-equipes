@@ -14,7 +14,7 @@
           <div class="col">
             <div class="text-h5">Alocação de Indiretos</div>
             <div class="text-subtitle2 text-grey-7">
-              Controle nominal do pessoal indireto por setor, base e responsável
+              Pessoal indireto por setor, base e responsável, com as vagas do BID
             </div>
           </div>
 
@@ -25,7 +25,6 @@
               color="positive"
               text-color="white"
               no-caps
-              icon="table_view"
               label="Planilha"
               @click="abrirPlanilha"
             />
@@ -126,7 +125,6 @@
                 <q-btn
                   color="primary"
                   no-caps
-                  icon="account_tree"
                   label="Organograma geral"
                   @click="abrirVisaoGeral"
                 />
@@ -136,42 +134,44 @@
         </q-card>
 
         <!-- ================================================== -->
-        <!-- INDICADORES (nominais: pessoas, não vagas) -->
+        <!-- INDICADORES (pessoas e vagas do BID) -->
         <!-- ================================================== -->
 
-        <div class="row q-col-gutter-md q-mb-md">
-          <div
+        <!-- uma linha de números; clicar num deles filtra (de novo, limpa) -->
+        <div class="faixa-indicadores q-mb-md">
+          <button
             v-for="indicador in indicadores"
             :key="indicador.chave"
-            class="col-6 col-md"
+            type="button"
+            class="faixa-indicadores__item"
+            :class="[
+              `faixa-indicadores__item--${indicador.chave || 'todos'}`,
+              { 'faixa-indicadores__item--ativo': filtroStatus === indicador.chave && indicador.chave }
+            ]"
+            @click="alternarStatus(indicador.chave)"
           >
-            <q-card
-              class="indicador cursor-pointer"
-              :class="[
-                `indicador--${indicador.chave}`,
-                { 'indicador--ativo': filtroStatus === indicador.chave }
-              ]"
-              @click="alternarStatus(indicador.chave)"
-            >
-              <q-card-section class="row items-center no-wrap">
-                <div class="indicador__icone">
-                  <q-icon :name="indicador.icone" size="22px" />
-                </div>
-                <div class="q-ml-md">
-                  <div class="indicador__valor">{{ indicador.valor }}</div>
-                  <div class="indicador__rotulo">{{ indicador.rotulo }}</div>
-                </div>
-              </q-card-section>
-            </q-card>
-          </div>
+            <span class="faixa-indicadores__valor">{{ indicador.valor }}</span>
+            <span class="faixa-indicadores__rotulo">{{ indicador.rotulo.toLowerCase() }}</span>
+          </button>
         </div>
 
         <!-- ================================================== -->
         <!-- CONTEÚDO -->
         <!-- ================================================== -->
 
-        <div v-if="carregando && primeiraCarga" class="row justify-center q-pa-xl">
-          <q-spinner color="primary" size="50px" />
+        <!-- carregando: o formato da tela, para ela não pular quando os dados chegam -->
+        <div v-if="carregando && primeiraCarga" class="mural-setores" aria-busy="true">
+          <div v-for="n in 4" :key="n" class="mural-setores__item">
+            <q-card flat bordered class="cartao-setor q-pa-md">
+              <q-skeleton type="text" width="40%" class="q-mb-sm" />
+              <q-skeleton type="text" width="25%" class="q-mb-md" />
+              <div v-for="l in 6" :key="l" class="row no-wrap q-gutter-sm q-mb-xs">
+                <q-skeleton type="text" width="30%" />
+                <q-skeleton type="text" width="12%" />
+                <q-skeleton type="text" class="col" />
+              </div>
+            </q-card>
+          </div>
         </div>
 
         <div v-else class="row q-col-gutter-md">
@@ -222,22 +222,32 @@
                           {{ grupo.bases.length }}
                           {{ grupo.bases.length === 1 ? 'base' : 'bases' }}
                         </div>
+                        <!-- BID do setor em texto; quem edita clica para definir as vagas -->
+                        <button
+                          v-if="textoResumoVagas(grupo.nome) || podeEditar"
+                          type="button"
+                          class="resumo-vagas"
+                          :disabled="!podeEditar"
+                          @click="abrirVagasDoSetor(grupo.nome)"
+                        >
+                          {{ textoResumoVagas(grupo.nome) || 'Definir vagas do BID' }}
+                        </button>
                       </div>
 
                       <div class="col q-px-md">
                         <button
-                          v-if="grupo.responsavelUnico"
+                          v-if="grupo.responsavelPrincipal"
                           type="button"
                           class="responsavel-chip"
                           :disabled="!podeEditar"
-                          @click="abrirTrocaResponsavel(grupo.responsavelUnico)"
+                          @click="abrirTrocaResponsavel(grupo.responsavelPrincipal)"
                         >
-                          <span v-if="grupo.responsavelUnico.responsavel" class="responsavel-chip__texto">
-                            <strong>{{ nomeCurto(grupo.responsavelUnico.responsavel.nome) }}</strong>
+                          <span v-if="grupo.responsavelPrincipal.responsavel" class="responsavel-chip__texto">
+                            <strong>{{ nomeCurto(grupo.responsavelPrincipal.responsavel.nome) }}</strong>
                             <small>
-                              {{ grupo.responsavelUnico.responsavel.chapa }}
-                              <template v-if="grupo.responsavelUnico.responsavel.funcao">
-                                · {{ grupo.responsavelUnico.responsavel.funcao }}
+                              {{ grupo.responsavelPrincipal.responsavel.chapa }}
+                              <template v-if="grupo.responsavelPrincipal.responsavel.funcao">
+                                · {{ grupo.responsavelPrincipal.responsavel.funcao }}
                               </template>
                             </small>
                           </span>
@@ -249,7 +259,7 @@
                             class="responsavel-chip__editar"
                           />
                           <q-tooltip v-if="podeEditar">
-                            Responsável pelo setor inteiro · clique para trocar
+                            Responsável mais alto do setor · clique para trocar quem responde direto a ele
                           </q-tooltip>
                         </button>
                       </div>
@@ -276,131 +286,117 @@
                     </div>
                   </q-card-section>
 
-                  <div class="secoes-base">
-                    <div v-for="secao in grupo.bases" :key="secao.base" class="secao-base">
-                      <!--
-                        O responsável fica na mesma linha da base (ou no
-                        cabeçalho do setor, quando é um só no setor todo). Se
-                        a base tem mais de um, os demais abrem uma linha
-                        própria (sem repetir a base) acima das suas pessoas.
-                      -->
-                      <div
-                        v-for="(time, indice) in secao.responsaveis"
-                        :key="time.chapa || 'sem'"
-                        class="time-responsavel"
-                      >
-                        <div
-                          class="secao-base__cabecalho"
-                          :class="{ 'secao-base__cabecalho--sub': indice > 0 }"
-                        >
-                          <q-chip
-                            v-if="indice === 0"
-                            dense
-                            class="chip-base q-ma-none"
-                            icon="place"
+                  <!--
+                    Como o BID: uma linha por vaga, na ordem do BID (ocupada ou
+                    vazia), e no fim os extras. Base ao lado do nome; a função
+                    real fica à direita, só em texto. Setor sem BID: as pessoas
+                    pelo nome.
+                  -->
+                  <q-list class="lista-pessoas lista-bid">
+                    <q-item
+                      v-for="linha in linhasDoCartao(grupo)"
+                      :key="linha.chave"
+                      dense
+                      class="linha-bid"
+                      :class="{
+                        'linha-vaga-vazia': !linha.pessoa,
+                        'linha-extra': linha.extra,
+                        'linha-afastado': linha.pessoa?.afastado
+                      }"
+                    >
+                      <q-item-section avatar class="secao-chapa">
+                        <span class="chapa-pessoa" :class="{ 'chapa-pessoa--vazia': !linha.pessoa }">
+                          {{ linha.pessoa ? linha.pessoa.chapa : '—' }}
+                        </span>
+                      </q-item-section>
+
+                      <!-- BID: o cargo previsto da vaga; extra = em branco -->
+                      <q-item-section v-if="setoresComBid.has(grupo.nome)" side class="secao-bid">
+                        <span class="bid-pessoa" :title="linha.vaga ? linha.vaga.funcao : 'Extra: sem vaga no BID'">
+                          {{ linha.vaga ? linha.vaga.funcao : '' }}
+                        </span>
+                      </q-item-section>
+
+                      <q-item-section>
+                        <!-- base à esquerda do nome, na mesma linha -->
+                        <q-item-label class="row items-center no-wrap">
+                          <span
+                            class="base-pessoa"
+                            :class="{ 'base-pessoa--vazia': !(linha.pessoa ? linha.pessoa.alocacao.base : linha.vaga.base) }"
+                            :style="{ '--cor-base': corDaBase(linha.pessoa ? linha.pessoa.alocacao.base : linha.vaga.base) }"
                           >
-                            {{ secao.base }}
-                          </q-chip>
-                          <button
-                            v-if="!grupo.responsavelUnico"
-                            type="button"
-                            class="responsavel-chip"
-                            :disabled="!podeEditar"
-                            @click="abrirTrocaResponsavel(time)"
+                            {{ (linha.pessoa ? linha.pessoa.alocacao.base : linha.vaga.base) || '—' }}
+                          </span>
+                          <span
+                            v-if="linha.pessoa"
+                            v-caber-na-linha
+                            class="col nome-pessoa"
+                            :title="[linha.pessoa.nome, linha.pessoa.alocacao.observacao].filter(Boolean).join(' · ')"
                           >
-                            <span v-if="time.responsavel" class="responsavel-chip__texto">
-                              <strong>{{ nomeCurto(time.responsavel.nome) }}</strong>
-                              <small>
-                                {{ time.responsavel.chapa }}
-                                <template v-if="time.responsavel.funcao">
-                                  · {{ time.responsavel.funcao }}
-                                </template>
-                              </small>
+                            {{ linha.pessoa.nome }}
+                          </span>
+                          <span v-else class="col texto-vaga-vazia">vaga vazia</span>
+                        </q-item-label>
+                      </q-item-section>
+
+                      <q-item-section side>
+                        <div class="row items-center no-wrap linha-bid__direita">
+                          <template v-if="linha.pessoa">
+                            <span v-if="linha.pessoa.afastado" class="marca-afastado">afastado</span>
+                            <span v-if="linha.extra" class="marca-extra">extra</span>
+                            <span
+                              class="funcao-real"
+                              :title="
+                                linha.pessoa.alocacao.funcao
+                                  ? `${linha.pessoa.alocacao.funcao} (no cadastro: ${linha.pessoa.funcao || '—'})`
+                                  : linha.pessoa.funcao
+                              "
+                            >
+                              {{ funcaoExibida(linha.pessoa) }}
                             </span>
-                            <span v-else class="sem-responsavel">Definir responsável</span>
-                            <q-icon
-                              v-if="podeEditar"
-                              name="edit"
-                              size="14px"
-                              class="responsavel-chip__editar"
-                            />
-                            <q-tooltip v-if="podeEditar">
-                              Responsável de {{ time.pessoas.length }}
-                              {{ time.pessoas.length === 1 ? 'pessoa' : 'pessoas' }} · clique para trocar
-                            </q-tooltip>
-                          </button>
-                          <q-space />
-                          <span class="secao-base__contagem">{{ time.pessoas.length }}</span>
+                          </template>
+                          <template v-if="podeEditar">
+                            <!-- alocar nas vagas direto na linha -->
+                            <button
+                              v-if="!linha.pessoa"
+                              type="button"
+                              class="acao-texto"
+                              @click="abrirOcuparVaga(linha.vaga)"
+                            >
+                              Ocupar
+                            </button>
+                            <button
+                              v-else-if="linha.extra && vagasVaziasDoSetor(grupo.nome).length"
+                              type="button"
+                              class="acao-texto"
+                              @click="abrirPorNaVaga(linha.pessoa)"
+                            >
+                              Pôr na vaga
+                            </button>
+                            <q-btn
+                              v-if="linha.pessoa"
+                              flat
+                              round
+                              dense
+                              icon="edit"
+                              size="sm"
+                              class="linha-bid__editar"
+                              aria-label="Editar colaborador"
+                              @click="abrirAlocacao(linha.pessoa)"
+                            >
+                              <q-tooltip>Editar colaborador</q-tooltip>
+                            </q-btn>
+                          </template>
                         </div>
-
-                        <q-list dense separator class="lista-pessoas">
-                          <q-item
-                            v-for="pessoa in time.pessoas"
-                            :key="pessoa.chapa"
-                            :class="{ 'linha-afastado': pessoa.afastado }"
-                          >
-                            <q-item-section avatar class="secao-chapa">
-                              <span class="chapa-pessoa">{{ pessoa.chapa }}</span>
-                            </q-item-section>
-
-                            <q-item-section>
-                              <q-item-label
-                                v-caber-na-linha
-                                class="text-weight-medium"
-                                :title="pessoa.nome"
-                              >
-                                {{ pessoa.nome }}
-                              </q-item-label>
-                              <q-item-label v-if="pessoa.alocacao.observacao" caption>
-                                <q-icon name="notes" size="12px" />
-                                {{ pessoa.alocacao.observacao }}
-                              </q-item-label>
-                            </q-item-section>
-
-                            <q-item-section side>
-                              <div class="row items-center no-wrap">
-                                <span
-                                  class="funcao-pessoa"
-                                  :title="
-                                    pessoa.alocacao.funcao
-                                      ? `${pessoa.alocacao.funcao} (no cadastro: ${pessoa.funcao || '—'})`
-                                      : pessoa.funcao
-                                  "
-                                >
-                                  {{ funcaoExibida(pessoa) }}
-                                </span>
-                                <q-chip
-                                  v-if="pessoa.afastado"
-                                  dense
-                                  class="bg-afastado text-afastado"
-                                  label="afastado"
-                                />
-                                <q-btn
-                                  v-if="podeEditar"
-                                  flat
-                                  round
-                                  dense
-                                  icon="edit"
-                                  size="sm"
-                                  aria-label="Editar colaborador"
-                                  @click="abrirAlocacao(pessoa)"
-                                >
-                                  <q-tooltip>Editar colaborador</q-tooltip>
-                                </q-btn>
-                              </div>
-                            </q-item-section>
-                          </q-item>
-                        </q-list>
-                      </div>
-                    </div>
-                  </div>
+                      </q-item-section>
+                    </q-item>
+                  </q-list>
 
                   <q-card-actions v-if="podeEditar">
                     <q-btn
                       flat
                       no-caps
                       color="primary"
-                      icon="person_add"
                       label="Adicionar pessoa"
                       @click="abrirAdicionarNoSetor(grupo.nome)"
                     />
@@ -511,7 +507,6 @@
               flat
               no-caps
               color="primary"
-              icon="person_add"
               label="Adicionar gerente"
               class="q-mr-sm"
               @click="abrirAdicionarNoSetor(SETOR_GERENCIA)"
@@ -521,18 +516,25 @@
               outline
               no-caps
               color="primary"
-              icon="edit"
               label="Editar gerentes"
               class="q-mr-sm"
               @click="abrirDaVisaoGeral(SETOR_GERENCIA, [])"
             />
           </template>
           <q-btn
+            v-if="!naVisaoGeral && podeEditar"
+            outline
+            no-caps
+            color="primary"
+            label="Vagas (BID)"
+            class="q-mr-sm"
+            @click="abrirVagasDoSetor(organograma.setor)"
+          />
+          <q-btn
             class="btn-exportar q-mr-sm"
             color="positive"
             text-color="white"
             no-caps
-            icon="image"
             label="Exportar imagem"
             :loading="exportandoOrganograma"
             @click="exportarOrganograma"
@@ -560,7 +562,9 @@
           Arraste uma pessoa sobre outra: no meio ou embaixo da caixa, passa a
           responder a ela; em cima, fica acima dela; no lado direito, vira
           assessoria dela; na caixa da base, volta ao nível da base. Clique na pessoa
-          para mudar o subsetor ou as bases dela.
+          para mudar o subsetor ou as bases dela. Vaga vazia (azul): arraste para alguém
+          (fica abaixo dela) ou para uma base; solte uma pessoa nela para ocupar; clique
+          para escolher quem ocupa.
           <q-spinner v-if="salvandoOrganograma" size="16px" color="primary" class="q-ml-sm" />
         </div>
 
@@ -708,7 +712,6 @@
             @input-value="valor => digitarSubsetor(basesDaPessoa, valor)"
             @clear="digitarSubsetor(basesDaPessoa, '')"
           >
-            <template #prepend><q-icon name="account_tree" /></template>
           </q-select>
 
           <q-select
@@ -727,7 +730,6 @@
             "
             :options="basesDoSetorOrganograma"
           >
-            <template #prepend><q-icon name="place" /></template>
           </q-select>
 
           <div v-if="!marcandoBasesDeGerente" class="text-caption">
@@ -788,7 +790,6 @@
             :options="opcoesPessoas"
             @filter="filtrarPessoas"
           >
-            <template #prepend><q-icon name="person" /></template>
             <template #option="scope">
               <q-item v-bind="scope.itemProps">
                 <q-item-section>
@@ -819,13 +820,11 @@
                 input-debounce="0"
                 new-value-mode="add-unique"
                 label="Setor *"
-                hint="Escolha ou digite um setor novo"
                 :options="opcoesSetorDialogo"
                 :readonly="alocacao.modo === 'setor'"
                 @filter="filtrarSetores"
                 @input-value="valor => (alocacao.setorDigitado = valor)"
               >
-                <template #prepend><q-icon name="apartment" /></template>
               </q-select>
             </div>
 
@@ -843,7 +842,6 @@
                 hint="Vazio: fica acima de todos"
                 :options="bases"
               >
-                <template #prepend><q-icon name="place" /></template>
               </q-select>
               <q-select
                 v-else
@@ -852,12 +850,31 @@
                 dense
                 label="Base *"
                 :options="bases"
-                hint="Independe do cadastro"
               >
-                <template #prepend><q-icon name="place" /></template>
               </q-select>
             </div>
           </div>
+
+          <!-- vaga do BID: só quando o setor já tem vagas -->
+          <q-select
+            v-if="setorEscolhidoTemBid"
+            v-model="alocacao.vagaId"
+            outlined
+            dense
+            emit-value
+            map-options
+            label="Vaga do BID"
+            :options="opcoesVagaDialogo"
+          >
+            <template #option="scope">
+              <q-item v-bind="scope.itemProps">
+                <q-item-section>
+                  <q-item-label>{{ scope.opt.label }}</q-item-label>
+                  <q-item-label caption>{{ scope.opt.caption }}</q-item-label>
+                </q-item-section>
+              </q-item>
+            </template>
+          </q-select>
 
           <!-- subsetor: opcional; não aparece nos cartões, só no filtro e no organograma -->
           <q-select
@@ -877,7 +894,6 @@
             @input-value="valor => digitarSubsetor(alocacao, valor)"
             @clear="digitarSubsetor(alocacao, '')"
           >
-            <template #prepend><q-icon name="account_tree" /></template>
           </q-select>
 
           <q-select
@@ -894,7 +910,6 @@
             :options="opcoesResponsavelSelect"
             @filter="filtrarResponsaveis"
           >
-            <template #prepend><q-icon name="supervisor_account" /></template>
             <template #option="scope">
               <q-item v-bind="scope.itemProps">
                 <q-item-section>
@@ -929,12 +944,11 @@
             :options="opcoesFuncao"
             :hint="
               pessoaAlocacao
-                ? `No cadastro: ${pessoaAlocacao.funcao || 'sem função'}. Trocar aqui não muda o cadastro.`
-                : 'Vazio = a função do cadastro'
+                ? `Só nesta página; no cadastro é ${pessoaAlocacao.funcao || 'sem função'}.`
+                : 'Vazio: a do cadastro.'
             "
             @filter="filtrarFuncoes"
           >
-            <template #prepend><q-icon name="badge" /></template>
             <template #no-option>
               <q-item>
                 <q-item-section class="text-grey-7">Nenhuma função encontrada</q-item-section>
@@ -949,7 +963,6 @@
             autogrow
             label="Observação (opcional)"
           >
-            <template #prepend><q-icon name="notes" /></template>
           </q-input>
 
           <q-banner v-if="setorNovo" dense rounded class="bg-blue-1">
@@ -965,7 +978,6 @@
             flat
             no-caps
             color="negative"
-            icon="person_remove"
             label="Tirar do setor"
             @click="removerDoSetor(pessoaAlocacao)"
           />
@@ -977,6 +989,286 @@
             :disable="!alocacaoCompleta"
             :loading="salvando"
             @click="confirmarAlocacao"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- ================================================== -->
+    <!-- VAGAS DO SETOR (BID): quantas por função e quem ocupa -->
+    <!-- ================================================== -->
+
+    <q-dialog v-model="vagasSetor.aberto">
+      <q-card style="width: 920px; max-width: 96vw">
+        <q-card-section class="row items-center no-wrap">
+          <q-icon name="event_seat" color="primary" size="26px" class="q-mr-sm" />
+          <div>
+            <div class="text-h6">Vagas · {{ vagasSetor.setor }}</div>
+            <div class="text-caption">
+              {{ textoResumoVagas(vagasSetor.setor) || 'Sem vagas no BID ainda' }}
+            </div>
+          </div>
+          <q-space />
+          <q-spinner v-if="vagasSetor.salvando" size="18px" color="primary" class="q-mr-sm" />
+          <q-btn v-close-popup flat round dense icon="close" />
+        </q-card-section>
+
+        <q-separator />
+
+        <q-banner
+          v-if="vagasSetor.aviso.texto"
+          dense
+          rounded
+          class="q-mx-md q-mt-sm"
+          :class="vagasSetor.aviso.tipo === 'erro' ? 'bg-red-1 text-negative' : 'bg-green-1 text-positive'"
+        >
+          {{ vagasSetor.aviso.texto }}
+        </q-banner>
+
+        <q-card-section class="vagas-dialogo">
+          <div class="text-caption q-mb-sm">
+            Defina as funções e quantas vagas cada uma tem, todas de uma vez, na ordem do BID
+            (arraste pela alça para mudar a ordem), e salve. Para pôr as pessoas nas vagas,
+            use "Ocupar" na vaga vazia ou "Pôr na vaga" no extra, no cartão do setor.
+          </div>
+
+          <!-- 1) BID: várias funções de uma vez; o nome do cargo sugere as
+               funções do cadastro, mas é editável -->
+          <div class="vagas-secao__titulo">Vagas previstas (BID)</div>
+          <div class="vagas-tabela">
+            <div class="vagas-tabela__cabecalho">
+              <span class="vagas-tabela__alca" />
+              <span class="col">Cargo (BID)</span>
+              <span class="vagas-tabela__qtd">Vagas</span>
+              <span class="vagas-tabela__ocupadas">Ocupadas</span>
+              <span class="vagas-tabela__acao" />
+            </div>
+            <div
+              v-for="linha in vagasSetor.linhas"
+              :key="linha.chave"
+              class="vagas-tabela__linha"
+              :class="{
+                'vagas-tabela__linha--apagar': linha.atual && Number(linha.quantidade) === 0,
+                'vagas-tabela__linha--arrastando': linhaArrastada === linha,
+                'vagas-tabela__linha--alvo': linhaAlvo === linha
+              }"
+              @dragover="evento => sobreLinha(evento, linha)"
+              @dragleave="linhaAlvo === linha && (linhaAlvo = null)"
+              @drop.prevent="soltarNaLinha(linha)"
+            >
+              <!-- arraste pela alça para mudar a ordem do BID -->
+              <span
+                class="vagas-tabela__alca"
+                draggable="true"
+                title="Arraste para cima ou para baixo para mudar a ordem do BID"
+                @dragstart="evento => iniciarArrasteDaLinha(evento, linha)"
+                @dragend="encerrarArrasteDaLinha"
+              >
+                <q-icon name="drag_indicator" size="20px" />
+              </span>
+              <q-select
+                v-model="linha.funcao"
+                outlined
+                dense
+                use-input
+                hide-selected
+                fill-input
+                input-debounce="0"
+                new-value-mode="add-unique"
+                class="col"
+                placeholder="Escolha ou digite o cargo"
+                :options="opcoesFuncaoVaga"
+                :disable="vagasSetor.salvando"
+                @filter="filtrarFuncoesVaga"
+                @input-value="valor => (linha.funcao = valor || null)"
+              >
+                <template #no-option>
+                  <q-item>
+                    <q-item-section class="text-grey-7">Cargo novo: fica como digitado</q-item-section>
+                  </q-item>
+                </template>
+              </q-select>
+              <q-input
+                v-model.number="linha.quantidade"
+                outlined
+                dense
+                type="number"
+                min="0"
+                class="vagas-tabela__qtd"
+                :disable="vagasSetor.salvando"
+              />
+              <span class="vagas-tabela__ocupadas">{{ linha.ocupadas || '—' }}</span>
+              <q-btn
+                flat
+                round
+                dense
+                size="sm"
+                icon="delete"
+                class="vagas-tabela__acao"
+                :aria-label="linha.atual ? 'Apagar as vagas desta função' : 'Tirar a linha'"
+                :disable="vagasSetor.salvando"
+                @click="removerLinhaDasVagas(linha)"
+              >
+                <q-tooltip>{{ linha.atual ? 'Zerar (apaga só vagas vazias)' : 'Tirar a linha' }}</q-tooltip>
+              </q-btn>
+            </div>
+          </div>
+
+          <div class="row items-center q-mt-sm">
+            <q-btn
+              flat
+              no-caps
+              color="primary"
+              label="Adicionar função"
+              :disable="vagasSetor.salvando"
+              @click="adicionarLinhaDasVagas"
+            />
+            <q-space />
+            <span v-if="problemaDasVagas" class="text-caption text-negative q-mr-sm">
+              {{ problemaDasVagas }}
+            </span>
+            <span v-else class="text-caption q-mr-sm">Total: {{ totalDaTabela }}</span>
+            <q-btn
+              color="primary"
+              no-caps
+              label="Salvar vagas"
+              :disable="!vagasMudaram || Boolean(problemaDasVagas)"
+              :loading="vagasSetor.salvando"
+              @click="salvarDefinicaoDasVagas"
+            />
+          </div>
+
+        </q-card-section>
+
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat label="Fechar" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- ================================================== -->
+    <!-- OCUPAR VAGA: na vaga vazia escolhe a pessoa; no extra, a vaga -->
+    <!-- ================================================== -->
+
+    <q-dialog v-model="ocupar.aberto">
+      <q-card style="width: 500px; max-width: 94vw">
+        <q-card-section class="row items-center no-wrap">
+          <q-icon name="event_seat" color="primary" size="26px" class="q-mr-sm" />
+          <div>
+            <div class="text-h6">
+              {{ ocupar.modo === 'vaga' ? 'Ocupar vaga' : 'Pôr na vaga' }}
+            </div>
+            <div class="text-caption">
+              {{ ocupar.setor }}
+              <template v-if="ocupar.modo === 'vaga' && ocupar.vaga"> · {{ ocupar.vaga.funcao }}</template>
+              <template v-else-if="ocupar.pessoa"> · {{ ocupar.pessoa.nome }}</template>
+            </div>
+          </div>
+          <q-space />
+          <q-btn v-close-popup flat round dense icon="close" />
+        </q-card-section>
+
+        <q-separator />
+
+        <q-card-section class="q-gutter-md">
+          <q-banner v-if="ocupar.erro" dense rounded class="bg-red-1 text-negative">
+            {{ ocupar.erro }}
+          </q-banner>
+
+          <!-- vaga vazia: quem vai ocupar -->
+          <q-select
+            v-if="ocupar.modo === 'vaga'"
+            v-model="ocupar.chapa"
+            outlined
+            dense
+            emit-value
+            map-options
+            use-input
+            input-debounce="0"
+            label="Quem ocupa *"
+            :options="opcoesOcupar"
+            @filter="filtrarOcupantes"
+          >
+            <template #option="scope">
+              <q-item-label
+                v-if="scope.index === 0 || opcoesOcupar[scope.index - 1].grupo !== scope.opt.grupo"
+                header
+                class="q-py-xs"
+              >
+                {{
+                  { extra: 'Extras do setor', livre: 'Sem setor', outro: 'De outro setor (muda de setor)' }[
+                    scope.opt.grupo
+                  ]
+                }}
+              </q-item-label>
+              <q-item v-bind="scope.itemProps">
+                <q-item-section>
+                  <q-item-label>{{ scope.opt.label }}</q-item-label>
+                  <q-item-label caption>{{ scope.opt.caption }}</q-item-label>
+                </q-item-section>
+              </q-item>
+            </template>
+            <template #no-option>
+              <q-item>
+                <q-item-section class="text-grey-7">Ninguém encontrado. Digite parte do nome.</q-item-section>
+              </q-item>
+            </template>
+          </q-select>
+
+          <!-- extra: em qual vaga vazia -->
+          <q-option-group
+            v-else
+            v-model="ocupar.vagaId"
+            :options="opcoesVagaParaOcupar"
+            type="radio"
+            dense
+          />
+
+          <!-- quem vem de fora do setor é alocado nele junto -->
+          <template v-if="ocuparAlocaNoSetor && !ocuparNaGerencia">
+            <div class="text-caption">
+              {{ pessoaParaOcupar.nome }} vai para {{ ocupar.setor }}: confira a base e o responsável.
+            </div>
+            <div class="row q-col-gutter-sm">
+              <div class="col-12 col-sm-4">
+                <q-select v-model="ocupar.base" outlined dense label="Base *" :options="bases">
+                </q-select>
+              </div>
+              <div class="col-12 col-sm-8">
+                <q-select
+                  v-model="ocupar.responsavelChapa"
+                  outlined
+                  dense
+                  emit-value
+                  map-options
+                  use-input
+                  input-debounce="0"
+                  label="Responsável *"
+                  :options="opcoesResponsavelSelect"
+                  @filter="filtrarResponsaveis"
+                >
+                  <template #option="scope">
+                    <q-item v-bind="scope.itemProps">
+                      <q-item-section>
+                        <q-item-label>{{ scope.opt.nome }}</q-item-label>
+                        <q-item-label caption>{{ scope.opt.chapa }} · {{ scope.opt.funcao }}</q-item-label>
+                      </q-item-section>
+                    </q-item>
+                  </template>
+                </q-select>
+              </div>
+            </div>
+          </template>
+        </q-card-section>
+
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat label="Cancelar" />
+          <q-btn
+            color="primary"
+            label="Confirmar"
+            :disable="!ocuparCompleto"
+            :loading="ocupar.salvando"
+            @click="confirmarOcupar"
           />
         </q-card-actions>
       </q-card>
@@ -1023,7 +1315,6 @@
             :options="opcoesResponsavelSelect"
             @filter="filtrarResponsaveis"
           >
-            <template #prepend><q-icon name="supervisor_account" /></template>
             <template #option="scope">
               <q-item v-bind="scope.itemProps">
                 <q-item-section>
@@ -1067,29 +1358,48 @@
 
         <q-card-section class="q-gutter-md">
           <div class="text-body2">
-            Baixe a planilha atual para consultar ou exportar as alocações. Para
-            alocar, mover ou trocar o responsável de vários indiretos de uma vez,
-            preencha e envie de volta: uma linha por indireto, e quem não estiver
-            na planilha continua onde está.
+            Uma planilha só, no formato do BID: à esquerda o previsto (setor e função do
+            BID), à direita o real (quem ocupa, base e responsável). Uma linha por vaga, na
+            ordem do BID, e no fim de cada setor os extras com a função do BID em branco.
+            Cada setor da planilha fica com as vagas dela; quem não estiver na planilha
+            continua onde está.
           </div>
 
           <q-markup-table flat bordered dense class="tabela-modelo">
             <thead>
+              <tr class="tabela-ocupacao__grupos">
+                <th colspan="2" class="tabela-ocupacao__grupo-bid">BID</th>
+                <th colspan="3" class="tabela-ocupacao__grupo-real">REAL</th>
+              </tr>
               <tr>
                 <th>SETOR</th>
+                <th>FUNÇÃO (BID)</th>
+                <th>CHAPA INDIRETO</th>
                 <th>BASE</th>
                 <th>CHAPA RESPONSÁVEL</th>
-                <th>CHAPA INDIRETO</th>
-                <th>OBSERVAÇÃO</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td>ALMOXARIFADO</td>
+                <td>GOMAN</td>
+                <td>SUPERVISOR OPERACIONAL</td>
+                <td>12345</td>
                 <td>BCB</td>
                 <td>19837</td>
-                <td>12345</td>
+              </tr>
+              <tr class="linha-vaga-vazia">
+                <td>GOMAN</td>
+                <td>SUPERVISOR OPERACIONAL</td>
                 <td></td>
+                <td></td>
+                <td></td>
+              </tr>
+              <tr class="linha-extra">
+                <td>GOMAN</td>
+                <td></td>
+                <td>23456</td>
+                <td>BCB</td>
+                <td>19837</td>
               </tr>
             </tbody>
           </q-markup-table>
@@ -1100,7 +1410,6 @@
                 outline
                 no-caps
                 color="primary"
-                icon="download"
                 label="Baixar planilha atual"
                 :loading="baixando"
                 @click="baixarPlanilha"
@@ -1116,7 +1425,6 @@
                 label="Escolher planilha (.xlsx)"
                 @update:model-value="planilha.previa = null"
               >
-                <template #prepend><q-icon name="attach_file" /></template>
               </q-file>
             </div>
           </div>
@@ -1134,6 +1442,10 @@
                 {{ planilha.previa.atualizar.length }} a atualizar
               </q-chip>
               <q-chip icon="check">{{ planilha.previa.sem_mudanca }} sem mudança</q-chip>
+              <q-chip v-if="planilha.previa.vagas?.length" class="chip-vaga-vazia" icon="event_seat">
+                BID: {{ planilha.previa.vagas.length }}
+                {{ planilha.previa.vagas.length === 1 ? 'setor muda' : 'setores mudam' }}
+              </q-chip>
               <q-chip
                 v-if="planilha.previa.erros.length"
                 class="bg-red-1 text-negative"
@@ -1179,7 +1491,28 @@
               </q-item>
             </q-list>
 
-            <div v-else class="text-caption">Nada muda com esta planilha.</div>
+            <div v-else-if="!planilha.previa.vagas?.length" class="text-caption">
+              Nada muda com esta planilha.
+            </div>
+
+            <q-list
+              v-if="!planilha.previa.erros.length && planilha.previa.vagas?.length"
+              bordered
+              dense
+              separator
+              class="rounded-borders lista-previa"
+            >
+              <q-item-label header>Vagas do BID</q-item-label>
+              <q-item v-for="item in planilha.previa.vagas" :key="`v${item.setor}`">
+                <q-item-section avatar>
+                  <q-icon name="event_seat" color="primary" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>{{ item.setor }}</q-item-label>
+                  <q-item-label caption>{{ textoPreviaVagas(item) }}</q-item-label>
+                </q-item-section>
+              </q-item>
+            </q-list>
           </template>
         </q-card-section>
 
@@ -1196,7 +1529,6 @@
           <q-btn
             v-else
             color="positive"
-            icon="check"
             label="Aplicar"
             :loading="planilha.aplicando"
             @click="aplicarPlanilha"
@@ -1242,6 +1574,8 @@ const responsaveis = ref([])
 const bases = ref([])
 const setoresGerencia = ref([])
 const funcoes = ref([])
+// vagas do BID: { id, setor, funcao }; quem ocupa vem em alocacao.vaga_id
+const vagas = ref([])
 const carregando = ref(false)
 const primeiraCarga = ref(true)
 const erro = ref('')
@@ -1265,6 +1599,7 @@ async function carregar() {
     bases.value = dados.bases || []
     setoresGerencia.value = dados.setores_gerencia || []
     funcoes.value = dados.funcoes || []
+    vagas.value = dados.vagas || []
   } catch (e) {
     if (minhaSequencia === sequenciaCarga) {
       erro.value = e.message || 'Erro ao carregar os indiretos.'
@@ -1454,7 +1789,93 @@ function casaComStatus(pessoa) {
   if (filtroStatus.value === 'afastados') return Boolean(pessoa.afastado)
   if (filtroStatus.value === 'alocados') return estaAlocado(pessoa)
   if (filtroStatus.value === 'semSetor') return !estaAlocado(pessoa)
+  if (filtroStatus.value === 'extras') return ehExtra(pessoa)
+  // os setores que têm vaga vazia (com todo mundo deles)
+  if (filtroStatus.value === 'vagasVazias') {
+    return Boolean(pessoa.alocacao && resumoVagasPorSetor.value.get(pessoa.alocacao.setor)?.vazias)
+  }
   return true
+}
+
+// ============================================================
+// VAGAS (BID)
+// ============================================================
+//
+// Cada vaga é uma linha do BID: setor + função. Quem a ocupa é a pessoa com
+// alocacao.vaga_id dela, mesmo com outra função real. Alocado sem vaga num
+// setor que já tem BID = EXTRA; setor ainda sem BID não marca ninguém.
+
+const vagaPorId = computed(() => new Map(vagas.value.map(v => [v.id, v])))
+const ocupantePorVaga = computed(
+  () => new Map(alocados.value.filter(p => p.alocacao.vaga_id).map(p => [p.alocacao.vaga_id, p]))
+)
+const setoresComBid = computed(() => new Set(vagas.value.map(v => v.setor)))
+
+function vagaDe(pessoa) {
+  return vagaPorId.value.get(pessoa.alocacao?.vaga_id) || null
+}
+
+function ehExtra(pessoa) {
+  return Boolean(
+    pessoa.alocacao && !vagaDe(pessoa) && setoresComBid.value.has(pessoa.alocacao.setor)
+  )
+}
+
+// setor -> { total, ocupadas, vazias, extras }
+const resumoVagasPorSetor = computed(() => {
+  const resumo = new Map()
+  const doSetor = setor => {
+    if (!resumo.has(setor)) resumo.set(setor, { total: 0, ocupadas: 0, vazias: 0, extras: 0 })
+    return resumo.get(setor)
+  }
+  for (const vaga of vagas.value) {
+    const r = doSetor(vaga.setor)
+    r.total++
+    if (ocupantePorVaga.value.has(vaga.id)) r.ocupadas++
+    else r.vazias++
+  }
+  for (const pessoa of alocados.value) {
+    if (ehExtra(pessoa)) doSetor(pessoa.alocacao.setor).extras++
+  }
+  return resumo
+})
+
+function textoResumoVagas(setor) {
+  const r = resumoVagasPorSetor.value.get(setor)
+  if (!r?.total) return ''
+  return [
+    `${r.total} ${r.total === 1 ? 'vaga' : 'vagas'}`,
+    r.vazias ? `${r.vazias} ${r.vazias === 1 ? 'vazia' : 'vazias'}` : '',
+    r.extras ? `${r.extras} ${r.extras === 1 ? 'extra' : 'extras'}` : ''
+  ]
+    .filter(Boolean)
+    .join(', ')
+}
+
+// vagas vazias no cartão do setor: somem com os filtros que só pessoas
+// têm (base, subsetor, responsável, busca, extras, afastados)
+function vagasVaziasNoCartao(setor) {
+  if (
+    basesAtivas.value.length ||
+    subsetoresAtivos.value.length ||
+    responsaveisAtivos.value.length ||
+    (busca.value || '').trim() ||
+    !['', 'vagasVazias', 'alocados'].includes(filtroStatus.value)
+  ) {
+    return []
+  }
+  return vagasDoSetorPorFuncao(setor).flatMap(f => f.vagas.filter(v => !v.ocupante))
+}
+
+// vagas de um setor agrupadas por função, na ordem do BID (o servidor já
+// manda as vagas ordenadas: setor, ordem, id)
+function vagasDoSetorPorFuncao(setor) {
+  const porFuncao = new Map()
+  for (const vaga of vagas.value.filter(v => v.setor === setor)) {
+    if (!porFuncao.has(vaga.funcao)) porFuncao.set(vaga.funcao, [])
+    porFuncao.get(vaga.funcao).push({ ...vaga, ocupante: ocupantePorVaga.value.get(vaga.id) || null })
+  }
+  return [...porFuncao.entries()].map(([funcao, lista]) => ({ funcao, vagas: lista }))
 }
 
 const alocadosFiltrados = computed(() =>
@@ -1493,21 +1914,6 @@ const semSetorFiltrados = computed(() =>
   )
 )
 
-// Ordem das pessoas dentro de cada base: primeiro pelo cargo (a função que
-// contém o termo, ex. "AUXILIAR DE ALMOXARIFADO" -> AUXILIAR), as demais
-// depois, em ordem alfabética. COORDENADOR vem antes de SUPERVISOR por ser
-// o cargo acima na hierarquia. A abreviação "SUP" (ex. "SUP OP SERV EXP E
-// MANUTENÇÃO") conta como SUPERVISOR; como palavra inteira, para não pegar
-// "SUPORTE".
-const ORDEM_CARGOS = [
-  /COORDENADOR/,
-  /SUPERVISOR|\bSUP\b/,
-  /ANALISTA/,
-  /ENCARREGADO/,
-  /ASSISTENTE/,
-  /AUXILIAR/
-]
-
 // maiúsculas e sem acento, para comparar textos
 function normalizarTexto(texto) {
   return String(texto || '')
@@ -1516,10 +1922,15 @@ function normalizarTexto(texto) {
     .toUpperCase()
 }
 
-function ordemCargo(funcao) {
-  const texto = normalizarTexto(funcao)
-  const posicao = ORDEM_CARGOS.findIndex(cargo => cargo.test(texto))
-  return posicao === -1 ? ORDEM_CARGOS.length : posicao
+// Ordem do BID: a posição da vaga que a pessoa ocupa (as vagas já vêm
+// ordenadas por setor, ordem do BID e id). Extra ou setor sem BID vai depois,
+// e aí desempata o nome. Não há mais ordem pelo nome da função.
+const SEM_POSICAO_NO_BID = Number.MAX_SAFE_INTEGER
+const posicaoNoBid = computed(() => new Map(vagas.value.map((v, i) => [v.id, i])))
+
+function ordemBid(chapa) {
+  const vaga = vagaDe(alocadoPorChapa.value.get(chapa) || {})
+  return vaga ? posicaoNoBid.value.get(vaga.id) : SEM_POSICAO_NO_BID
 }
 
 // setor -> base -> responsável -> pessoas
@@ -1577,9 +1988,7 @@ function montarGruposSetor(lista) {
   }
 
   const porFuncaoENome = (a, b) =>
-    ordemCargo(funcaoExibida(a)) - ordemCargo(funcaoExibida(b)) ||
-    funcaoExibida(a).localeCompare(funcaoExibida(b), 'pt-BR') ||
-    a.nome.localeCompare(b.nome, 'pt-BR')
+    ordemBid(a.chapa) - ordemBid(b.chapa) || a.nome.localeCompare(b.nome, 'pt-BR')
 
   return [...porSetor.entries()]
     .map(([nome, porBase]) => {
@@ -1599,22 +2008,26 @@ function montarGruposSetor(lista) {
           }
         })
         .sort((a, b) => a.base.localeCompare(b.base))
-      // Um responsável só no setor inteiro: o chip sobe para o cabeçalho
-      // do setor em vez de se repetir em cada base.
-      const chapas = new Set(secoes.flatMap(s => s.responsaveis.map(t => t.chapa)))
-      const [chapaUnica] = chapas
+      // O cabeçalho mostra só o responsável mais alto do setor (o topo da
+      // cadeia com mais gente); quem responde a quem fica no organograma.
+      const porTopo = new Map()
+      for (const time of secoes.flatMap(s => s.responsaveis)) {
+        if (!porTopo.has(time.chapa)) porTopo.set(time.chapa, [])
+        porTopo.get(time.chapa).push(...time.pessoas)
+      }
+      const [chapaPrincipal, pessoasDoPrincipal] =
+        [...porTopo.entries()].sort((a, b) => b[1].length - a[1].length)[0] || []
       return {
         nome,
         bases: secoes,
         total: secoes.reduce((soma, s) => soma + s.total, 0),
-        responsavelUnico:
-          chapas.size === 1
-            ? {
-                chapa: chapaUnica,
-                responsavel: responsavelPorChapa(chapaUnica),
-                pessoas: secoes.flatMap(s => s.responsaveis[0].pessoas)
-              }
-            : null
+        responsavelPrincipal: chapaPrincipal !== undefined
+          ? {
+              chapa: chapaPrincipal,
+              responsavel: responsavelPorChapa(chapaPrincipal),
+              pessoas: pessoasDoPrincipal
+            }
+          : null
       }
     })
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
@@ -1654,10 +2067,10 @@ const salvandoOrganograma = ref(false)
 // erro e aviso mostrados dentro do diálogo (o banner da página fica atrás dele)
 const avisoOrganograma = ref({ tipo: '', texto: '' })
 
+// no organograma, irmãos na ordem do BID (depois o nome)
+const posicaoDoNo = no => no.ordemNoBid ?? ordemBid(no.chapa)
 const porCargoENome = (a, b) =>
-  ordemCargo(a.funcao) - ordemCargo(b.funcao) ||
-  a.funcao.localeCompare(b.funcao, 'pt-BR') ||
-  a.nomeCompleto.localeCompare(b.nomeCompleto, 'pt-BR')
+  posicaoDoNo(a) - posicaoDoNo(b) || a.nomeCompleto.localeCompare(b.nomeCompleto, 'pt-BR')
 
 // a visão geral mostra todo mundo, independente dos filtros da página
 const gruposCompletos = computed(() => montarGruposSetor(alocados.value))
@@ -1750,7 +2163,7 @@ function noDoSetor(grupo, bases, prefixo, topos = null, toposLigados = null) {
       })
       .sort(
         (a, b) =>
-          ordemCargo(a.funcao) - ordemCargo(b.funcao) || a.nome.localeCompare(b.nome, 'pt-BR')
+          ordemBid(a.chapa) - ordemBid(b.chapa) || a.nome.localeCompare(b.nome, 'pt-BR')
       )
   }
 }
@@ -2022,7 +2435,9 @@ function separarPorBase(no, baseAtual) {
   // quem responde por várias bases fica direto abaixo do chefe (as bases
   // dele aparecem abaixo dele), sem ir para a caixa da base em que está
   const variosLideres = no.filhos.filter(f => (f.basesResponsavel || []).length > 1)
-  const demais = no.filhos.filter(f => !variosLideres.includes(f))
+  // vaga vazia sem base (chefe sem base própria): direto abaixo dele
+  const vagasSemBase = no.filhos.filter(f => f.tipo === 'vaga' && !f.base)
+  const demais = no.filhos.filter(f => !variosLideres.includes(f) && !vagasSemBase.includes(f))
   variosLideres.forEach(f => separarPorBase(f, null))
   const bases = [...new Set(demais.map(f => f.base))]
   if (!forcar && (!bases.length || (bases.length === 1 && bases[0] === baseAtual))) {
@@ -2032,6 +2447,7 @@ function separarPorBase(no, baseAtual) {
   const lista = forcar ? [...new Set([...minhas, ...bases])] : bases
   no.filhos = [
     ...variosLideres,
+    ...vagasSemBase,
     ...lista
       .sort((a, b) => a.localeCompare(b, 'pt-BR'))
       .flatMap(base => caixaDaBase(no, base, demais, forcar))
@@ -2071,7 +2487,7 @@ function agruparFolhas(lista, prefixo, chefe, assessoria) {
         chefe: chefe.chapa || '',
         chefeNome: chefe.nome || '',
         pessoas: iguais
-          .map(i => ({ chapa: i.chapa, nome: i.nome, nomeCompleto: i.nomeCompleto }))
+          .map(i => ({ chapa: i.chapa, nome: i.nome, nomeCompleto: i.nomeCompleto, extra: i.extra, detalhe: i.detalhe }))
           .sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto, 'pt-BR')),
         filhos: [],
         assessores: []
@@ -2153,7 +2569,8 @@ const arvoreOrganograma = computed(() => {
   const nos = new Map()
 
   for (const pessoa of pessoasDoOrganograma.value) {
-    const funcao = funcaoExibida(pessoa) || 'SEM FUNÇÃO'
+    // cargo do cartão: o da vaga do BID que ocupa; só o extra mostra a função real
+    const funcao = vagaDe(pessoa)?.funcao || funcaoExibida(pessoa) || 'SEM FUNÇÃO'
     nos.set(pessoa.chapa, {
       id: pessoa.chapa,
       chapa: pessoa.chapa,
@@ -2170,6 +2587,8 @@ const arvoreOrganograma = computed(() => {
       assessoria: Boolean(pessoa.alocacao.assessoria),
       externo: false,
       responsavel: pessoa.alocacao.responsavel_chapa || '',
+      // BID: sem vaga = extra (selo laranja)
+      extra: ehExtra(pessoa),
       filhos: [],
       assessores: []
     })
@@ -2218,6 +2637,24 @@ const arvoreOrganograma = computed(() => {
     if (!pai) raizes.push(no)
     else (no.assessoria ? pai.assessores : pai.filhos).push(no)
   }
+  // vagas vazias arrastadas para alguém (ou só para uma base): entram na
+  // cadeia, na base delas; as outras (ou as de quem está fora do desenho)
+  // ficam na caixa "Vagas vazias"
+  const naCaixa = []
+  if (!organograma.topos.length) {
+    for (const lista of vagasVaziasAgrupadas(grupo.nome)) {
+      const [vaga] = lista
+      if (organograma.bases.length && vaga.base && !organograma.bases.includes(vaga.base)) continue
+      const chefeDaVaga = vaga.responsavel_chapa ? nos.get(vaga.responsavel_chapa) : null
+      const pai =
+        chefeDaVaga ||
+        (vaga.base && !vaga.responsavel_chapa
+          ? raizes.find(r => r.base === vaga.base) || raizes.find(r => r.tipo === 'pessoa')
+          : null)
+      if (pai) pai.filhos.push(noDeVagas(lista, vaga.base || pai.base))
+      else naCaixa.push(...lista)
+    }
+  }
   const ordenar = lista => {
     lista.sort(porSubsetorCargoENome)
     lista.forEach(no => {
@@ -2230,8 +2667,67 @@ const arvoreOrganograma = computed(() => {
   // um setor de base única não precisa da caixa da base
   if (variasBases) raizes.forEach(raiz => separarPorBase(raiz, raiz.base || null))
   raizes.forEach(raiz => agruparMesmaFuncao(raiz, raiz))
-  return raizes
+  const caixa = organograma.topos.length ? null : caixaDasVagasVazias(naCaixa)
+  return caixa ? [...raizes, caixa] : raizes
 })
+
+// vagas vazias do setor juntas por função e lugar no desenho (chefe + base),
+// na ordem do BID
+function vagasVaziasAgrupadas(setor) {
+  const grupos = new Map()
+  for (const vaga of vagasVaziasDoSetor(setor)) {
+    const chave = `${vaga.funcao}|${vaga.responsavel_chapa}|${vaga.base}`
+    if (!grupos.has(chave)) grupos.set(chave, [])
+    grupos.get(chave).push(vaga)
+  }
+  return [...grupos.values()]
+}
+
+// cartão de vagas vazias da mesma função ("2 vagas vazias")
+function noDeVagas(lista, base) {
+  const [vaga] = lista
+  return {
+    id: `vaga-${vaga.id}`,
+    tipo: 'vaga',
+    cargo: vaga.funcao,
+    vagaIds: lista.map(v => v.id),
+    quantidade: lista.length,
+    base: base || '',
+    subsetor: '',
+    nomeCompleto: '',
+    ordemNoBid: posicaoNoBid.value.get(vaga.id),
+    filhos: [],
+    assessores: []
+  }
+}
+
+// Vagas do BID sem lugar no desenho: uma caixa ao lado do organograma, com
+// um cartão por função. Arraste o cartão para alguém (fica abaixo dela) ou
+// para uma base; solte uma pessoa do setor nele para pôr na vaga. A caixa
+// aparece também vazia quando o setor tem vagas posicionadas, para receber
+// de volta as que forem tiradas da cadeia.
+function caixaDasVagasVazias(lista) {
+  const temPosicionadas = vagasVaziasDoSetor(organograma.setor).length > lista.length
+  if (!lista.length && !(temPosicionadas && podeEditar.value)) return null
+  const porFuncao = new Map()
+  for (const vaga of lista) {
+    if (!porFuncao.has(vaga.funcao)) porFuncao.set(vaga.funcao, [])
+    porFuncao.get(vaga.funcao).push(vaga)
+  }
+  return {
+    id: 'vagas-vazias',
+    tipo: 'base',
+    titulo: 'Vagas vazias',
+    icone: 'event_seat',
+    subtitulo: lista.length
+      ? `${lista.length} ${lista.length === 1 ? 'vaga' : 'vagas'} sem lugar`
+      : 'solte aqui para tirar da cadeia',
+    naoRecebe: true,
+    recebeVagas: true,
+    filhos: [...porFuncao.values()].map(vagasDaFuncao => noDeVagas(vagasDaFuncao, '')),
+    assessores: []
+  }
+}
 
 function abrirOrganograma(grupo) {
   avisoOrganograma.value = { tipo: '', texto: '' }
@@ -2312,6 +2808,14 @@ function soltarNoOrganograma(origem, alvo, posicao) {
   // visão geral: setor ou responsável de setor solto num gerente
   if (origem.setor) {
     soltarSetorNoGerente(origem, alvo, posicao)
+    return
+  }
+  if (origem.vagaIds) {
+    posicionarVagas(origem, alvo)
+    return
+  }
+  if (alvo.vaga) {
+    soltarNaVaga(origem, alvo)
     return
   }
   // soltou sobre um cartão agrupado (várias pessoas da mesma função)
@@ -2641,7 +3145,8 @@ provide('arrasteOrganograma', {
   habilitado: computed(() => podeEditar.value && !salvandoOrganograma.value),
   emArraste,
   soltar: soltarNoOrganograma,
-  abrirBases: abrirBasesDaPessoa
+  abrirBases: abrirBasesDaPessoa,
+  abrirVaga: id => vagaPorId.value.get(id) && abrirOcuparVaga(vagaPorId.value.get(id))
 })
 
 // ---------- exportar
@@ -2807,13 +3312,28 @@ const indicadores = computed(() => [
     valor: pessoas.value.filter(p => !estaAlocado(p)).length
   },
   {
+    chave: 'vagasVazias',
+    rotulo: 'Vagas vazias',
+    icone: 'event_seat',
+    valor: vagas.value.filter(v => !ocupantePorVaga.value.has(v.id)).length
+  },
+  {
+    chave: 'extras',
+    rotulo: 'Extras',
+    icone: 'person_add_alt',
+    valor: alocados.value.filter(ehExtra).length
+  },
+  {
     chave: 'afastados',
     rotulo: 'Afastados',
     icone: 'event_busy',
     valor: pessoas.value.filter(p => p.afastado).length
   }
-  // quem só consulta não vê a lista "Sem setor", então nem o indicador dela
-].filter(indicador => podeEditar.value || indicador.chave !== 'semSetor'))
+  // quem só consulta não vê a lista "Sem setor", então nem o indicador dela;
+  // sem BID nenhum ainda, os de vagas não dizem nada
+]
+  .filter(indicador => podeEditar.value || indicador.chave !== 'semSetor')
+  .filter(indicador => vagas.value.length || !['vagasVazias', 'extras'].includes(indicador.chave)))
 
 function alternarStatus(chave) {
   filtroStatus.value = filtroStatus.value === chave ? '' : chave
@@ -2829,7 +3349,7 @@ const termoResponsavel = ref('')
 
 const opcoesResponsavelSelect = computed(() => {
   const termo = termoResponsavel.value.trim().toLowerCase()
-  const selecionadas = [alocacao.responsavelChapa, trocaResponsavel.chapa].filter(Boolean)
+  const selecionadas = [alocacao.responsavelChapa, trocaResponsavel.chapa, ocupar.responsavelChapa].filter(Boolean)
   const lista = termo.length < 2
     ? responsaveis.value.filter(r => selecionadas.includes(r.chapa))
     : responsaveis.value
@@ -2862,7 +3382,9 @@ const alocacao = reactive({
   funcao: null,
   subsetor: null,
   subsetorDigitado: '',
-  observacao: ''
+  observacao: '',
+  // vaga do BID que ocupa (null = extra)
+  vagaId: null
 })
 const salvando = ref(false)
 const termoPessoa = ref('')
@@ -2947,7 +3469,7 @@ const dicaSubsetor = computed(() => {
   if (herdado && !subsetorEscolhido.value) {
     return `Herdado de ${nomeCurto(chefe.nome)}: ${herdado}. Preencha só para usar outro.`
   }
-  return 'Vazio = setor geral (ou o do responsável). Escolha um do setor ou digite um novo'
+  return ''
 })
 
 // como no setor: vale o texto digitado mesmo sem Enter
@@ -3004,7 +3526,8 @@ function abrirAlocacao(pessoa) {
     funcao: funcaoExibida(pessoa) || null,
     subsetor: atual?.subsetor || null,
     subsetorDigitado: '',
-    observacao: atual?.observacao || ''
+    observacao: atual?.observacao || '',
+    vagaId: atual?.vaga_id || null
   })
 }
 
@@ -3024,7 +3547,8 @@ function abrirAdicionarNoSetor(nomeSetor) {
     funcao: null,
     subsetor: null,
     subsetorDigitado: '',
-    observacao: ''
+    observacao: '',
+    vagaId: null
   })
 }
 
@@ -3047,7 +3571,8 @@ async function confirmarAlocacao() {
           // vazio ou igual à do cadastro: o servidor volta a usar a do cadastro
           funcao: alocacao.funcao || '',
           subsetor: subsetorEscolhido.value,
-          observacao: alocacao.observacao
+          observacao: alocacao.observacao,
+          vaga_id: setorEscolhidoTemBid.value ? alocacao.vagaId : null
         })
       },
       'Não foi possível alocar.'
@@ -3101,6 +3626,564 @@ async function removerDoSetor(pessoa) {
     erro.value = e.message
   }
 }
+
+// ============================================================
+// VAGAS DO SETOR (BID): quantidade por função e quem ocupa cada uma
+// ============================================================
+
+// linhas: a tabela do BID que se edita de uma vez ({ chave, atual, funcao,
+// quantidade, ocupadas }); atual = nome de hoje ('' = função nova)
+// aviso: mostrado dentro do diálogo (o banner da página fica atrás dele)
+const vagasSetor = reactive({
+  aberto: false,
+  setor: '',
+  linhas: [],
+  salvando: false,
+  aviso: { tipo: '', texto: '' }
+})
+const opcoesFuncaoVaga = ref([])
+let proximaChaveLinha = 0
+
+const funcoesDasVagas = computed(() => vagasDoSetorPorFuncao(vagasSetor.setor))
+function linhaDaTabela(atual = '', quantidade = 1, ocupadas = 0) {
+  return { chave: ++proximaChaveLinha, atual, funcao: atual || null, quantidade, ocupadas }
+}
+
+// a tabela parte do BID de hoje; setor sem BID começa com uma linha em branco
+function montarLinhasDasVagas() {
+  const linhas = funcoesDasVagas.value.map(f =>
+    linhaDaTabela(f.funcao, f.vagas.length, f.vagas.filter(v => v.ocupante).length)
+  )
+  vagasSetor.linhas = linhas.length ? linhas : [linhaDaTabela()]
+}
+
+function abrirVagasDoSetor(setor) {
+  opcoesFuncaoVaga.value = sugestoesDeCargo.value
+  Object.assign(vagasSetor, { aberto: true, setor, salvando: false, aviso: { tipo: '', texto: '' } })
+  montarLinhasDasVagas()
+}
+
+function adicionarLinhaDasVagas() {
+  vagasSetor.linhas.push(linhaDaTabela())
+}
+
+// função que já existe vai a 0 (apaga as vagas vazias); linha nova sai da tabela
+function removerLinhaDasVagas(linha) {
+  if (linha.atual) linha.quantidade = 0
+  else vagasSetor.linhas = vagasSetor.linhas.filter(l => l !== linha)
+}
+
+// Nome do cargo da vaga: sugere as funções do cadastro e as que já estão no
+// BID, mas é texto livre (o BID pode usar um nome que o cadastro não tem)
+const sugestoesDeCargo = computed(() =>
+  [...new Set([...funcoes.value, ...vagas.value.map(v => v.funcao)])].sort((a, b) =>
+    a.localeCompare(b, 'pt-BR')
+  )
+)
+
+function cargoDigitado(valor) {
+  return String(valor || '').trim().replace(/\s+/g, ' ').toUpperCase()
+}
+
+// primeiro os que começam com o texto, depois os que o contêm; a primeira
+// já fica marcada (Enter completa com ela) e o texto continua editável
+function filtrarFuncoesVaga(texto, atualizar) {
+  atualizar(
+    () => {
+      const termo = normalizarTexto(texto)
+      if (!termo) {
+        opcoesFuncaoVaga.value = sugestoesDeCargo.value
+        return
+      }
+      const comecam = []
+      const contem = []
+      for (const funcao of sugestoesDeCargo.value) {
+        const nome = normalizarTexto(funcao)
+        if (nome.startsWith(termo)) comecam.push(funcao)
+        else if (nome.includes(termo)) contem.push(funcao)
+      }
+      opcoesFuncaoVaga.value = [...comecam, ...contem]
+    },
+    campo => {
+      if (texto && campo.options.length) {
+        campo.setOptionIndex(-1)
+        campo.moveOptionSelection(1, true)
+      }
+    }
+  )
+}
+
+// linhas que vão para o servidor: as em branco (sem cargo) de função nova são ignoradas
+const linhasParaSalvar = computed(() =>
+  vagasSetor.linhas
+    .filter(l => l.atual || cargoDigitado(l.funcao))
+    .map(l => ({ atual: l.atual, funcao: cargoDigitado(l.funcao), quantidade: Number(l.quantidade) }))
+)
+
+const problemaDasVagas = computed(() => {
+  const linhas = linhasParaSalvar.value
+  if (linhas.some(l => !l.funcao)) return 'Preencha o nome do cargo de todas as linhas.'
+  if (linhas.some(l => !Number.isInteger(l.quantidade) || l.quantidade < 0)) {
+    return 'A quantidade precisa ser um número inteiro (0 apaga as vagas).'
+  }
+  const nomes = linhas.filter(l => l.quantidade > 0 || l.atual).map(l => l.funcao)
+  const repetido = nomes.find((n, i) => nomes.indexOf(n) !== i)
+  if (repetido) return `${repetido} aparece em mais de uma linha: junte numa só.`
+  return ''
+})
+
+const vagasMudaram = computed(() => {
+  const hoje = new Map(funcoesDasVagas.value.map(f => [f.funcao, f.vagas.length]))
+  const ordemDeHoje = funcoesDasVagas.value.map(f => f.funcao).join('|')
+  const ordemDaTabela = vagasSetor.linhas.filter(l => l.atual).map(l => l.atual).join('|')
+  return (
+    ordemDaTabela !== ordemDeHoje ||
+    linhasParaSalvar.value.some(
+      l => !l.atual || l.funcao !== l.atual || l.quantidade !== hoje.get(l.atual)
+    )
+  )
+})
+
+// ---------- arrastar o cargo para cima ou para baixo (ordem do BID)
+const linhaArrastada = ref(null)
+const linhaAlvo = ref(null)
+
+function iniciarArrasteDaLinha(evento, linha) {
+  linhaArrastada.value = linha
+  evento.dataTransfer.effectAllowed = 'move'
+  evento.dataTransfer.setData('text/plain', linha.funcao || '')
+}
+
+function sobreLinha(evento, linha) {
+  if (!linhaArrastada.value || linhaArrastada.value === linha) return
+  evento.preventDefault()
+  evento.dataTransfer.dropEffect = 'move'
+  linhaAlvo.value = linha
+}
+
+function soltarNaLinha(linha) {
+  const origem = linhaArrastada.value
+  linhaArrastada.value = null
+  linhaAlvo.value = null
+  if (!origem || origem === linha) return
+  const lista = vagasSetor.linhas.filter(l => l !== origem)
+  const destino = vagasSetor.linhas.indexOf(linha) > vagasSetor.linhas.indexOf(origem)
+    ? lista.indexOf(linha) + 1
+    : lista.indexOf(linha)
+  lista.splice(destino, 0, origem)
+  vagasSetor.linhas = lista
+}
+
+function encerrarArrasteDaLinha() {
+  linhaArrastada.value = null
+  linhaAlvo.value = null
+}
+
+const totalDaTabela = computed(() =>
+  linhasParaSalvar.value.reduce((soma, l) => soma + (l.quantidade > 0 ? l.quantidade : 0), 0)
+)
+
+async function salvarDefinicaoDasVagas() {
+  // função nova com 0 vagas não precisa ir
+  const linhas = linhasParaSalvar.value.filter(l => l.atual || l.quantidade > 0)
+  if (!linhas.length || problemaDasVagas.value) return
+  if (
+    await salvarNasVagas(
+      '/api/indiretos/vagas/definir',
+      { setor: vagasSetor.setor, linhas },
+      `${vagasSetor.setor}: BID salvo, ${totalDaTabela.value} ${totalDaTabela.value === 1 ? 'vaga' : 'vagas'}.`
+    )
+  ) {
+    montarLinhasDasVagas()
+  }
+}
+
+async function salvarNasVagas(url, corpo, mensagem) {
+  vagasSetor.salvando = true
+  vagasSetor.aviso = { tipo: '', texto: '' }
+  try {
+    await chamarApi(
+      url,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) },
+      'Não foi possível salvar as vagas.'
+    )
+    vagasSetor.aviso = { tipo: 'ok', texto: mensagem }
+    await carregar()
+    return true
+  } catch (e) {
+    vagasSetor.aviso = { tipo: 'erro', texto: e.message }
+    return false
+  } finally {
+    vagasSetor.salvando = false
+  }
+}
+
+// ---------- linhas do cartão do setor (como o BID)
+
+function peloNome(a, b) {
+  return a.nome.localeCompare(b.nome, 'pt-BR')
+}
+
+// Cada base com uma cor fixa (a paleta das disciplinas, que já se ajusta ao
+// modo escuro): a mesma base tem a mesma cor em todos os setores
+const CORES_DAS_BASES = {
+  BCB: 'var(--tipo-p8)',
+  BDC: 'var(--tipo-p1)',
+  ITM: 'var(--tipo-p3)',
+  PDS: 'var(--tipo-p4)',
+  PDT: 'var(--tipo-p5)',
+  STI: 'var(--tipo-p2)',
+  'SPOT STI': 'var(--tipo-p9)'
+}
+const CORES_DE_SOBRA = ['var(--tipo-p6)', 'var(--tipo-p7)', 'var(--tipo-p10)']
+// gerente sem base (indiretos.py: BASE_GERENCIA) fica neutro
+const BASE_GERAL = 'GERAL'
+
+function corDaBase(base) {
+  if (!base || base === BASE_GERAL) return null
+  if (CORES_DAS_BASES[base]) return CORES_DAS_BASES[base]
+  const soma = [...base].reduce((total, letra) => total + letra.charCodeAt(0), 0)
+  return CORES_DE_SOBRA[soma % CORES_DE_SOBRA.length]
+}
+
+// vagas vazias do setor (sem olhar os filtros)
+function vagasVaziasDoSetor(setor) {
+  return vagas.value.filter(v => v.setor === setor && !ocupantePorVaga.value.has(v.id))
+}
+
+// Uma linha por vaga, na ordem do BID (com quem ocupa, ou vazia), e no fim os
+// extras. Só entra quem passou nos filtros da página; vaga vazia some com os
+// filtros que só pessoas têm. Setor sem BID: as pessoas pelo nome.
+function linhasDoCartao(grupo) {
+  const pessoasDoGrupo = grupo.bases.flatMap(b => b.responsaveis.flatMap(t => t.pessoas))
+  if (!setoresComBid.value.has(grupo.nome)) {
+    return pessoasDoGrupo
+      .slice()
+      .sort(peloNome)
+      .map(pessoa => ({ chave: pessoa.chapa, pessoa, vaga: null, extra: false }))
+  }
+  const visiveis = new Set(pessoasDoGrupo.map(p => p.chapa))
+  const comVazias = vagasVaziasNoCartao(grupo.nome).length > 0
+  const linhas = []
+  for (const vaga of vagas.value.filter(v => v.setor === grupo.nome)) {
+    const ocupante = ocupantePorVaga.value.get(vaga.id)
+    if (ocupante ? visiveis.has(ocupante.chapa) : comVazias) {
+      linhas.push({ chave: `vaga-${vaga.id}`, pessoa: ocupante || null, vaga, extra: false })
+    }
+  }
+  for (const pessoa of pessoasDoGrupo.filter(p => !vagaDe(p)).sort(peloNome)) {
+    linhas.push({ chave: pessoa.chapa, pessoa, vaga: null, extra: true })
+  }
+  return linhas
+}
+
+// ============================================================
+// OCUPAR VAGA (na linha do cartão)
+// ============================================================
+//
+// modo 'vaga': clicou "Ocupar" numa vaga vazia e escolhe a pessoa (extras do
+// setor primeiro, depois quem está sem setor e, por último, de outro setor).
+// Quem não é do setor é alocado nele na hora: pede só base e responsável.
+// modo 'pessoa': clicou "Pôr na vaga" num extra e escolhe a vaga vazia.
+
+const ocupar = reactive({
+  aberto: false,
+  modo: 'vaga',
+  setor: '',
+  vaga: null,
+  pessoa: null,
+  chapa: null,
+  vagaId: null,
+  base: null,
+  responsavelChapa: null,
+  salvando: false,
+  erro: ''
+})
+const termoOcupante = ref('')
+
+function abrirOcuparVaga(vaga) {
+  termoOcupante.value = ''
+  termoResponsavel.value = ''
+  Object.assign(ocupar, {
+    aberto: true,
+    modo: 'vaga',
+    setor: vaga.setor,
+    vaga,
+    pessoa: null,
+    chapa: null,
+    vagaId: vaga.id,
+    base: null,
+    responsavelChapa: null,
+    salvando: false,
+    erro: ''
+  })
+}
+
+function abrirPorNaVaga(pessoa) {
+  const setor = pessoa.alocacao.setor
+  const vazias = vagasVaziasDoSetor(setor)
+  // sugere a vaga da mesma função da pessoa, se houver
+  const mesma = vazias.find(v => normalizarTexto(v.funcao) === normalizarTexto(funcaoExibida(pessoa)))
+  Object.assign(ocupar, {
+    aberto: true,
+    modo: 'pessoa',
+    setor,
+    vaga: null,
+    pessoa,
+    chapa: pessoa.chapa,
+    vagaId: (mesma || vazias[0] || {}).id || null,
+    base: null,
+    responsavelChapa: null,
+    salvando: false,
+    erro: ''
+  })
+}
+
+// modo 'pessoa': uma opção por função com vaga vazia, na ordem do BID
+// (vagas da mesma função são iguais: vale a primeira)
+const opcoesVagaParaOcupar = computed(() => {
+  const porFuncao = new Map()
+  for (const vaga of vagasVaziasDoSetor(ocupar.setor)) {
+    if (!porFuncao.has(vaga.funcao)) porFuncao.set(vaga.funcao, [])
+    porFuncao.get(vaga.funcao).push(vaga)
+  }
+  return [...porFuncao.entries()].map(([funcao, lista]) => ({
+    label: `${funcao} · ${lista.length} ${lista.length === 1 ? 'vaga vazia' : 'vagas vazias'}`,
+    value: lista[0].id
+  }))
+})
+
+// modo 'vaga': quem pode ocupar
+const opcoesOcupar = computed(() => {
+  const termo = normalizarTexto(termoOcupante.value)
+  const casa = p => !termo || normalizarTexto(`${p.nome} ${p.chapa} ${funcaoExibida(p)}`).includes(termo)
+  const extras = alocados.value
+    .filter(p => p.alocacao.setor === ocupar.setor && !vagaDe(p))
+    .filter(casa)
+    .sort(peloNome)
+    .map(p => ({ value: p.chapa, label: p.nome, caption: `${funcaoExibida(p)} · extra no setor`, grupo: 'extra' }))
+  const semSetor = pessoas.value
+    .filter(p => !p.alocacao)
+    .filter(casa)
+    .sort(peloNome)
+    .map(p => ({ value: p.chapa, label: p.nome, caption: `${p.funcao || 'sem função'} · sem setor`, grupo: 'livre' }))
+  const outros = alocados.value
+    .filter(p => p.alocacao.setor !== ocupar.setor)
+    .filter(casa)
+    .sort(peloNome)
+    .map(p => ({
+      value: p.chapa,
+      label: p.nome,
+      caption: `${funcaoExibida(p)} · hoje em ${p.alocacao.setor}`,
+      grupo: 'outro'
+    }))
+  // de outro setor só depois de digitar (são muitos)
+  return [...extras, ...semSetor, ...(termo.length >= 2 ? outros.slice(0, 40) : [])]
+})
+
+function filtrarOcupantes(termo, atualizar) {
+  atualizar(() => {
+    termoOcupante.value = termo || ''
+  })
+}
+
+const pessoaParaOcupar = computed(() =>
+  ocupar.modo === 'pessoa' ? ocupar.pessoa : pessoas.value.find(p => p.chapa === ocupar.chapa) || null
+)
+// quem não está no setor da vaga é alocado nele junto (precisa de base e responsável)
+const ocuparAlocaNoSetor = computed(
+  () => Boolean(pessoaParaOcupar.value && pessoaParaOcupar.value.alocacao?.setor !== ocupar.setor)
+)
+const ocuparNaGerencia = computed(() => ocupar.setor === SETOR_GERENCIA)
+
+// escolheu alguém de fora: sugere a base e o responsável mais comuns do setor
+watch(
+  () => ocupar.chapa,
+  () => {
+    if (!ocupar.aberto || ocupar.modo !== 'vaga' || !ocuparAlocaNoSetor.value) return
+    const doSetor = alocados.value.filter(p => p.alocacao.setor === ocupar.setor)
+    const maisComum = valores => {
+      const contagem = new Map()
+      for (const v of valores.filter(Boolean)) contagem.set(v, (contagem.get(v) || 0) + 1)
+      return [...contagem.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null
+    }
+    // a vaga posicionada no organograma já diz a base e o chefe
+    ocupar.base = ocupar.vaga?.base || maisComum(doSetor.map(p => p.alocacao.base))
+    ocupar.responsavelChapa =
+      ocupar.vaga?.responsavel_chapa ||
+      maisComum(doSetor.filter(p => p.alocacao.base === ocupar.base).map(p => p.alocacao.responsavel_chapa))
+  }
+)
+
+const ocuparCompleto = computed(() => {
+  if (!ocupar.chapa || !ocupar.vagaId) return false
+  if (!ocuparAlocaNoSetor.value || ocuparNaGerencia.value) return true
+  return Boolean(ocupar.base && ocupar.responsavelChapa)
+})
+
+async function confirmarOcupar() {
+  const pessoa = pessoaParaOcupar.value
+  const vaga = vagaPorId.value.get(ocupar.vagaId)
+  if (!pessoa || !vaga) return
+  ocupar.salvando = true
+  ocupar.erro = ''
+  try {
+    if (ocuparAlocaNoSetor.value) {
+      await chamarApi(
+        '/api/indiretos/alocar',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chapa: pessoa.chapa,
+            setor: ocupar.setor,
+            base: ocuparNaGerencia.value ? '' : ocupar.base,
+            responsavel_chapa: ocupar.responsavelChapa,
+            vaga_id: vaga.id
+          })
+        },
+        'Não foi possível alocar na vaga.'
+      )
+    } else {
+      await chamarApi(
+        '/api/indiretos/vagas/ocupar',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vaga_id: vaga.id, chapa: pessoa.chapa })
+        },
+        'Não foi possível ocupar a vaga.'
+      )
+    }
+    sucesso.value = `${pessoa.nome} agora ocupa a vaga de ${vaga.funcao} em ${ocupar.setor}.`
+    erro.value = ''
+    ocupar.aberto = false
+    await carregar()
+  } catch (e) {
+    ocupar.erro = e.message
+  } finally {
+    ocupar.salvando = false
+  }
+}
+
+// organograma: vagas arrastadas ficam abaixo de alguém e/ou numa base; na
+// caixa "Vagas vazias", saem da cadeia
+async function posicionarVagas(origem, alvo) {
+  let corpo
+  let mensagem
+  const quantas = origem.vagaIds.length === 1 ? 'A vaga' : `As ${origem.vagaIds.length} vagas`
+  if (alvo.limparVagas) {
+    corpo = {}
+    mensagem = `${quantas} de ${origem.cargo} ${origem.vagaIds.length === 1 ? 'saiu' : 'saíram'} da cadeia.`
+  } else {
+    const chefe = alvo.grupo ? alvo.chefe : alvo.chapa
+    const nomeDoChefe = alvo.grupo ? alvo.chefeNome : alvo.nome
+    const base = alvo.base || alocadoPorChapa.value.get(chefe)?.alocacao.base || ''
+    if (alvo.externo) {
+      avisoOrganograma.value = { tipo: 'erro', texto: `${nomeDoChefe} está fora deste setor.` }
+      return
+    }
+    corpo = { base, responsavel_chapa: chefe || '' }
+    const verbo = origem.vagaIds.length === 1 ? 'fica' : 'ficam'
+    mensagem = `${quantas} de ${origem.cargo} agora ${verbo}${chefe ? ` abaixo de ${nomeDoChefe}` : ''}${base ? ` em ${base}` : ''}.`
+  }
+  salvandoOrganograma.value = true
+  avisoOrganograma.value = { tipo: '', texto: '' }
+  try {
+    await chamarApi(
+      '/api/indiretos/vagas/posicao',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vaga_ids: origem.vagaIds, ...corpo })
+      },
+      'Não foi possível posicionar a vaga.'
+    )
+    avisoOrganograma.value = { tipo: 'ok', texto: mensagem }
+    await carregar()
+  } catch (e) {
+    avisoOrganograma.value = { tipo: 'erro', texto: e.message }
+  } finally {
+    salvandoOrganograma.value = false
+  }
+}
+
+// organograma: pessoa solta numa vaga vazia passa a ocupá-la
+async function soltarNaVaga(origem, alvo) {
+  if (origem.chapas) {
+    avisoOrganograma.value = { tipo: 'erro', texto: 'Arraste uma pessoa por vez para a vaga.' }
+    return
+  }
+  salvandoOrganograma.value = true
+  avisoOrganograma.value = { tipo: '', texto: '' }
+  try {
+    await chamarApi(
+      '/api/indiretos/vagas/ocupar',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vaga_id: alvo.vagaIds[0], chapa: origem.chapa })
+      },
+      'Não foi possível ocupar a vaga.'
+    )
+    avisoOrganograma.value = { tipo: 'ok', texto: `${origem.nome} agora ocupa a vaga de ${alvo.cargo}.` }
+    await carregar()
+  } catch (e) {
+    avisoOrganograma.value = { tipo: 'erro', texto: e.message }
+  } finally {
+    salvandoOrganograma.value = false
+  }
+}
+
+// ---------- vaga no diálogo de alocar
+
+// vagas do setor escolhido que a pessoa pode ocupar: as vazias e a dela
+const opcoesVagaDialogo = computed(() => {
+  const lista = vagas.value
+    .filter(v => v.setor === setorEscolhido.value)
+    .filter(v => {
+      const ocupante = ocupantePorVaga.value.get(v.id)
+      return !ocupante || ocupante.chapa === alocacao.chapa
+    })
+  // várias vagas vazias da mesma função: basta uma opção por função
+  const vistas = new Set()
+  const opcoes = []
+  for (const vaga of lista) {
+    const dela = ocupantePorVaga.value.get(vaga.id)?.chapa === alocacao.chapa
+    if (!dela && vistas.has(vaga.funcao)) continue
+    if (!dela) vistas.add(vaga.funcao)
+    const vazias = lista.filter(v => v.funcao === vaga.funcao && !ocupantePorVaga.value.has(v.id)).length
+    opcoes.push({
+      label: vaga.funcao,
+      value: vaga.id,
+      caption: dela ? 'vaga atual' : `${vazias} ${vazias === 1 ? 'vazia' : 'vazias'}`
+    })
+  }
+  return [{ label: 'Sem vaga (extra)', value: null, caption: 'fica como extra no setor' }, ...opcoes]
+})
+const setorEscolhidoTemBid = computed(() => setoresComBid.value.has(setorEscolhido.value))
+
+// trocou o setor (ou a pessoa): se a vaga escolhida não é do setor, sugere
+// uma vaga vazia da mesma função da pessoa
+watch(
+  () => [setorEscolhido.value, alocacao.chapa],
+  () => {
+    if (!alocacao.aberto) return
+    const atual = vagaPorId.value.get(alocacao.vagaId)
+    if (atual && atual.setor === setorEscolhido.value) return
+    const pessoa = pessoaAlocacao.value
+    // continua no setor de hoje: fica como está (extra continua extra)
+    if (pessoa?.alocacao && pessoa.alocacao.setor === setorEscolhido.value) {
+      alocacao.vagaId = pessoa.alocacao.vaga_id || null
+      return
+    }
+    const funcao = normalizarTexto(alocacao.funcao || (pessoa ? funcaoExibida(pessoa) : ''))
+    const sugerida = opcoesVagaDialogo.value.find(
+      o => o.value && normalizarTexto(o.label) === funcao && o.caption !== 'vaga atual'
+    )
+    alocacao.vagaId = sugerida ? sugerida.value : null
+  }
+)
 
 // ============================================================
 // FUNÇÃO NA PÁGINA (só a mostrada aqui; o cadastro não muda)
@@ -3211,11 +4294,15 @@ function abrirPlanilha() {
   Object.assign(planilha, { aberto: true, arquivo: null, previa: null })
 }
 
-async function baixarPlanilha() {
+function baixarPlanilha() {
+  return baixarArquivo('/api/indiretos/planilha', 'alocacao-indiretos.xlsx')
+}
+
+async function baixarArquivo(endereco, nome) {
   baixando.value = true
   erro.value = ''
   try {
-    const resposta = await fetch('/api/indiretos/planilha')
+    const resposta = await fetch(endereco)
     if (!resposta.ok) {
       const dados = await resposta.json().catch(() => ({}))
       throw new Error(dados.erro || 'Erro ao gerar a planilha.')
@@ -3223,7 +4310,7 @@ async function baixarPlanilha() {
     const url = URL.createObjectURL(await resposta.blob())
     const link = document.createElement('a')
     link.href = url
-    link.download = 'alocacao-indiretos.xlsx'
+    link.download = nome
     document.body.appendChild(link)
     link.click()
     link.remove()
@@ -3279,7 +4366,9 @@ const mudancasPrevia = computed(() => {
 })
 
 const podeAplicar = computed(
-  () => Boolean(planilha.previa && !planilha.previa.erros.length && mudancasPrevia.value.length)
+  () =>
+    Boolean(planilha.previa && !planilha.previa.erros.length) &&
+    Boolean(mudancasPrevia.value.length || planilha.previa.vagas?.length)
 )
 
 async function aplicarPlanilha() {
@@ -3292,7 +4381,10 @@ async function aplicarPlanilha() {
       { method: 'POST', body: corpoArquivo() },
       'Erro ao aplicar a planilha.'
     )
-    sucesso.value = `Planilha aplicada: ${r.alocados} alocados, ${r.movidos} movidos, ${r.atualizados} atualizados.`
+    const bid = r.vagas?.length
+      ? `; BID de ${r.vagas.length} ${r.vagas.length === 1 ? 'setor atualizado' : 'setores atualizados'}`
+      : ''
+    sucesso.value = `Planilha aplicada: ${r.alocados} alocados, ${r.movidos} movidos, ${r.atualizados} atualizados${bid}.`
     planilha.aberto = false
     await carregar()
   } catch (e) {
@@ -3301,6 +4393,18 @@ async function aplicarPlanilha() {
   } finally {
     planilha.aplicando = false
   }
+}
+
+function textoPreviaVagas(item) {
+  const partes = [
+    item.antes === item.depois ? `${item.depois} vagas` : `vagas: ${item.antes} → ${item.depois}`,
+    item.criadas ? `${item.criadas} ${item.criadas === 1 ? 'nova' : 'novas'}` : '',
+    item.removidas ? `${item.removidas} ${item.removidas === 1 ? 'apagada' : 'apagadas'}` : '',
+    `${item.ocupadas} ${item.ocupadas === 1 ? 'ocupada' : 'ocupadas'}`,
+    item.vazias ? `${item.vazias} ${item.vazias === 1 ? 'vazia' : 'vazias'}` : '',
+    item.extras ? `${item.extras} ${item.extras === 1 ? 'extra' : 'extras'}` : ''
+  ]
+  return partes.filter(Boolean).join(' · ')
 }
 </script>
 
@@ -3782,6 +4886,432 @@ body.body--dark .org-legenda__cor {
 
 .linha-afastado {
   background: var(--afastado-fundo);
+}
+
+/* ---------- faixa de indicadores (item 4) ---------- */
+.faixa-indicadores {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 18px;
+  padding: 10px 16px;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  background: var(--superficie);
+}
+
+.faixa-indicadores__item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font: inherit;
+  color: var(--tinta);
+  cursor: pointer;
+}
+
+.faixa-indicadores__valor {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.faixa-indicadores__rotulo {
+  font-size: 0.85rem;
+  color: var(--tinta-fraca);
+}
+
+.faixa-indicadores__item:hover .faixa-indicadores__rotulo {
+  color: var(--tinta);
+}
+
+.faixa-indicadores__item--ativo {
+  border-bottom-color: var(--marca-clara);
+}
+
+.faixa-indicadores__item--vagasVazias .faixa-indicadores__valor {
+  color: var(--vaga-vazia);
+}
+
+.faixa-indicadores__item--extras .faixa-indicadores__valor {
+  color: var(--folguista);
+}
+
+/* ---------- lista do cartão do setor: limpa, sem pílulas ---------- */
+.linha-bid {
+  min-height: 38px;
+  padding: 2px 10px 2px 13px;
+  border-left: 3px solid transparent;
+  transition: background-color 0.12s ease;
+}
+
+.linha-bid + .linha-bid {
+  border-top: 1px solid var(--linha);
+}
+
+.linha-bid:hover {
+  background: color-mix(in srgb, var(--marca-clara) 6%, transparent);
+}
+
+.lista-bid .secao-chapa {
+  min-width: 52px;
+  padding-right: 6px;
+}
+
+.lista-bid .chapa-pessoa {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--marca-texto);
+}
+
+.lista-bid .bid-pessoa {
+  color: var(--marca-texto);
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+/* base: cor própria de cada base (ver corDaBase) */
+.lista-bid .base-pessoa {
+  min-width: 52px;
+  margin-right: 10px;
+  border: 1px solid color-mix(in srgb, var(--cor-base, var(--tinta-fraca)) 45%, transparent);
+  background: color-mix(in srgb, var(--cor-base, var(--tinta-fraca)) 13%, transparent);
+  color: var(--cor-base, var(--tinta-fraca));
+  font-weight: 700;
+}
+
+.lista-bid .base-pessoa--vazia {
+  border-color: transparent;
+}
+
+.nome-pessoa {
+  font-weight: 600;
+  color: var(--titulo);
+}
+
+.funcao-real {
+  max-width: 220px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.74rem;
+  color: var(--tinta-fraca);
+}
+
+.marca-extra,
+.marca-afastado {
+  margin-right: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.marca-extra {
+  color: var(--folguista);
+}
+
+.marca-afastado {
+  color: var(--afastado);
+}
+
+.linha-bid__direita {
+  gap: 4px;
+}
+
+/* editar só aparece ao passar o mouse (no toque, sempre) */
+.linha-bid__editar {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.linha-bid:hover .linha-bid__editar,
+.linha-bid__editar:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .linha-bid__editar {
+    opacity: 1;
+  }
+}
+
+/* vaga vazia (azul) e extra (laranja): fundo suave e filete à esquerda */
+.lista-bid .linha-vaga-vazia {
+  border-left-color: var(--vaga-vazia);
+}
+
+.lista-bid .linha-extra {
+  border-left-color: var(--folguista);
+}
+
+.texto-extra {
+  font-weight: 600;
+  color: var(--folguista);
+}
+
+.texto-secundario {
+  font-weight: 400;
+  color: var(--tinta-fraca);
+}
+
+.texto-afastado {
+  font-weight: 400;
+  color: var(--afastado);
+}
+
+.acao-texto {
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--marca-texto);
+  cursor: pointer;
+}
+
+.acao-texto:hover {
+  text-decoration: underline;
+}
+
+/* ---------- vagas do BID ---------- */
+.indicador--vagasVazias .indicador__icone {
+  background: var(--vaga-vazia-fundo);
+  color: var(--vaga-vazia);
+}
+
+.indicador--extras .indicador__icone {
+  background: var(--folguista-fundo);
+  color: var(--folguista);
+}
+
+.resumo-vagas {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--tinta-fraca);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.resumo-vagas:not(:disabled):hover {
+  color: var(--marca-texto);
+  text-decoration: underline;
+}
+
+.resumo-vagas:disabled {
+  cursor: default;
+}
+
+.resumo-vagas--sem-bid {
+  border-style: dashed;
+  background: transparent;
+  color: var(--tinta-fraca);
+  border-color: var(--linha-forte);
+}
+
+.chip-extra {
+  background: var(--folguista-fundo);
+  color: var(--folguista);
+  font-weight: 600;
+}
+
+.vagas-dialogo {
+  max-height: 62vh;
+  overflow-y: auto;
+}
+
+.vagas-secao__titulo {
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--titulo);
+}
+
+.vagas-tabela__cabecalho,
+.vagas-tabela__linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vagas-tabela__cabecalho {
+  padding: 0 2px 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--tinta-fraca);
+  text-transform: uppercase;
+}
+
+.vagas-tabela__linha + .vagas-tabela__linha {
+  margin-top: 6px;
+}
+
+.vagas-tabela__alca {
+  width: 22px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tinta-fraca);
+  cursor: grab;
+}
+
+.vagas-tabela__alca:active {
+  cursor: grabbing;
+}
+
+.vagas-tabela__linha--arrastando {
+  opacity: 0.45;
+}
+
+/* onde a linha vai entrar */
+.vagas-tabela__linha--alvo {
+  box-shadow: 0 -2px 0 var(--marca-clara);
+  border-radius: 4px;
+}
+
+.vagas-tabela__linha--apagar {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.vagas-tabela__qtd {
+  width: 84px;
+  flex: none;
+}
+
+.vagas-tabela__ocupadas {
+  width: 70px;
+  flex: none;
+  text-align: center;
+  color: var(--tinta-fraca);
+}
+
+.vagas-tabela__acao {
+  width: 32px;
+  flex: none;
+}
+
+.tabela-ocupacao__cargo {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--titulo);
+  white-space: nowrap;
+}
+
+.tabela-ocupacao__nome {
+  min-width: 210px;
+}
+
+.tabela-ocupacao__funcao {
+  white-space: normal;
+  font-size: 0.75rem;
+  color: var(--tinta-fraca);
+}
+
+/* cadeira vazia: tons de azul; extra: fundo laranja (claro e escuro pelos tokens) */
+.linha-vaga-vazia,
+.linha-vaga-vazia td {
+  background: var(--vaga-vazia-fundo);
+}
+
+.linha-vaga-vazia :deep(.q-field__native),
+.texto-vaga-vazia {
+  color: var(--vaga-vazia);
+  font-style: italic;
+}
+
+.linha-extra,
+.linha-extra td {
+  background: var(--folguista-fundo);
+}
+
+.chip-vaga-vazia {
+  background: var(--vaga-vazia);
+  color: #fff;
+  font-weight: 600;
+}
+
+:global(.body--dark) .chip-vaga-vazia {
+  color: #10202f;
+}
+
+.chapa-pessoa--vazia {
+  color: var(--vaga-vazia);
+}
+
+/* base: só uma informação da linha (antes agrupava as pessoas) */
+.base-pessoa {
+  display: inline-block;
+  flex: none;
+  min-width: 58px;
+  margin-right: 8px;
+  padding: 0 6px;
+  text-align: center;
+  white-space: nowrap;
+  border-radius: 999px;
+  background: var(--realce);
+  color: var(--marca-texto);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.base-pessoa--vazia {
+  background: transparent;
+  color: var(--tinta-fraca);
+}
+
+.nome-pessoa {
+  min-width: 0;
+}
+
+/* coluna do BID no cartão: o cargo previsto da vaga (vazio = extra) */
+.secao-bid {
+  width: 116px;
+  min-width: 116px;
+  padding-right: 6px;
+  align-items: flex-start;
+}
+
+/* até duas linhas: o nome da pessoa fica com o espaço maior */
+.bid-pessoa {
+  display: -webkit-box;
+  width: 100%;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.15;
+  white-space: normal;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--vaga-vazia);
+}
+
+.tabela-ocupacao__grupos th {
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.tabela-ocupacao__grupo-bid {
+  background: var(--vaga-vazia-fundo);
+  color: var(--vaga-vazia);
+}
+
+.tabela-ocupacao__grupo-real {
+  background: var(--realce);
+  color: var(--marca-texto);
 }
 
 /* ---------- sem setor ---------- */
