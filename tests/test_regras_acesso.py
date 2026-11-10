@@ -498,9 +498,10 @@ def test_planilha_de_indiretos_protege_texto_e_mantem_as_formulas_dela(Sessao):
     r = cliente(1).get("/api/indiretos/planilha")
     assert r.status_code == 200
     aba = load_workbook(io.BytesIO(r.data))["Alocação"]
-    linha = next(n for n in range(2, aba.max_row + 1) if aba.cell(row=n, column=5).value == "70")
-    assert aba.cell(row=linha, column=8).data_type == "s"
-    assert aba.cell(row=linha, column=6).data_type == "f"
+    # C = CHAPA INDIRETO, I = OBSERVAÇÃO, D = NOME INDIRETO (fórmula)
+    linha = next(n for n in range(2, aba.max_row + 1) if aba.cell(row=n, column=3).value == "70")
+    assert aba.cell(row=linha, column=9).data_type == "s"
+    assert aba.cell(row=linha, column=4).data_type == "f"
 
 
 # ------------------------------------------------------------

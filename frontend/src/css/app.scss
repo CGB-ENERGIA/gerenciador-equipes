@@ -117,6 +117,9 @@
   --realce: #f7e9d7;
   --afastado: #8a5a00;
   --afastado-fundo: #fdf0cd;
+  // vaga do BID sem ninguém (Indiretos): o azul da planilha do BID
+  --vaga-vazia: #2f5d8a;
+  --vaga-vazia-fundo: #e3ecf5;
   --sombra: 0 1px 3px rgba(65, 32, 38, 0.1), 0 6px 14px rgba(65, 32, 38, 0.1), 0 16px 36px rgba(65, 32, 38, 0.12);
   --sombra-elevada: 0 3px 8px rgba(65, 32, 38, 0.12), 0 12px 28px rgba(65, 32, 38, 0.16), 0 28px 60px rgba(65, 32, 38, 0.2);
   --raio: 14px;
@@ -187,6 +190,8 @@ body.body--dark {
   --realce: #382a1c;
   --afastado: #e0b84c;
   --afastado-fundo: #3d3218;
+  --vaga-vazia: #9cc0e6;
+  --vaga-vazia-fundo: #1f2d3d;
   --sombra: 0 1px 3px rgba(0, 0, 0, 0.4), 0 6px 14px rgba(0, 0, 0, 0.35), 0 16px 36px rgba(0, 0, 0, 0.4);
   --sombra-elevada: 0 3px 8px rgba(0, 0, 0, 0.45), 0 12px 28px rgba(0, 0, 0, 0.45), 0 28px 60px rgba(0, 0, 0, 0.55);
   --gradiente-marca: linear-gradient(100deg, #3f0912 0%, #6a1626 45%, #9c2c45 100%);

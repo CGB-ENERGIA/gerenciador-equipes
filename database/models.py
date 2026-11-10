@@ -354,6 +354,34 @@ class AlocacaoIndireto(Base):
     BASES_RESPONSAVEL = Column(String, nullable=True)
     # no organograma, abaixo do bloco desta função (mesmo chefe) — migrations/021
     ABAIXO_DE_FUNCAO = Column(String, nullable=True)
+    # vaga do BID que ocupa; vazio = EXTRA no setor — migrations/025
+    VAGA_ID = Column(
+        Integer,
+        ForeignKey("vagas_indiretos.id", ondelete="SET NULL"),
+        unique=True,
+        nullable=True,
+    )
     ALOCADO_POR = Column(String, nullable=True)
     ALOCADO_EM = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class VagaIndireto(Base):
+    """Uma vaga prevista (BID) de indireto: SETOR + FUNÇÃO, uma linha por
+    vaga. Quem a ocupa é a alocação com VAGA_ID dela; a função real da pessoa
+    pode ser outra. Sem ocupante = vaga vazia — ver migrations/025."""
+
+    __tablename__ = "vagas_indiretos"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    SETOR = Column(String, nullable=False)
+    FUNCAO = Column(String, nullable=False)
+    # posição da função no BID do setor (as vagas da mesma função têm a mesma)
+    ORDEM = Column(Integer, nullable=False, default=0, server_default="0")
+    # onde a vaga fica no organograma (opcional): base e chefe. Vazios = na
+    # caixa "Vagas vazias", fora da cadeia
+    BASE = Column(String, nullable=True)
+    RESPONSAVEL_CHAPA = Column(String, nullable=True)
+    CRIADO_POR = Column(String, nullable=True)
+    CRIADO_EM = Column(DateTime(timezone=True), server_default=func.now())
 
