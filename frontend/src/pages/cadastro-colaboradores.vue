@@ -82,7 +82,6 @@
               <div class="col-12 col-md-auto">
                 <q-btn
                   color="primary"
-                  icon="person_add"
                   label="Novo colaborador"
                   @click="abrirNovo"
                 />
@@ -115,7 +114,6 @@
                 dense
                 no-caps
                 color="primary"
-                icon="edit_note"
                 label="Editar em massa"
                 @click="abrirEdicaoMassa"
               />
@@ -124,7 +122,6 @@
                 dense
                 no-caps
                 color="negative"
-                icon="delete"
                 label="Excluir selecionados"
                 @click="removerSelecionados"
               />
@@ -246,7 +243,6 @@
                     no-caps
                     size="sm"
                     color="primary"
-                    icon="add"
                     label="Adicionar rateio"
                     @click="formulario.rateios.push({ rateio: '', grpccusto: '' })"
                   />
@@ -398,7 +394,6 @@
                     no-caps
                     size="sm"
                     color="primary"
-                    icon="add"
                     label="Adicionar rateio"
                     class="q-mt-xs"
                     @click="massa.rateios.push({ rateio: '', grpccusto: '' })"

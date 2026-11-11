@@ -898,3 +898,34 @@ body.body--dark .q-chip.bg-grey-7 {
   background: color-mix(in srgb, var(--cor-chip) 22%, var(--superficie)) !important;
   color: color-mix(in srgb, var(--cor-chip) 45%, #fff) !important;
 }
+
+// Selos q-badge de situação (ex.: Alocado / Livre / Afastado no Cadastro de
+// Colaboradores): mesmo estilo tonal dos chips
+.q-badge.bg-positive { --cor-chip: var(--positivo); }
+.q-badge.bg-negative { --cor-chip: var(--negativo); }
+.q-badge.bg-amber-8 { --cor-chip: var(--afastado); }
+.q-badge.bg-grey-5,
+.q-badge.bg-grey-6,
+.q-badge.bg-grey-7 { --cor-chip: var(--neutro); }
+
+.q-badge.bg-positive,
+.q-badge.bg-negative,
+.q-badge.bg-amber-8,
+.q-badge.bg-grey-5,
+.q-badge.bg-grey-6,
+.q-badge.bg-grey-7 {
+  background: color-mix(in srgb, var(--cor-chip) 12%, var(--superficie)) !important;
+  color: color-mix(in srgb, var(--cor-chip) 88%, #000) !important;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+body.body--dark .q-badge.bg-positive,
+body.body--dark .q-badge.bg-negative,
+body.body--dark .q-badge.bg-amber-8,
+body.body--dark .q-badge.bg-grey-5,
+body.body--dark .q-badge.bg-grey-6,
+body.body--dark .q-badge.bg-grey-7 {
+  background: color-mix(in srgb, var(--cor-chip) 22%, var(--superficie)) !important;
+  color: color-mix(in srgb, var(--cor-chip) 45%, #fff) !important;
+}
