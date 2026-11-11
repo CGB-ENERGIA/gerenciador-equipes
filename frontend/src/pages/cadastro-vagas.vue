@@ -57,7 +57,6 @@
                     dense
                     no-caps
                     color="primary"
-                    icon="table_view"
                     label="Planilha"
                   >
                     <q-list dense>
@@ -83,7 +82,6 @@
                     dense
                     no-caps
                     color="primary"
-                    icon="add"
                     label="Nova equipe"
                     class="q-px-sm"
                     @click="iniciarNovaEquipe"
@@ -153,7 +151,6 @@
                   dense
                   no-caps
                   color="primary"
-                  icon="edit"
                   label="Editar setor e responsáveis"
                   @click="abrirEdicaoSelecionadas"
                 />
@@ -178,9 +175,9 @@
 
               <q-separator />
 
-              <div v-if="carregando && primeiraCarga" class="row justify-center q-pa-xl">
-                <q-spinner color="primary" size="40px" />
-              </div>
+              <div v-if="carregando && primeiraCarga" class="q-pa-md">
+            <q-skeleton v-for="n in 6" :key="n" type="rect" height="44px" class="q-mb-sm" />
+          </div>
 
               <div v-else-if="!equipesFiltradas.length" class="text-grey-7 q-pa-lg text-center">
                 Nenhuma equipe encontrada com esses filtros.
@@ -247,7 +244,6 @@
                   outline
                   no-caps
                   color="primary"
-                  icon="add"
                   label="Nova equipe"
                   class="q-mt-md"
                   @click="iniciarNovaEquipe"
@@ -303,7 +299,6 @@
                     unelevated
                     no-caps
                     color="primary"
-                    icon-right="arrow_forward"
                     label="Continuar"
                     @click="avancarParaVagas"
                   />
@@ -319,7 +314,7 @@
                       <div class="text-h6">{{ painel.prefixo }}</div>
                       <div class="text-caption text-grey-7">Base {{ painel.base }}</div>
                     </div>
-                    <q-btn flat dense no-caps color="primary" icon="arrow_back" label="Voltar" @click="painel.passo = 1" />
+                    <q-btn flat dense no-caps color="primary" label="Voltar" @click="painel.passo = 1" />
                   </div>
 
                   <template v-else>
@@ -514,7 +509,6 @@
                         dense
                         no-caps
                         color="primary"
-                        icon="add"
                         label="Adicionar função"
                         class="q-mt-xs"
                         @click="adicionarFuncao(disciplina)"
@@ -527,7 +521,6 @@
                     dense
                     no-caps
                     color="primary"
-                    icon="add"
                     label="Adicionar outro tipo de equipe"
                     @click="adicionarDisciplina"
                   />
@@ -546,7 +539,6 @@
                     dense
                     no-caps
                     color="negative"
-                    icon="delete"
                     label="Excluir equipe"
                     :disable="resumoPainel.ocupadas > 0"
                     @click="removerEquipeAberta"
@@ -657,9 +649,6 @@
             accept=".xlsx"
             label="Planilha (.xlsx)"
           >
-            <template #prepend>
-              <q-icon name="attach_file" />
-            </template>
           </q-file>
         </q-card-section>
 
@@ -669,7 +658,6 @@
             unelevated
             no-caps
             color="primary"
-            icon="fact_check"
             label="Conferir mudanças"
             :disable="!arquivoPlanilha"
             :loading="analisandoPlanilha"

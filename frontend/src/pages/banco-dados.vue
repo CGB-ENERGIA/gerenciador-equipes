@@ -196,7 +196,6 @@
                       dense
                       size="sm"
                       color="negative"
-                      icon="person_remove"
                       label="Remover todas as alocações"
                       :disable="!vagasOcupadas"
                       :loading="limpandoAlocacoes"
@@ -246,7 +245,6 @@
                         dense
                         size="sm"
                         color="primary"
-                        icon="person_add"
                         label="Adicionar Folguista Extra"
                         class="q-mr-sm"
                         @click="abrirFolguistaExtra(equipe)"
@@ -257,7 +255,6 @@
                         dense
                         size="sm"
                         color="negative"
-                        icon="person_remove"
                         label="Remover todos os colaboradores"
                         :disable="!equipe.vagas.some(vaga => vaga.colaborador)"
                         @click="liberarEquipe(equipe)"
@@ -1198,7 +1195,6 @@
               no-caps
               dense
               color="positive"
-              icon="download"
               label="Baixar planilha atual"
               class="btn-exportar"
               @click="baixarPlanilhaAlocacoes"
@@ -1213,9 +1209,6 @@
             accept=".xlsx"
             @update:model-value="planoAlocacoes = null"
           >
-            <template #prepend>
-              <q-icon name="attach_file" />
-            </template>
           </q-file>
 
           <div class="text-caption text-grey-7 q-mt-sm">

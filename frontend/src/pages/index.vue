@@ -525,7 +525,6 @@
 
                     <q-btn
                       color="positive"
-                      icon="download"
                       label="Exportar Base"
                       dense
                       :disable="!composicaoConsolidada.length"
@@ -751,7 +750,6 @@
 
                   <q-btn
                     color="positive"
-                    icon="download"
                     label="Exportar Excel"
                     @click="exportarAlocados"
                   />
@@ -794,7 +792,6 @@
 
                   <q-btn
                     color="positive"
-                    icon="download"
                     label="Exportar Excel"
                     :disable="carregandoNaoAlocados || !naoAlocadosDetalhes.length"
                     @click="exportarNaoAlocados"
@@ -1612,8 +1609,16 @@ const colunasNecessidades = [
   }
 ]
 
+// funções de vaga fora da lista padrão (FUNCOES_SISTEMA) entram somadas
+// numa linha "OUTRAS", para o total da tabela bater com a lista de pessoas
+const FUNCAO_OUTRAS = 'OUTRAS'
+
+function ehOutraFuncao(funcao) {
+  return !FUNCOES_SISTEMA.includes(funcao)
+}
+
 const linhasDisponiveis = computed(() => {
-  return FUNCOES_SISTEMA.map(funcao => {
+  const linhas = FUNCOES_SISTEMA.map(funcao => {
     const linha = { funcao, total: 0 }
 
     for (const base of pessoasDisponiveisFiltradas.value) {
@@ -1624,6 +1629,21 @@ const linhasDisponiveis = computed(() => {
 
     return linha
   })
+
+  const outras = { funcao: FUNCAO_OUTRAS, total: 0 }
+  for (const base of pessoasDisponiveisFiltradas.value) {
+    const quantidade = Object.entries(base.funcoes || {})
+      .filter(([funcao]) => ehOutraFuncao(funcao))
+      .reduce((soma, [, valor]) => soma + (valor || 0), 0)
+    outras[base.codigo] = quantidade
+    outras.total += quantidade
+  }
+
+  if (outras.total) {
+    linhas.push(outras)
+  }
+
+  return linhas
 })
 
 // linha "Total" das tabelas de indicadores (soma das funções)
@@ -1779,9 +1799,13 @@ const detalhesExibidos = computed(() => {
     .flatMap(base =>
       // funcao vazia = exportar a base toda: junta todas as funcoes, nao
       // so uma
-      detalheSelecionado.value.funcao
-        ? base.detalhes?.[detalheSelecionado.value.funcao] || []
-        : Object.values(base.detalhes || {}).flat()
+      detalheSelecionado.value.funcao === FUNCAO_OUTRAS
+        ? Object.entries(base.detalhes || {})
+            .filter(([funcao]) => ehOutraFuncao(funcao))
+            .flatMap(([, pessoas]) => pessoas)
+        : detalheSelecionado.value.funcao
+          ? base.detalhes?.[detalheSelecionado.value.funcao] || []
+          : Object.values(base.detalhes || {}).flat()
     )
 
   // ordem padrão (antes de clicar em qualquer cabeçalho): afastados primeiro
@@ -1789,7 +1813,10 @@ const detalhesExibidos = computed(() => {
 })
 
 const detalheTitulo = computed(() => {
-  const funcao = detalheSelecionado.value.funcao || 'Todas as funções'
+  const funcao =
+    detalheSelecionado.value.funcao === FUNCAO_OUTRAS
+      ? 'Outras funções'
+      : detalheSelecionado.value.funcao || 'Todas as funções'
 
   if (detalheSelecionado.value.codigo) {
     return `${funcao} em ${detalheSelecionado.value.codigo}`

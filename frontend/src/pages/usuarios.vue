@@ -100,7 +100,6 @@
                       dense
                       size="sm"
                       color="primary"
-                      icon="save"
                       label="Salvar"
                       :loading="salvandoPermissoesNivel === nivel.valor"
                       @click="salvarPermissoesNivel(nivel.valor)"
@@ -149,7 +148,6 @@
                 no-caps
                 dense
                 color="positive"
-                icon="download"
                 label="Baixar planilha de usuários"
                 :loading="baixandoPlanilhaUsuarios"
                 class="btn-exportar"
@@ -175,16 +173,12 @@
                   label="Planilha de usuários (.xlsx)"
                   @update:model-value="planoUsuarios = null; resetarOrdenacaoLote()"
                 >
-                  <template #prepend>
-                    <q-icon name="attach_file" />
-                  </template>
                 </q-file>
               </div>
 
               <div class="col-12 col-md-auto">
                 <q-btn
                   color="primary"
-                  icon="fact_check"
                   label="Conferir mudanças"
                   :disable="!arquivoUsuarios"
                   :loading="analisandoUsuarios"
@@ -271,7 +265,6 @@
               <div class="col-12 col-md-auto">
                 <q-btn
                   color="primary"
-                  icon="person_add"
                   label="Novo usuário"
                   @click="abrirNovo"
                 />
@@ -281,8 +274,8 @@
 
           <q-separator />
 
-          <div v-if="carregando && primeiraCarga" class="row justify-center q-pa-xl">
-            <q-spinner color="primary" size="40px" />
+          <div v-if="carregando && primeiraCarga" class="q-pa-md">
+            <q-skeleton v-for="n in 6" :key="n" type="rect" height="44px" class="q-mb-sm" />
           </div>
 
           <div v-else class="q-pa-md">

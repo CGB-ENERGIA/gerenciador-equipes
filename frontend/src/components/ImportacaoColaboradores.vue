@@ -27,7 +27,6 @@
               no-caps
               dense
               color="positive"
-              icon="download"
               label="Baixar planilha modelo"
               :loading="baixandoModeloColaboradores"
               class="btn-exportar"
@@ -53,16 +52,12 @@
                 label="Planilha de colaboradores (.xlsx)"
                 @update:model-value="resumoColaboradores = null"
               >
-                <template #prepend>
-                  <q-icon name="attach_file" />
-                </template>
               </q-file>
             </div>
 
             <div class="col-12 col-md-auto">
               <q-btn
                 color="primary"
-                icon="fact_check"
                 label="Analisar planilha"
                 :disable="!arquivoColaboradores"
                 :loading="analisandoColaboradores"
