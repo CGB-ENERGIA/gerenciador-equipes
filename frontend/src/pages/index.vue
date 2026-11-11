@@ -1,5 +1,5 @@
 <template>
-  <q-layout view="lHh Lpr lFf">
+  <q-layout view="hHh Lpr lFf">
     <MarcaDaguaFundo />
 
     <CabecalhoApp
@@ -36,7 +36,7 @@
 
         <q-card flat bordered class="q-mb-md barra-filtros">
           <q-card-section>
-            <div class="row q-col-gutter-md items-end">
+            <div class="row q-col-gutter-sm items-center">
               <div class="col-6 col-md">
                 <SelectFiltroMultiplo
                   :model-value="baseSelecionada"
@@ -103,7 +103,6 @@
                   dense
                   rounded
                   no-caps
-                  icon="filter_alt_off"
                   label="Limpar filtros"
                   color="grey-8"
                   @click="limparFiltros"
@@ -120,15 +119,12 @@
                 v-for="grupo in totalExibido.grupos"
                 :key="grupo.rotulo"
                 clickable
-                class="chip-tipo chip-topo-menor"
+                class="chip-tonal chip-tipo chip-topo-menor"
                 :class="{ ativo: tipoEstaFiltrado(grupo) }"
-                :style="{
-                  background: corDoTipo(grupo),
-                  color: 'var(--tipo-tinta)'
-                }"
+                :style="{ '--cor-chip': corDoTipo(grupo) }"
                 @click="alternarFiltroTipo(grupo)"
               >
-                {{ grupo.equipes }} {{ rotuloCurto(grupo) }}
+                <span class="chip-tonal__num">{{ grupo.equipes }}</span>{{ rotuloCurto(grupo) }}
                 <q-tooltip>
                   {{
                     tipoEstaFiltrado(grupo)
@@ -140,12 +136,12 @@
 
               <q-space />
 
-              <q-chip color="positive" text-color="white" class="chip-topo-menor">
-                {{ totalExibido.alocados }} alocados
+              <q-chip class="chip-tonal chip-topo-menor" style="--cor-chip: var(--positivo)">
+                <span class="chip-tonal__num">{{ totalExibido.alocados }}</span>alocados
               </q-chip>
 
-              <q-chip color="grey-7" text-color="white" class="chip-topo-menor">
-                {{ totalExibido.vagas }} vagas
+              <q-chip class="chip-tonal chip-topo-menor" style="--cor-chip: var(--neutro)">
+                <span class="chip-tonal__num">{{ totalExibido.vagas }}</span>vagas
               </q-chip>
             </div>
           </q-card-section>
@@ -208,13 +204,12 @@
                       :key="grupo.rotulo"
                       dense
                       size="xs"
-                      class="chip-tipo-info"
-                      :style="{
-                        background: corDoTipo(grupo),
-                        color: 'var(--tipo-tinta)'
-                      }"
+                      class="chip-tonal chip-tipo-info"
+                      :style="{ '--cor-chip': corDoTipo(grupo) }"
                     >
-                      {{ grupo.equipes }} {{ rotuloCurto(grupo) }}
+                      <span class="chip-tonal__num">{{ grupo.equipes }}</span>
+                      <span class="chip-tonal__rotulo">{{ rotuloCurto(grupo) }}</span>
+                      <q-tooltip>{{ grupo.equipes }} {{ rotuloCurto(grupo) }}</q-tooltip>
                     </q-chip>
                   </div>
                 </div>
@@ -310,8 +305,13 @@
               <div v-if="visaoIndicadores === 'cards'" key="cards">
                 <q-card bordered>
                   <q-card-section>
-                    <div class="row items-center justify-between q-mb-md">
-                      <div class="text-h6">Pessoas alocadas</div>
+                    <div class="row items-center justify-between q-mb-sm cabecalho-indicador">
+                      <div>
+                        <div class="text-h6">Pessoas alocadas</div>
+                        <div class="text-caption text-grey-7">
+                          {{ totalAlocadosGeral }} pessoa(s) · clique num número para ver a lista
+                        </div>
+                      </div>
 
                       <q-btn
                         flat
@@ -382,13 +382,54 @@
                           </q-td>
                         </q-tr>
                       </template>
+
+                      <template #bottom-row>
+                        <q-tr class="linha-total-indicador">
+                          <q-td class="text-left">Total</q-td>
+                          <q-td
+                            v-for="base in pessoasDisponiveisFiltradas"
+                            :key="'total-' + base.codigo"
+                            class="text-center"
+                          >
+                            <q-btn
+                              v-if="totalAlocadosPorBase[base.codigo]"
+                              flat
+                              dense
+                              color="primary"
+                              :label="String(totalAlocadosPorBase[base.codigo])"
+                              @click="abrirDetalhes('', base.codigo)"
+                            >
+                              <q-tooltip>Ver todos os alocados em {{ base.codigo }}</q-tooltip>
+                            </q-btn>
+                            <span v-else>0</span>
+                          </q-td>
+                          <q-td class="text-center">
+                            <q-btn
+                              v-if="totalAlocadosGeral"
+                              flat
+                              dense
+                              color="primary"
+                              :label="String(totalAlocadosGeral)"
+                              @click="abrirDetalhes('')"
+                            >
+                              <q-tooltip>Ver toda a composição alocada</q-tooltip>
+                            </q-btn>
+                            <span v-else>0</span>
+                          </q-td>
+                        </q-tr>
+                      </template>
                     </q-table>
                   </q-card-section>
                 </q-card>
 
-                <q-card bordered class="q-mt-lg">
+                <q-card bordered class="q-mt-md">
                   <q-card-section>
-                    <div class="text-h6 q-mb-md">Pessoas não alocadas</div>
+                    <div class="q-mb-sm cabecalho-indicador">
+                      <div class="text-h6">Pessoas não alocadas</div>
+                      <div class="text-caption text-grey-7">
+                        {{ totalNaoAlocadosGeral }} pessoa(s) sem vaga nas bases do filtro
+                      </div>
+                    </div>
 
                     <q-table
                       flat
@@ -445,6 +486,20 @@
 
                             <span v-else>0</span>
                           </q-td>
+                        </q-tr>
+                      </template>
+
+                      <template #bottom-row>
+                        <q-tr class="linha-total-indicador">
+                          <q-td class="text-left">Total</q-td>
+                          <q-td
+                            v-for="base in basesExibidas"
+                            :key="'total-na-' + base.codigo"
+                            class="text-center"
+                          >
+                            {{ totalNaoAlocadosPorBase[base.codigo] || 0 }}
+                          </q-td>
+                          <q-td class="text-center">{{ totalNaoAlocadosGeral }}</q-td>
                         </q-tr>
                       </template>
                     </q-table>
@@ -549,7 +604,20 @@
                         <tr class="linha-total-composicao">
                           <td colspan="2" class="text-left">Total</td>
                           <td class="text-center">{{ totalComposicaoConsolidada.vagas }}</td>
-                          <td class="text-center">{{ totalComposicaoConsolidada.alocados }}</td>
+                          <td class="text-center">
+                            <q-btn
+                              v-if="totalComposicaoConsolidada.alocados"
+                              flat
+                              dense
+                              color="primary"
+                              class="text-weight-bold"
+                              :label="String(totalComposicaoConsolidada.alocados)"
+                              @click="abrirDetalhes('')"
+                            >
+                              <q-tooltip>Ver todas as pessoas alocadas</q-tooltip>
+                            </q-btn>
+                            <span v-else>0</span>
+                          </td>
                           <td class="text-center">
                             <span
                               class="marcador-diferenca"
@@ -1558,6 +1626,28 @@ const linhasDisponiveis = computed(() => {
   })
 })
 
+// linha "Total" das tabelas de indicadores (soma das funções)
+function somarPorBase(linhas) {
+  const totais = {}
+  for (const linha of linhas) {
+    for (const [chave, valor] of Object.entries(linha)) {
+      if (chave !== 'funcao' && chave !== 'total') {
+        totais[chave] = (totais[chave] || 0) + (valor || 0)
+      }
+    }
+  }
+  return totais
+}
+
+const totalAlocadosPorBase = computed(() => somarPorBase(linhasDisponiveis.value))
+const totalAlocadosGeral = computed(() =>
+  linhasDisponiveis.value.reduce((soma, linha) => soma + linha.total, 0)
+)
+const totalNaoAlocadosPorBase = computed(() => somarPorBase(linhasNaoAlocadas.value))
+const totalNaoAlocadosGeral = computed(() =>
+  linhasNaoAlocadas.value.reduce((soma, linha) => soma + linha.total, 0)
+)
+
 const necessidadePorFuncao = computed(() => {
   return basesExibidas.value.reduce((acumulado, base) => {
     for (const linha of (base.grupos || []).flatMap(g => g.funcoes || [])) {
@@ -2119,14 +2209,25 @@ watch(
 
 .cabecalho-base-chips :deep(.q-chip) {
   margin: 0;
-  width: 92px;
-  justify-content: center;
+  width: 108px;
+  justify-content: flex-start;
 }
 
+/* número fixo à esquerda (no lugar do ícone), nome corta com "…" */
 .cabecalho-base-chips :deep(.q-chip__content) {
-  justify-content: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
   width: 100%;
+  min-width: 0;
   white-space: nowrap;
+}
+
+.cabecalho-base-chips :deep(.chip-tonal__num) {
+  flex: none;
+}
+
+.cabecalho-base-chips :deep(.chip-tonal__rotulo) {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -2147,11 +2248,11 @@ watch(
 
 .chip-tipo:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
 }
 
+/* filtro ativo: contorno na própria cor da disciplina */
 .chip-tipo.ativo {
-  box-shadow: 0 0 0 2px var(--superficie), 0 0 0 4px currentColor;
+  box-shadow: inset 0 0 0 1.5px currentColor !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2173,14 +2274,23 @@ watch(
   height: 20px;
 }
 
+.chip-tipo-info .chip-tonal__num {
+  min-width: 16px;
+  height: 14px;
+  padding: 0 3px;
+  margin-right: 4px;
+  border-radius: 4px;
+}
+
 /* celula de grupo mesclada: uma vez por disciplina, abrangendo suas funcoes */
 /* a largura vem das variaveis --largura-equipe-* (uma por tabela) */
 .celula-grupo {
   vertical-align: middle;
-  text-align: center;
-  border-left: 4px solid var(--cor-grupo, var(--marca));
-  background: var(--superficie-2);
+  text-align: left;
+  border-left: 3px solid var(--cor-grupo, var(--marca));
+  background: transparent;
   white-space: nowrap;
+  padding-left: 12px !important;
 }
 
 /* O tamanho destes dois textos define a altura MINIMA da celula mesclada,
@@ -2193,8 +2303,7 @@ watch(
   font-family: var(--fonte-ui);
   font-weight: 700;
   line-height: 1;
-  /* mais espaçada para a cor da disciplina ocupar mais area visivel */
-  letter-spacing: 0.1em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--cor-grupo, var(--marca));
 }
@@ -2202,6 +2311,7 @@ watch(
 .grupo-detalhe {
   display: block;
   line-height: 1;
+  margin-top: 3px;
   color: var(--tinta-fraca);
 }
 
@@ -2328,8 +2438,22 @@ watch(
   font-size: var(--linha-fonte);
 }
 
+.tabela-resumo :deep(tbody td) {
+  border-color: var(--linha);
+}
+
 .tabela-resumo :deep(tr.inicio-grupo td) {
   border-top: 1px solid var(--linha-forte);
+}
+
+.resumo-page :deep(tr.linha-total-indicador td) {
+  border-top: 2px solid var(--linha-forte);
+  background: var(--superficie-2);
+  font-weight: 700;
+}
+
+.cabecalho-indicador .text-h6 {
+  line-height: 1.2;
 }
 
 .tabela-resumo :deep(tr.linha-total-composicao td) {
@@ -2373,13 +2497,17 @@ watch(
   background: var(--positivo-fundo);
 }
 
+/* zero = sem diferença: só o número apagado, sem pílula — a cor fica
+   para o que pede atenção (falta ou sobra) */
 .marcador-diferenca.neutra {
   color: var(--tinta-fraca);
-  background: var(--realce);
+  background: transparent;
+  font-weight: 500;
 }
 
-/* gradiente na LINHA do cabeçalho (cada célula transparente): pintar a
-   célula repetiria o degradê coluna a coluna */
+/* cabeçalho nas cores da CGB (degradê vinho na LINHA, células
+   transparentes para o degradê não se repetir coluna a coluna), com rótulo
+   pequeno em caixa alta — segura a cor da tela agora que os chips são suaves */
 .resumo-page :deep(.q-table thead tr) {
   background: var(--gradiente-marca) !important;
 }
@@ -2387,8 +2515,16 @@ watch(
 .resumo-page :deep(.q-table thead th) {
   background: transparent !important;
   color: #fff !important;
-  font-weight: 700;
+  font-weight: 600;
+  font-size: 11px !important;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   text-align: center !important;
+  border-bottom: 0 !important;
+}
+
+.resumo-page :deep(.q-table thead th.text-left) {
+  text-align: left !important;
 }
 
 .resumo-page {

@@ -1,5 +1,5 @@
 <template>
-  <q-layout view="lHh Lpr lFf">
+  <q-layout view="hHh Lpr lFf">
     <MarcaDaguaFundo />
 
     <CabecalhoApp
@@ -93,7 +93,6 @@
                   dense
                   rounded
                   no-caps
-                  icon="filter_alt_off"
                   label="Limpar filtros"
                   color="grey-8"
                   @click="limparFiltros"
@@ -103,8 +102,8 @@
 
             <q-separator class="q-my-md" />
 
-            <div class="row items-center q-col-gutter-md q-mt-none">
-              <div class="col-12 col-md-4">
+            <div class="row items-center q-col-gutter-sm q-mt-none">
+              <div class="col-12 col-md busca-topo">
                 <q-input
                   v-model="filtroEquipe"
                   outlined
@@ -145,32 +144,24 @@
                   outline
                   dense
                   color="primary"
-                  icon="upload_file"
+                  no-caps
                   label="Alocação em massa"
                   @click="abrirPlanilhaAlocacoes"
                 />
               </div>
 
-              <div class="col-auto">
-                <q-chip color="primary" text-color="white">
+              <!-- contagens juntas, numa linha só, encostadas à direita -->
+              <div class="col-auto contagens-topo">
+                <q-chip dense class="chip-tonal" style="--cor-chip: var(--marca)">
                   {{ equipesFiltradas.length }} equipes
                 </q-chip>
-              </div>
-
-              <div class="col-auto">
-                <q-chip color="positive" text-color="white">
+                <q-chip dense class="chip-tonal" style="--cor-chip: var(--positivo)">
                   {{ textoChipAlocados }}
                 </q-chip>
-              </div>
-
-              <div class="col-auto">
-                <q-chip color="grey-7" text-color="white">
+                <q-chip dense class="chip-tonal" style="--cor-chip: var(--neutro)">
                   {{ colaboradoresLivres }} livres
                 </q-chip>
-              </div>
-
-              <div class="col-auto">
-                <q-chip color="amber-8" text-color="white">
+                <q-chip dense class="chip-tonal" style="--cor-chip: var(--afastado)">
                   {{ colaboradoresAfastados }} afastados
                 </q-chip>
               </div>
@@ -449,50 +440,22 @@
               <q-separator />
 
               <q-card-section>
-                <div class="row q-col-gutter-sm q-mb-md">
-                  <div class="col-auto">
-                    <q-btn
-                      :color="
-                        statusColaborador === 'TODOS' ? 'primary' : 'grey-7'
-                      "
-                      outline
-                      label="Todos"
-                      @click="statusColaborador = 'TODOS'"
-                    />
-                  </div>
-
-                  <div class="col-auto">
-                    <q-btn
-                      :color="
-                        statusColaborador === 'ALOCADOS' ? 'positive' : 'grey-7'
-                      "
-                      outline
-                      :label="`Alocados (${colaboradoresAlocados})`"
-                      @click="statusColaborador = 'ALOCADOS'"
-                    />
-                  </div>
-
-                  <div class="col-auto">
-                    <q-btn
-                      :color="
-                        statusColaborador === 'LIVRES' ? 'primary' : 'grey-7'
-                      "
-                      outline
-                      :label="`Livres (${colaboradoresLivres})`"
-                      @click="statusColaborador = 'LIVRES'"
-                    />
-                  </div>
-
-                  <div class="col-auto">
-                    <q-btn
-                      :color="
-                        statusColaborador === 'AFASTADOS' ? 'amber-8' : 'grey-7'
-                      "
-                      outline
-                      :label="`Afastados (${colaboradoresAfastados})`"
-                      @click="statusColaborador = 'AFASTADOS'"
-                    />
-                  </div>
+                <!-- situação: um segmentado de 4 partes iguais, numa linha só -->
+                <div class="segmentado-situacao q-mb-md" role="tablist" aria-label="Situação">
+                  <button
+                    v-for="opcao in opcoesSituacao"
+                    :key="opcao.valor"
+                    type="button"
+                    role="tab"
+                    class="segmentado-situacao__item"
+                    :class="{ ativo: statusColaborador === opcao.valor }"
+                    :style="{ '--cor-chip': opcao.cor }"
+                    :aria-selected="statusColaborador === opcao.valor ? 'true' : 'false'"
+                    @click="statusColaborador = opcao.valor"
+                  >
+                    <span class="segmentado-situacao__num">{{ opcao.quantidade }}</span>
+                    <span class="segmentado-situacao__rotulo">{{ opcao.rotulo }}</span>
+                  </button>
                 </div>
 
                 <div class="row q-col-gutter-sm q-mb-md items-center">
@@ -2076,6 +2039,13 @@ const colaboradoresAfastados = computed(() => {
     .length
 })
 
+const opcoesSituacao = computed(() => [
+  { valor: 'TODOS', rotulo: 'Todos', quantidade: colaboradoresDoTipo.value.length, cor: 'var(--marca)' },
+  { valor: 'ALOCADOS', rotulo: 'Alocados', quantidade: colaboradoresAlocados.value, cor: 'var(--positivo)' },
+  { valor: 'LIVRES', rotulo: 'Livres', quantidade: colaboradoresLivres.value, cor: 'var(--neutro)' },
+  { valor: 'AFASTADOS', rotulo: 'Afastados', quantidade: colaboradoresAfastados.value, cor: 'var(--afastado)' }
+])
+
 // CHAPA -> onde a pessoa esta alocada hoje (prefixo + base da equipe) — usa
 // pra rotular "Alocado em ..." nas opções de colaborador dos diálogos de
 // Alocar/Trocar/Folguista Extra.
@@ -3057,6 +3027,94 @@ watch(
 </script>
 
 <style scoped>
+.busca-topo {
+  min-width: 220px;
+}
+
+.contagens-topo {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.contagens-topo .q-chip {
+  margin: 0;
+}
+
+/* situação dos colaboradores: 4 partes iguais numa linha, número em cima */
+.segmentado-situacao {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--superficie);
+}
+
+.segmentado-situacao__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  padding: 6px 4px;
+  border: 0;
+  border-left: 1px solid var(--linha);
+  background: transparent;
+  color: var(--tinta-fraca);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.segmentado-situacao__item:first-child {
+  border-left: 0;
+}
+
+.segmentado-situacao__item:hover {
+  background: var(--superficie-2);
+}
+
+.segmentado-situacao__item:focus-visible {
+  outline: 2px solid var(--marca-clara);
+  outline-offset: -2px;
+}
+
+.segmentado-situacao__num {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--tinta);
+  font-variant-numeric: tabular-nums;
+}
+
+.segmentado-situacao__rotulo {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.segmentado-situacao__item.ativo {
+  background: color-mix(in srgb, var(--cor-chip) 12%, var(--superficie));
+  color: color-mix(in srgb, var(--cor-chip) 88%, #000);
+  box-shadow: inset 0 -2px 0 var(--cor-chip);
+}
+
+.segmentado-situacao__item.ativo .segmentado-situacao__num {
+  color: inherit;
+}
+
+body.body--dark .segmentado-situacao__item.ativo {
+  background: color-mix(in srgb, var(--cor-chip) 22%, var(--superficie));
+  color: color-mix(in srgb, var(--cor-chip) 45%, #fff);
+}
+
 /* ações da vaga: uma linha só, sem quebrar, mesma posição em todas as vagas */
 .acoes-vaga {
   display: flex;

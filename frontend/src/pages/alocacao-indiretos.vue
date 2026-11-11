@@ -1,5 +1,5 @@
 <template>
-  <q-layout view="lHh Lpr lFf">
+  <q-layout view="hHh Lpr lFf">
     <MarcaDaguaFundo />
 
     <CabecalhoApp titulo="Indiretos" :carregando="carregando" @atualizar="carregar" />
@@ -96,7 +96,6 @@
                   dense
                   rounded
                   no-caps
-                  icon="filter_alt_off"
                   label="Limpar filtros"
                   color="grey-8"
                   @click="limparFiltros"

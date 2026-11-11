@@ -1,5 +1,5 @@
 <template>
-  <q-layout view="lHh Lpr lFf">
+  <q-layout view="hHh Lpr lFf">
     <MarcaDaguaFundo />
 
     <CabecalhoApp
@@ -107,23 +107,17 @@
                     />
                   </div>
                   <div class="col-6 col-sm-4">
-                    <q-select
+                    <SelectFiltroMultiplo
                       v-model="tipoFiltro"
-                      outlined
-                      dense
-                      emit-value
-                      map-options
+                      :multiple="false"
                       label="Tipo de equipe"
                       :options="opcoesTipos"
                     />
                   </div>
                   <div class="col-6 col-sm-4">
-                    <q-select
+                    <SelectFiltroMultiplo
                       v-model="setorFiltro"
-                      outlined
-                      dense
-                      emit-value
-                      map-options
+                      :multiple="false"
                       label="Setor"
                       :options="opcoesSetores"
                     />
