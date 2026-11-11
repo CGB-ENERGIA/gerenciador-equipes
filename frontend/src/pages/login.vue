@@ -44,15 +44,14 @@
     </q-header>
 
     <q-page-container>
-      <q-page class="tela-login flex flex-center q-pa-md">
-        <canvas ref="canvasFundoEl" class="canvas-fundo" aria-hidden="true"></canvas>
+      <q-page class="tela-login">
+        <!-- faixa lateral da CGB: degradê da marca, logo branco e a mensagem -->
+        <aside class="faixa-cgb">
+          <div class="faixa-cgb__marca-dagua" aria-hidden="true"></div>
 
-        <div class="marca-dagua" aria-hidden="true">
-          <img src="/icons/logo-fundo.png" alt="" />
-        </div>
+          <img src="/icons/logo-cabecalho.png" alt="CGB Energia" class="faixa-cgb__logo" />
 
-        <div class="conteudo-login">
-          <div class="coluna-mensagem">
+          <div class="faixa-cgb__mensagem">
             <div class="selo-seguranca">
               <q-icon name="verified_user" size="16px" />
               Acesso restrito às equipes autorizadas
@@ -60,8 +59,7 @@
 
             <h1 class="titulo-hero">
               Gestão de<br />
-              <span class="titulo-hero__destaque">Equipes            
-              </span>
+              <span class="titulo-hero__destaque">Equipes</span>
             </h1>
 
             <p class="texto-hero">
@@ -69,6 +67,14 @@
             </p>
           </div>
 
+          <div class="faixa-cgb__rodape">CGB Energia</div>
+        </aside>
+
+        <!-- área do login: o plexus fica só aqui -->
+        <section ref="areaLoginEl" class="area-login">
+          <canvas ref="canvasFundoEl" class="canvas-fundo" aria-hidden="true"></canvas>
+
+        <div class="conteudo-login">
           <div class="cartao-login-halo">
           <q-card bordered class="cartao-login">
             <div class="cartao-login__faixa"></div>
@@ -203,6 +209,7 @@
           </q-card>
           </div>
         </div>
+        </section>
 
         <!-- ------------------------------------------- -->
         <!-- NOTIFICAÇÕES -->
@@ -348,6 +355,8 @@ async function verificarServidor() {
 // flutuando por cima. Nao carrega nada de fora — so canvas 2D nativo.
 
 const canvasFundoEl = ref(null)
+const areaLoginEl = ref(null)
+let observadorArea = null
 let contextoFundo = null
 let quadroAnimacao = null
 let tempoFundo = 0
@@ -410,8 +419,16 @@ function criarPontoRede(largura, altura, destaque) {
   }
 }
 
+// a quantidade sorteada vale para uma tela cheia de 1366x768; numa área
+// menor (só a direita da faixa, ou o celular) a rede mantém a mesma
+// densidade em vez de ficar embolada
+const AREA_REFERENCIA_REDE = 1366 * 768
+
 function prepararRede(largura, altura) {
-  pontosRede = Array.from({ length: REDE_NUM_PONTOS }, (_, i) =>
+  const proporcao = Math.min(1, (largura * altura) / AREA_REFERENCIA_REDE)
+  const quantidade = Math.max(40, Math.round(REDE_NUM_PONTOS * proporcao))
+
+  pontosRede = Array.from({ length: quantidade }, (_, i) =>
     criarPontoRede(largura, altura, i % 7 === 0)
   )
 }
@@ -576,8 +593,15 @@ function redimensionarCanvas() {
   const canvas = canvasFundoEl.value
   if (!canvas) return
 
-  canvas.width = window.innerWidth
-  canvas.height = window.innerHeight
+  // mede pela área da direita (não pela janela): a faixa lateral fica lisa
+  const area = areaLoginEl.value
+  const largura = Math.round(area?.clientWidth || window.innerWidth)
+  const altura = Math.round(area?.clientHeight || window.innerHeight)
+
+  if (canvas.width === largura && canvas.height === altura) return
+
+  canvas.width = largura
+  canvas.height = altura
   prepararParticulas(canvas.width, canvas.height)
   prepararRede(canvas.width, canvas.height)
 }
@@ -592,6 +616,10 @@ onMounted(async () => {
     contextoFundo = canvasFundoEl.value.getContext('2d')
     redimensionarCanvas()
     window.addEventListener('resize', redimensionarCanvas)
+    if (areaLoginEl.value && 'ResizeObserver' in window) {
+      observadorArea = new ResizeObserver(() => redimensionarCanvas())
+      observadorArea.observe(areaLoginEl.value)
+    }
     document.addEventListener('visibilitychange', aoTrocarVisibilidadeFundo)
     iniciarFundo()
   }
@@ -599,6 +627,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', redimensionarCanvas)
+  observadorArea?.disconnect()
   document.removeEventListener('visibilitychange', aoTrocarVisibilidadeFundo)
   pararFundo()
 })
@@ -681,33 +710,111 @@ onBeforeUnmount(() => {
   min-height: 100vh;
   position: relative;
   overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+}
+
+@media (min-width: 900px) {
+  .tela-login {
+    grid-template-columns: minmax(340px, 38%) 1fr;
+    grid-template-rows: 1fr;
+  }
+}
+
+/* ---------- faixa lateral da CGB ---------- */
+
+.faixa-cgb {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 40px 44px;
+  background: linear-gradient(160deg, #4e0b17 0%, #711424 50%, #a8304a 100%);
+  color: #fff;
+}
+
+.faixa-cgb__marca-dagua {
+  position: absolute;
+  right: -22%;
+  bottom: -14%;
+  width: 78%;
+  aspect-ratio: 1;
+  background: url('/icons/logo-fundo.png') center / contain no-repeat;
+  filter: brightness(0) invert(1);
+  opacity: 0.07;
+  pointer-events: none;
+}
+
+.faixa-cgb__logo {
+  position: relative;
+  width: 168px;
+  max-width: 60%;
+  height: auto;
+}
+
+.faixa-cgb__mensagem {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.faixa-cgb__rodape {
+  position: relative;
+  font-family: 'Inter', var(--fonte-texto);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* celular: a faixa vira um topo baixo, só com o logo */
+@media (max-width: 899px) {
+  .faixa-cgb {
+    padding: 18px 20px;
+    gap: 0;
+    min-height: 0;
+  }
+
+  .faixa-cgb__mensagem,
+  .faixa-cgb__rodape {
+    display: none;
+  }
+
+  .faixa-cgb__logo {
+    width: 112px;
+  }
+
+  .faixa-cgb__marca-dagua {
+    width: 40%;
+    right: -6%;
+    bottom: -60%;
+  }
+}
+
+/* ---------- área do login (com o plexus) ---------- */
+
+.area-login {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  min-height: 0;
 }
 
 .canvas-fundo {
-  position: fixed;
+  position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   pointer-events: none;
   z-index: 0;
-}
-
-.marca-dagua {
-  position: fixed;
-  top: 50%;
-  left: -14%;
-  transform: translateY(-50%);
-  width: min(72vw, 980px);
-  height: min(72vw, 980px);
-  opacity: 0.08;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.marca-dagua img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
 }
 
 /* ============================================================ */
@@ -718,30 +825,8 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 980px;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 32px;
-  align-items: center;
+  max-width: 420px;
   padding: 24px 0;
-}
-
-@media (min-width: 900px) {
-  .conteudo-login {
-    grid-template-columns: 1.05fr 1fr;
-  }
-}
-
-.coluna-mensagem {
-  display: none;
-  flex-direction: column;
-  gap: 18px;
-}
-
-@media (min-width: 900px) {
-  .coluna-mensagem {
-    display: flex;
-  }
 }
 
 .selo-seguranca {
@@ -751,9 +836,9 @@ onBeforeUnmount(() => {
   width: fit-content;
   padding: 6px 14px;
   border-radius: 999px;
-  background: rgba(113, 20, 36, 0.08);
-  border: 1px solid rgba(113, 20, 36, 0.18);
-  color: var(--marca-clara);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #fff;
   font-family: 'Inter', var(--fonte-texto);
   font-weight: 600;
   font-size: 0.75rem;
@@ -762,27 +847,24 @@ onBeforeUnmount(() => {
 .titulo-hero {
   font-family: 'Inter', var(--fonte-ui);
   font-weight: 800;
-  font-size: 3.8rem;
-  line-height: 1.15;
+  font-size: clamp(2.6rem, 4.2vw, 3.8rem);
+  line-height: 1.12;
   letter-spacing: -0.01em;
-  color: var(--titulo);
+  color: #fff;
   margin: 0;
 }
 
 .titulo-hero__destaque {
   white-space: nowrap;
-  background: linear-gradient(90deg, var(--marca) 0%, var(--marca-clara) 60%, #e57c94 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: #ffd6e0;
 }
 
 .texto-hero {
   font-family: 'Inter', var(--fonte-texto);
   font-size: 0.95rem;
   line-height: 1.6;
-  color: var(--tinta-fraca);
-  max-width: 40ch;
+  color: rgba(255, 255, 255, 0.78);
+  max-width: 36ch;
   margin: 0;
 }
 
@@ -971,20 +1053,18 @@ onBeforeUnmount(() => {
   passam por essa transformacao e funcionam normalmente.
 -->
 <style>
+body.body--dark .faixa-cgb {
+  background: linear-gradient(160deg, #2a0a10 0%, #4a0d18 55%, #6a1729 100%);
+}
+
 body.body--dark .cabecalho-login {
   background: rgba(15, 20, 30, 0.85);
   border-bottom-color: var(--linha);
 }
 
-body.body--dark .marca-dagua {
-  opacity: 0.12;
-}
 
-body.body--dark .selo-seguranca {
-  background: rgba(224, 138, 156, 0.1);
-  border-color: rgba(224, 138, 156, 0.25);
-  color: #e08a9c;
-}
+
+
 
 body.body--dark .link-recuperar {
   color: #e08a9c;
