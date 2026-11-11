@@ -1,6 +1,16 @@
 <template>
   <q-header elevated class="site-header text-white">
     <q-toolbar>
+      <q-btn
+        flat
+        round
+        dense
+        icon="menu"
+        class="q-mr-xs"
+        :aria-label="menuAberto && !recolhidoEfetivo ? 'Recolher menu' : 'Abrir menu'"
+        @click="alternarMenu"
+      />
+
       <div class="site-logo q-mr-sm">
         <img src="/icons/logo-cabecalho.png" alt="CGB Energia" />
       </div>
@@ -29,35 +39,6 @@
       >
         <q-tooltip>{{ modoNoturno ? 'Modo claro' : 'Modo noturno' }}</q-tooltip>
       </q-btn>
-
-      <q-btn-dropdown
-        flat
-        icon="menu"
-        label="Menu"
-        aria-label="Menu de navegação"
-        auto-close
-        class="q-ml-sm"
-      >
-        <q-list>
-          <q-item
-            v-for="pagina in paginasPermitidas"
-            :key="pagina.rota"
-            v-close-popup
-            clickable
-            :active="ehPaginaAtual(pagina)"
-            active-class="text-primary text-weight-bold"
-            @click="navegar(pagina)"
-          >
-            <q-item-section avatar>
-              <q-icon :name="pagina.icone" />
-            </q-item-section>
-
-            <q-item-section>
-              {{ pagina.titulo }}
-            </q-item-section>
-          </q-item>
-        </q-list>
-      </q-btn-dropdown>
 
       <!-- ============================================== -->
       <!-- USUÁRIO LOGADO -->
@@ -111,6 +92,60 @@
       </q-btn-dropdown>
     </q-toolbar>
   </q-header>
+
+  <!-- ================================================== -->
+  <!-- MENU LATERAL (recolhe para só ícones no computador; -->
+  <!-- no celular abre por cima pelo botão ☰)              -->
+  <!-- ================================================== -->
+
+  <q-drawer
+    v-model="menuAberto"
+    show-if-above
+    bordered
+    side="left"
+    :width="232"
+    :mini="recolhidoEfetivo"
+    :mini-width="60"
+    :breakpoint="LARGURA_MENU_FIXO"
+    class="menu-lateral"
+  >
+    <div class="menu-lateral__conteudo">
+      <q-list class="menu-lateral__lista">
+        <q-item
+          v-for="pagina in paginasPermitidas"
+          :key="pagina.rota"
+          clickable
+          :active="ehPaginaAtual(pagina)"
+          active-class="menu-lateral__item--ativo"
+          class="menu-lateral__item"
+          @click="navegar(pagina)"
+        >
+          <q-item-section avatar>
+            <q-icon :name="pagina.icone" size="20px" />
+          </q-item-section>
+          <q-item-section>{{ pagina.titulo }}</q-item-section>
+          <q-tooltip v-if="recolhidoEfetivo" anchor="center right" self="center left" :offset="[8, 0]">
+            {{ pagina.titulo }}
+          </q-tooltip>
+        </q-item>
+      </q-list>
+
+      <q-item
+        v-if="$q.screen.width >= LARGURA_MENU_FIXO"
+        clickable
+        class="menu-lateral__item menu-lateral__recolher"
+        @click="recolhido = !recolhido"
+      >
+        <q-item-section avatar>
+          <q-icon :name="recolhido ? 'chevron_right' : 'chevron_left'" size="20px" />
+        </q-item-section>
+        <q-item-section>Recolher menu</q-item-section>
+        <q-tooltip v-if="recolhidoEfetivo" anchor="center right" self="center left" :offset="[8, 0]">
+          Expandir menu
+        </q-tooltip>
+      </q-item>
+    </div>
+  </q-drawer>
 
   <!-- ================================================== -->
   <!-- TROCA DE SENHA -->
@@ -182,6 +217,8 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useQuasar } from 'quasar'
+import { LARGURA_MENU_FIXO, useMenuLateral } from '../composables/useMenuLateral'
 
 import { useRoute, useRouter } from 'vue-router'
 import { useModoNoturno } from '../composables/useModoNoturno'
@@ -206,6 +243,25 @@ defineProps({
 })
 
 const emit = defineEmits(['atualizar'])
+
+const $q = useQuasar()
+const { menuAberto, recolhido } = useMenuLateral()
+
+// recolher (só ícones) vale para o computador; no celular o menu abre inteiro
+const recolhidoEfetivo = computed(() => recolhido.value && $q.screen.width >= LARGURA_MENU_FIXO)
+
+function alternarMenu() {
+  if ($q.screen.width >= LARGURA_MENU_FIXO) {
+    if (!menuAberto.value) {
+      menuAberto.value = true
+      recolhido.value = false
+    } else {
+      recolhido.value = !recolhido.value
+    }
+  } else {
+    menuAberto.value = !menuAberto.value
+  }
+}
 
 const router = useRouter()
 const route = useRoute()
@@ -272,6 +328,9 @@ function ehPaginaAtual(pagina) {
 }
 
 function navegar(pagina) {
+  if ($q.screen.width < LARGURA_MENU_FIXO) {
+    menuAberto.value = false
+  }
   if (!ehPaginaAtual(pagina)) {
     router.push(pagina.rota)
   }
@@ -347,3 +406,107 @@ async function salvarSenha() {
 
 onMounted(restaurarModoNoturno)
 </script>
+
+<style>
+/* sem scoped: o q-drawer monta fora da raiz deste componente */
+.q-drawer__content.menu-lateral {
+  background: linear-gradient(180deg, #5a0f1c 0%, #711424 55%, #8d2136 100%);
+  color: #fff;
+  overflow: hidden;
+}
+
+body.body--dark .q-drawer__content.menu-lateral {
+  background: linear-gradient(180deg, #2a0a10 0%, #4a0d18 55%, #5e1424 100%);
+}
+
+.q-drawer--bordered:has(.menu-lateral) {
+  border-right: 0 !important;
+}
+
+/* marca d'água bem leve do logo, no pé do menu */
+.q-drawer__content.menu-lateral {
+  position: relative;
+}
+
+.q-drawer__content.menu-lateral::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 70px;
+  width: 180px;
+  height: 180px;
+  transform: translateX(-50%);
+  background: url('/icons/logo-fundo.png') center / contain no-repeat;
+  filter: brightness(0) invert(1);
+  opacity: 0.06;
+  pointer-events: none;
+}
+
+.q-drawer--mini .menu-lateral::after {
+  width: 44px;
+  height: 44px;
+}
+
+.menu-lateral__conteudo {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 10px 8px;
+}
+
+.menu-lateral__lista {
+  flex: 1;
+}
+
+.menu-lateral__item {
+  min-height: 40px;
+  margin-bottom: 2px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 14px;
+}
+
+.menu-lateral__item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.menu-lateral__item .q-item__section--avatar {
+  min-width: 34px;
+  color: inherit;
+}
+
+.menu-lateral__item .q-focus-helper {
+  display: none;
+}
+
+.menu-lateral__item--ativo,
+body.body--dark .menu-lateral__item--ativo {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 #fff;
+}
+
+.menu-lateral__recolher {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0 0 8px 8px;
+  padding-top: 4px;
+}
+
+/* recolhido: só o ícone, centralizado */
+.q-drawer--mini .menu-lateral__item {
+  justify-content: center;
+  padding: 0;
+}
+
+.q-drawer--mini .menu-lateral__item .q-item__section--avatar {
+  min-width: 0;
+  padding-right: 0;
+}
+</style>
