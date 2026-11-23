@@ -35,3 +35,4 @@ Microsoft/
 
 # Pasta local do Vercel CLI (link do projeto, cache de build)
 .vercel
+RELATORIO_AUDITORIA*.md
