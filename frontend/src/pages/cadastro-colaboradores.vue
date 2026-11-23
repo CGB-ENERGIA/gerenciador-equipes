@@ -146,7 +146,7 @@
             <template #body-cell-status="props">
               <q-td :props="props">
                 <q-badge v-if="props.row.afastado" color="amber-8" label="Afastado" />
-                <q-badge v-else-if="props.row.alocado" color="positive" label="Alocado" />
+                <q-badge v-else-if="estaAlocado(props.row)" color="positive" label="Alocado" />
                 <q-badge v-else color="grey-6" label="Livre" />
               </q-td>
             </template>
@@ -461,6 +461,17 @@ function dataBr(iso) {
 
   const [ano, mes, dia] = iso.split('-')
   return `${dia}/${mes}/${ano}`
+}
+
+
+// Alocado = ocupa vaga numa equipe OU, sendo indireto, está num setor da
+// página Indiretos ou é responsável por alguém lá (mesma regra do Banco de Dados).
+function estaAlocado(colaborador) {
+  return (
+    Boolean(colaborador.alocado) ||
+    (colaborador.tipo_funcao === 'INDIRETO' &&
+      (Boolean(colaborador.setor_indireto) || Boolean(colaborador.lidera_indiretos)))
+  )
 }
 
 const colunas = [
