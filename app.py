@@ -3806,7 +3806,9 @@ def validar_cadastro_colaborador(dados):
     return campos, rateios, None
 
 
-def _json_cadastro_colaborador(colaborador, rateios, alocado):
+def _json_cadastro_colaborador(colaborador, rateios, alocado, vinculo_indireto=None):
+    """vinculo_indireto: (setor_indireto, lidera_indiretos) da página Indiretos."""
+    setor_indireto, lidera_indiretos = vinculo_indireto or ("", False)
     return {
         "chapa": str(colaborador.CHAPA).strip(),
         "nome": colaborador.NOME or "",
@@ -3819,6 +3821,8 @@ def _json_cadastro_colaborador(colaborador, rateios, alocado):
         "tipo_ccusto": colaborador.TIPO_CCUSTO or "",
         "afastado": bool(colaborador.AFASTADO),
         "alocado": alocado,
+        "setor_indireto": setor_indireto,
+        "lidera_indiretos": lidera_indiretos,
         "rateios": [{"rateio": r or "", "grpccusto": g or ""} for r, g in rateios],
     }
 
@@ -3852,12 +3856,20 @@ def listar_cadastro_colaboradores():
             )
 
         chapas_alocadas = chapas_alocadas_do_banco(session)
+        # vínculo com a página Indiretos (setor onde está / responsável por alguém)
+        indiretos = {a.CHAPA: a for a in session.query(AlocacaoIndireto).all()}
+        lideres_indiretos = {a.RESPONSAVEL_CHAPA for a in indiretos.values() if a.RESPONSAVEL_CHAPA}
+
+        def vinculo_indireto(c):
+            a = indiretos.get(c.CHAPA)
+            return (f"{a.SETOR} · {a.BASE}" if a else "", c.CHAPA in lideres_indiretos)
 
         return jsonify([
             _json_cadastro_colaborador(
                 c,
                 rateios_por_chapa.get(c.CHAPA, []),
                 str(c.CHAPA).strip() in chapas_alocadas,
+                vinculo_indireto(c),
             )
             for c in session.query(Colaborador).order_by(Colaborador.NOME).all()
         ])
