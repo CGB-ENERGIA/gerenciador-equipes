@@ -396,6 +396,7 @@ def descrever_usuario(usuario, incluir_vinculos=True, session=None):
         "nivel": usuario.NIVEL,
         "nivel_rotulo": NIVEIS.get(usuario.NIVEL, {}).get("rotulo", usuario.NIVEL),
         "ativo": bool(usuario.ATIVO),
+        "pendente": bool(usuario.PENDENTE),
         "permissoes": sorted(permissoes_do_nivel(usuario.NIVEL, session)),
         "ignora_vinculos": bool(
             NIVEIS.get(usuario.NIVEL, {}).get("ignora_vinculos", False)
@@ -471,6 +472,7 @@ def descrever_usuarios(session, usuarios):
             "nivel": usuario.NIVEL,
             "nivel_rotulo": NIVEIS.get(usuario.NIVEL, {}).get("rotulo", usuario.NIVEL),
             "ativo": bool(usuario.ATIVO),
+            "pendente": bool(usuario.PENDENTE),
             "permissoes": sorted(permissoes),
             "ignora_vinculos": bool(NIVEIS.get(usuario.NIVEL, {}).get("ignora_vinculos", False)),
             "responsavel_id": usuario.RESPONSAVEL_ID,

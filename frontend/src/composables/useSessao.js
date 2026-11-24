@@ -66,6 +66,8 @@ async function entrar(login, senha) {
     const erro = new Error(dados.erro || 'Não foi possível entrar.')
     // a tela de login usa o 429 para mostrar o aviso fixo de bloqueio
     erro.status = resposta.status
+    // conta criada pela própria pessoa e ainda não aprovada
+    erro.pendente = Boolean(dados.pendente)
     throw erro
   }
 
@@ -73,6 +75,23 @@ async function entrar(login, senha) {
   await buscarSessao()
 
   return usuario.value
+}
+
+/** Autocadastro: cria a conta como pendente; um administrador aprova depois. */
+async function solicitarCadastro({ nome, usuario: login, senha }) {
+  const resposta = await fetch('/api/cadastro', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nome, usuario: login, senha })
+  })
+
+  const dados = await resposta.json().catch(() => ({}))
+
+  if (!resposta.ok || dados.erro) {
+    throw new Error(dados.erro || 'Não foi possível enviar o cadastro.')
+  }
+
+  return dados
 }
 
 // O filtro de base fica no localStorage, que é do navegador e não da conta.
@@ -151,6 +170,7 @@ export function useSessao() {
     garantirSessao,
     buscarSessao,
     entrar,
+    solicitarCadastro,
     sair,
     lerBasesSelecionadas,
     gravarBasesSelecionadas,

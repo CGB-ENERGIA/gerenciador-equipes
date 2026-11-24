@@ -85,15 +85,11 @@
               </div>
 
               <div class="text-h6 titulo-cartao">
-                {{ modoRecuperacao ? 'Recuperar acesso' : 'Entrar no sistema' }}
+                {{ tituloCartao }}
               </div>
 
               <div class="text-caption text-grey-7">
-                {{
-                  modoRecuperacao
-                    ? 'Veja como redefinir sua senha'
-                    : 'Entre com o seu usuário para continuar'
-                }}
+                {{ subtituloCartao }}
               </div>
             </q-card-section>
 
@@ -127,7 +123,107 @@
                 </div>
               </div>
 
-              <q-form v-if="!modoRecuperacao" @submit.prevent="autenticar">
+              <q-banner
+                v-if="cadastroEnviado"
+                dense
+                class="bg-green-1 text-positive q-mb-md"
+                rounded
+              >
+                Cadastro enviado! Assim que um Administrador aprovar, você já
+                pode entrar com o usuário e a senha que escolheu.
+              </q-banner>
+
+              <q-banner
+                v-if="aguardandoAprovacao && !modoCadastro"
+                dense
+                class="bg-orange-1 text-orange-9 q-mb-md"
+                rounded
+              >
+                Seu cadastro ainda aguarda a aprovação de um Administrador.
+              </q-banner>
+
+              <!-- ------------------------------------------- -->
+              <!-- CRIAR ACESSO -->
+              <!-- ------------------------------------------- -->
+              <q-form v-if="modoCadastro" @submit.prevent="enviarCadastro">
+                <q-input
+                  v-model="cadastro.nome"
+                  outlined
+                  dense
+                  autofocus
+                  class="q-mb-md"
+                  label="Nome completo"
+                  autocomplete="name"
+                  maxlength="120"
+                  :disable="enviandoCadastro"
+                />
+
+                <q-input
+                  v-model="cadastro.usuario"
+                  outlined
+                  dense
+                  class="q-mb-md"
+                  label="Usuário (login)"
+                  hint="É o que você vai digitar para entrar"
+                  autocomplete="username"
+                  maxlength="60"
+                  :disable="enviandoCadastro"
+                />
+
+                <q-input
+                  v-model="cadastro.senha"
+                  outlined
+                  dense
+                  class="q-mt-md q-mb-md"
+                  label="Senha"
+                  :hint="`Mínimo de ${SENHA_MINIMA} caracteres`"
+                  autocomplete="new-password"
+                  :type="mostrarSenha ? 'text' : 'password'"
+                  :disable="enviandoCadastro"
+                >
+                  <template #append>
+                    <q-icon
+                      class="cursor-pointer"
+                      :name="mostrarSenha ? 'visibility_off' : 'visibility'"
+                      @click="mostrarSenha = !mostrarSenha"
+                    />
+                  </template>
+                </q-input>
+
+                <q-input
+                  v-model="cadastro.confirmacao"
+                  outlined
+                  dense
+                  class="q-mb-md"
+                  label="Repita a senha"
+                  autocomplete="new-password"
+                  :type="mostrarSenha ? 'text' : 'password'"
+                  :error="Boolean(cadastro.confirmacao) && cadastro.confirmacao !== cadastro.senha"
+                  error-message="As senhas não são iguais"
+                  :disable="enviandoCadastro"
+                />
+
+                <q-btn
+                  type="submit"
+                  color="primary"
+                  class="full-width botao-entrar"
+                  label="SOLICITAR ACESSO"
+                  icon-right="send"
+                  :loading="enviandoCadastro"
+                  :disable="!cadastroValido"
+                />
+
+                <q-btn
+                  flat
+                  class="full-width q-mt-sm"
+                  label="Voltar para o login"
+                  icon="arrow_back"
+                  :disable="enviandoCadastro"
+                  @click="abrirLogin"
+                />
+              </q-form>
+
+              <q-form v-else-if="!modoRecuperacao" @submit.prevent="autenticar">
                 <q-input
                   v-model="login"
                   outlined
@@ -185,6 +281,13 @@
                   :loading="entrando"
                   :disable="!login || !senha"
                 />
+
+                <div class="text-center q-mt-md text-caption text-grey-7">
+                  Ainda não tem acesso?
+                  <a href="#" class="link-recuperar" @click.prevent="abrirCadastro">
+                    Criar meu acesso
+                  </a>
+                </div>
               </q-form>
 
               <!-- ------------------------------------------- -->
@@ -235,7 +338,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useModoNoturno } from '../composables/useModoNoturno'
@@ -243,7 +346,9 @@ import { useSessao } from '../composables/useSessao'
 
 const router = useRouter()
 const route = useRoute()
-const { entrar } = useSessao()
+const { entrar, solicitarCadastro } = useSessao()
+
+const SENHA_MINIMA = 6
 const { modoNoturno, alternarModoNoturno, restaurarModoNoturno } = useModoNoturno()
 
 const login = ref('')
@@ -251,6 +356,67 @@ const senha = ref('')
 const mostrarSenha = ref(false)
 const entrando = ref(false)
 const modoRecuperacao = ref(false)
+
+// ---- criar o próprio acesso (um administrador aprova depois) ----
+const modoCadastro = ref(false)
+const enviandoCadastro = ref(false)
+const cadastroEnviado = ref(false)
+// login que recebeu "aguarda aprovação": mostra o aviso fixo no cartão
+const aguardandoAprovacao = ref(false)
+const cadastro = reactive({ nome: '', usuario: '', senha: '', confirmacao: '' })
+
+const tituloCartao = computed(() => {
+  if (modoCadastro.value) return 'Criar meu acesso'
+  return modoRecuperacao.value ? 'Recuperar acesso' : 'Entrar no sistema'
+})
+
+const subtituloCartao = computed(() => {
+  if (modoCadastro.value) return 'Preencha os dados e aguarde a aprovação do Administrador'
+  return modoRecuperacao.value
+    ? 'Veja como redefinir sua senha'
+    : 'Entre com o seu usuário para continuar'
+})
+
+const cadastroValido = computed(
+  () =>
+    cadastro.nome.trim() &&
+    cadastro.usuario.trim() &&
+    cadastro.senha.length >= SENHA_MINIMA &&
+    cadastro.senha === cadastro.confirmacao
+)
+
+function abrirCadastro() {
+  cadastroEnviado.value = false
+  aguardandoAprovacao.value = false
+  modoCadastro.value = true
+}
+
+function abrirLogin() {
+  modoCadastro.value = false
+}
+
+async function enviarCadastro() {
+  enviandoCadastro.value = true
+
+  try {
+    await solicitarCadastro({
+      nome: cadastro.nome.trim(),
+      usuario: cadastro.usuario.trim(),
+      senha: cadastro.senha
+    })
+
+    // leva o login digitado de volta para a tela de entrar
+    login.value = cadastro.usuario.trim()
+    senha.value = ''
+    Object.assign(cadastro, { nome: '', usuario: '', senha: '', confirmacao: '' })
+    modoCadastro.value = false
+    cadastroEnviado.value = true
+  } catch (e) {
+    avisar(e.message || 'Não foi possível enviar o cadastro.', 'erro')
+  } finally {
+    enviandoCadastro.value = false
+  }
+}
 
 // marcado pelo boot quando a API respondeu 401 no meio do uso
 const sessaoExpirou = computed(() => route.query.expirou === '1')
@@ -281,6 +447,8 @@ const mostrarBloqueio = computed(
 
 async function autenticar() {
   entrando.value = true
+  aguardandoAprovacao.value = false
+  cadastroEnviado.value = false
 
   try {
     await entrar(login.value.trim(), senha.value)
@@ -294,6 +462,8 @@ async function autenticar() {
       // bloqueio não é aviso passageiro: fica fixo no cartão até a pessoa
       // trocar de usuário ou conseguir entrar
       loginBloqueado.value = login.value.trim().toUpperCase()
+    } else if (e.pendente) {
+      aguardandoAprovacao.value = true
     } else {
       avisar(e.message || 'Não foi possível entrar.', 'erro')
     }

@@ -216,6 +216,11 @@ class Usuario(Base):
     NIVEL = Column(String, nullable=False)
     ATIVO = Column(Boolean, nullable=False, default=True)
 
+    # Conta criada pela propria pessoa na tela de login (POST /api/cadastro) e
+    # ainda nao aprovada por um administrador. Enquanto True, ATIVO e False e a
+    # conta nao entra — migrations/026
+    PENDENTE = Column(Boolean, nullable=False, default=False, server_default="false")
+
     # Superior direto na hierarquia Gerente -> Coordenador -> Supervisor (o
     # Coordenador de um Supervisor, o Gerente de um Coordenador). O escopo de
     # dados de Gerente/Coordenador e calculado em auth.py somando os vinculos

@@ -28,6 +28,62 @@
         </q-banner>
 
         <!-- ================================================== -->
+        <!-- CADASTROS AGUARDANDO APROVAÇÃO -->
+        <!-- ================================================== -->
+
+        <q-card v-if="pendentes.length" bordered class="q-mb-md cartao-pendentes">
+          <q-card-section>
+            <div class="text-h6">
+              Cadastros aguardando aprovação
+              <q-badge color="warning" text-color="dark" class="q-ml-sm" :label="pendentes.length" />
+            </div>
+
+            <div class="text-caption text-grey-7">
+              Pessoas que criaram o próprio acesso na tela de login. Ao aprovar,
+              a conta já pode entrar, mas só vê equipes depois que você definir
+              o nível e os vínculos em Editar.
+            </div>
+          </q-card-section>
+
+          <q-separator />
+
+          <q-list separator>
+            <q-item v-for="pessoa in pendentes" :key="pessoa.id">
+              <q-item-section>
+                <q-item-label class="text-weight-medium">{{ pessoa.nome }}</q-item-label>
+                <q-item-label caption>Login: {{ pessoa.usuario }}</q-item-label>
+              </q-item-section>
+
+              <q-item-section side>
+                <div class="row q-gutter-xs">
+                  <q-btn
+                    unelevated
+                    dense
+                    no-caps
+                    color="positive"
+                    icon="check"
+                    label="Aprovar"
+                    class="q-px-sm"
+                    :loading="aprovandoId === pessoa.id"
+                    @click="aprovarUsuario(pessoa)"
+                  />
+                  <q-btn
+                    flat
+                    dense
+                    no-caps
+                    color="negative"
+                    icon="close"
+                    label="Recusar"
+                    class="q-px-sm"
+                    @click="recusarCadastro(pessoa)"
+                  />
+                </div>
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </q-card>
+
+        <!-- ================================================== -->
         <!-- NÍVEIS DE ACESSO -->
         <!-- ================================================== -->
 
@@ -314,7 +370,14 @@
                             label="você"
                           />
                           <q-badge
-                            v-if="!pessoa.ativo"
+                            v-if="pessoa.pendente"
+                            color="warning"
+                            text-color="dark"
+                            class="q-ml-sm"
+                            label="aguardando aprovação"
+                          />
+                          <q-badge
+                            v-else-if="!pessoa.ativo"
                             color="grey-7"
                             class="q-ml-sm"
                             label="desativado"
@@ -1414,6 +1477,64 @@ async function aplicarPlanilhaUsuarios() {
     erro.value = e.message || 'Erro ao aplicar a planilha.'
   } finally {
     aplicandoUsuarios.value = false
+  }
+}
+
+const pendentes = computed(() => usuarios.value.filter(pessoa => pessoa.pendente))
+const aprovandoId = ref(null)
+
+// Libera a conta criada pela própria pessoa (ver app.py, aprovar_usuario).
+async function aprovarUsuario(pessoa) {
+  limparAvisos()
+  aprovandoId.value = pessoa.id
+
+  try {
+    const resposta = await fetch(`/api/usuarios/${pessoa.id}/aprovar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    })
+
+    const dados = await resposta.json()
+
+    if (!resposta.ok || dados.erro) {
+      throw new Error(dados.erro || 'Não foi possível aprovar o cadastro.')
+    }
+
+    sucesso.value = `${dados.mensagem} Defina o nível e os vínculos em Editar.`
+    await carregarTudo()
+  } catch (e) {
+    erro.value = e.message || 'Não foi possível aprovar o cadastro.'
+  } finally {
+    aprovandoId.value = null
+  }
+}
+
+// Recusar = apagar a conta pendente; a pessoa pode pedir de novo.
+async function recusarCadastro(pessoa) {
+  const confirmado = await confirmar(
+    `Recusar o cadastro de "${pessoa.nome}" (${pessoa.usuario})?\n\n` +
+      'A solicitação é apagada e a pessoa não consegue entrar.'
+  )
+
+  if (!confirmado) {
+    return
+  }
+
+  limparAvisos()
+
+  try {
+    const resposta = await fetch(`/api/usuarios/${pessoa.id}`, { method: 'DELETE' })
+    const dados = await resposta.json()
+
+    if (!resposta.ok || dados.erro) {
+      throw new Error(dados.erro || 'Não foi possível recusar o cadastro.')
+    }
+
+    sucesso.value = 'Cadastro recusado.'
+    await carregarTudo()
+  } catch (e) {
+    erro.value = e.message || 'Não foi possível recusar o cadastro.'
   }
 }
 

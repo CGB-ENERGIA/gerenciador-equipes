@@ -243,6 +243,7 @@ ROTAS_LIVRES = {
     "sair",
     "obter_sessao",
     "status",
+    "solicitar_cadastro",
 }
 
 
@@ -430,6 +431,14 @@ def entrar():
             registrar_falha_login(chave_usuario, ip)
             return jsonify({"erro": "Usuário ou senha inválidos."}), 401
 
+        # so chega aqui quem acertou a senha: a mensagem nao entrega a
+        # existencia de contas para quem so esta testando logins
+        if usuario.PENDENTE:
+            return jsonify({
+                "erro": "Seu cadastro ainda aguarda a aprovação de um Administrador.",
+                "pendente": True,
+            }), 403
+
         if not usuario.ATIVO:
             return jsonify({"erro": "Este usuário está desativado."}), 403
 
@@ -445,6 +454,91 @@ def entrar():
         session.rollback()
         print(f"[ERRO] entrar: {erro}")
         return jsonify({"erro": "Não foi possível entrar."}), 500
+    finally:
+        session.close()
+
+
+# Autocadastro: a pessoa pede a propria conta na tela de login e um
+# administrador aprova na tela de Usuarios. A conta nasce desativada, com o
+# nivel mais baixo e sem nenhum vinculo — nao entra e, mesmo depois de
+# aprovada, nao ve dado de equipe ate o administrador definir nivel e vinculos.
+# A rota e publica, entao tem limite por IP (mesma tabela das falhas de login)
+# para ninguem encher a fila de pendencias.
+MAX_CADASTROS_POR_IP = 5
+NIVEL_PADRAO_CADASTRO = auth.NIVEL_SUPERVISOR
+
+
+def chave_cadastro(ip):
+    return f"#CADASTRO:{ip or '?'}"
+
+
+@app.route("/api/cadastro", methods=["POST"])
+def solicitar_cadastro():
+    dados = corpo_json() or {}
+    nome_usuario = str(dados.get("usuario", "")).strip()
+    nome = str(dados.get("nome", "")).strip()
+    senha = str(dados.get("senha", ""))
+
+    if not nome_usuario:
+        return jsonify({"erro": "Informe o usuário."}), 400
+    if len(nome_usuario) > 60 or len(nome) > 120:
+        return jsonify({"erro": "Usuário ou nome grande demais."}), 400
+    if not nome:
+        return jsonify({"erro": "Informe o nome completo."}), 400
+
+    problema_senha = auth.validar_senha(senha)
+    if problema_senha:
+        return jsonify({"erro": problema_senha}), 400
+
+    ip = ip_da_requisicao()
+    chave = chave_cadastro(ip)
+
+    session = SessionLocal()
+    try:
+        desde = datetime.now(timezone.utc) - JANELA_TENTATIVAS_LOGIN
+        recentes = (
+            session.query(func.count(TentativaLogin.id))
+            .filter(
+                TentativaLogin.USUARIO == chave,
+                TentativaLogin.CRIADO_EM >= desde,
+            )
+            .scalar()
+        )
+        if recentes >= MAX_CADASTROS_POR_IP:
+            return jsonify({
+                "erro": "Muitas solicitações de cadastro. Aguarde alguns minutos e tente de novo."
+            }), 429
+
+        existente = (
+            session.query(Usuario)
+            .filter(func.upper(Usuario.USUARIO) == nome_usuario.upper())
+            .first()
+        )
+        if existente:
+            return jsonify({"erro": "Já existe um usuário com esse login."}), 400
+
+        session.add(Usuario(
+            USUARIO=nome_usuario,
+            NOME=nome,
+            NIVEL=NIVEL_PADRAO_CADASTRO,
+            ATIVO=False,
+            PENDENTE=True,
+            SENHA_HASH=auth.gerar_hash_senha(senha),
+        ))
+        session.add(TentativaLogin(USUARIO=chave, IP=ip))
+        session.commit()
+
+        return jsonify({
+            "sucesso": True,
+            "mensagem": "Cadastro enviado. Você poderá entrar assim que um Administrador aprovar.",
+        })
+    except IntegrityError:
+        session.rollback()
+        return jsonify({"erro": "Já existe um usuário com esse login."}), 400
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] solicitar_cadastro: {erro}")
+        return jsonify({"erro": "Não foi possível enviar o cadastro."}), 500
     finally:
         session.close()
 
@@ -5274,6 +5368,9 @@ def atualizar_usuario(usuario_id):
         usuario.NOME = campos["nome"]
         usuario.NIVEL = campos["nivel"]
         usuario.ATIVO = campos["ativo"]
+        # ativar uma conta pendente pelo formulario tambem a aprova
+        if campos["ativo"]:
+            usuario.PENDENTE = False
         usuario.RESPONSAVEL_ID = campos["responsavel_id"]
         usuario.CHAPA = campos["chapa"]
 
@@ -5312,6 +5409,44 @@ def contar_administradores_ativos(session, ignorando=None):
         consulta = consulta.filter(Usuario.id != ignorando)
 
     return consulta.count()
+
+
+@app.route("/api/usuarios/<int:usuario_id>/aprovar", methods=["POST"])
+@exige_permissao(auth.GERENCIAR_USUARIOS)
+def aprovar_usuario(usuario_id):
+    """Aprova um cadastro pendente: a conta passa a poder entrar, com o nivel
+    que ela ja tem (o padrao do autocadastro). Vinculos e responsavel o
+    administrador ajusta depois em Editar — sem vinculo a conta nao ve dados.
+    Aceita um 'nivel' opcional no corpo, para aprovar ja no nivel certo."""
+    dados = corpo_json() or {}
+    session = SessionLocal()
+    try:
+        usuario = session.query(Usuario).filter(Usuario.id == usuario_id).first()
+        if not usuario:
+            return jsonify({"erro": "Usuário não encontrado."}), 404
+        if not usuario.PENDENTE:
+            return jsonify({"erro": "Este cadastro não está pendente."}), 400
+
+        nivel = str(dados.get("nivel") or usuario.NIVEL).strip().upper()
+        if nivel not in auth.NIVEIS:
+            return jsonify({"erro": "Nível de acesso inválido."}), 400
+        if nivel == auth.NIVEL_ADMINISTRADOR and not auth.usuario_logado().get("ignora_vinculos"):
+            return jsonify({
+                "erro": "Só um Administrador pode aprovar alguém como Administrador."
+            }), 403
+
+        usuario.NIVEL = nivel
+        usuario.PENDENTE = False
+        usuario.ATIVO = True
+        session.commit()
+
+        return jsonify({"sucesso": True, "mensagem": f"Cadastro de {usuario.NOME} aprovado."})
+    except Exception as erro:
+        session.rollback()
+        print(f"[ERRO] aprovar_usuario: {erro}")
+        return jsonify({"erro": "Não foi possível aprovar o cadastro."}), 500
+    finally:
+        session.close()
 
 
 @app.route("/api/usuarios/<int:usuario_id>/desbloquear", methods=["POST"])
@@ -5983,6 +6118,8 @@ def aplicar_planilha_usuarios():
             usuario.NOME = item["nome"]
             usuario.NIVEL = item["nivel"]
             usuario.ATIVO = item["ativo"]
+            if item["ativo"]:
+                usuario.PENDENTE = False
             if item["senha"]:
                 usuario.SENHA_HASH = auth.gerar_hash_senha(item["senha"])
             auth.substituir_vinculos(session, usuario, item["vinculos"])

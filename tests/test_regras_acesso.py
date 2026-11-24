@@ -1001,3 +1001,114 @@ def test_supervisor_pode_responder_direto_ao_gerente_e_herda_o_escopo(Sessao):
     assert r.status_code == 400 and "Coordenador ou Gerente" in r.get_json()["erro"]
     niveis = {n["valor"]: n for n in admin.get("/api/sessao").get_json()["niveis"]}
     assert niveis["SUPERVISOR"]["niveis_do_responsavel"] == ["COORDENADOR", "GERENTE"]
+
+
+# ------------------------------------------------------------
+# Autocadastro: a pessoa pede o acesso, o administrador aprova
+# ------------------------------------------------------------
+
+def pedir_cadastro(usuario="novo", senha="senha-boa", nome="Novo Fulano"):
+    c = modulo_app.app.test_client()  # sem login
+    return c, c.post("/api/cadastro", json={"usuario": usuario, "nome": nome, "senha": senha})
+
+
+def conta(Sessao, login):
+    return ler(Sessao, lambda s: s.query(Usuario).filter_by(USUARIO=login).first())
+
+
+def test_cadastro_cria_conta_pendente_sem_acesso(Sessao):
+    c, r = pedir_cadastro()
+    assert r.status_code == 200
+    nova = conta(Sessao, "novo")
+    assert nova.PENDENTE and not nova.ATIVO
+    assert nova.NIVEL == "SUPERVISOR" and nova.SENHA_HASH != "senha-boa"
+
+    # com a senha certa ainda nao entra, e a tela recebe o aviso proprio
+    r = c.post("/api/login", json={"usuario": "novo", "senha": "senha-boa"})
+    assert r.status_code == 403 and r.get_json()["pendente"] is True
+    assert c.get("/api/equipes").status_code == 401
+
+
+def test_cadastro_valida_dados_e_login_repetido(Sessao):
+    assert pedir_cadastro(senha="123")[1].status_code == 400
+    assert pedir_cadastro(nome="")[1].status_code == 400
+    assert pedir_cadastro(usuario="ADMIN")[1].status_code == 400
+    assert conta(Sessao, "ADMIN") is None
+    assert pedir_cadastro()[1].status_code == 200
+    assert pedir_cadastro(usuario="NOVO")[1].status_code == 400
+
+
+def test_cadastro_nao_deixa_escolher_nivel(Sessao):
+    c = modulo_app.app.test_client()
+    r = c.post("/api/cadastro", json={
+        "usuario": "esperto", "nome": "E", "senha": "senha-boa",
+        "nivel": "ADMINISTRADOR", "ativo": True, "pendente": False,
+    })
+    assert r.status_code == 200
+    esperta = conta(Sessao, "esperto")
+    assert esperta.NIVEL == "SUPERVISOR" and esperta.PENDENTE and not esperta.ATIVO
+
+
+def test_cadastro_tem_limite_por_ip(Sessao):
+    for i in range(modulo_app.MAX_CADASTROS_POR_IP):
+        assert pedir_cadastro(usuario=f"u{i}")[1].status_code == 200
+    assert pedir_cadastro(usuario="u-extra")[1].status_code == 429
+
+
+def test_admin_aprova_e_a_pessoa_entra(Sessao):
+    c, _ = pedir_cadastro(senha="senha-boa")
+    novo_id = conta(Sessao, "novo").id
+
+    r = cliente(1).post(f"/api/usuarios/{novo_id}/aprovar", json={})
+    assert r.status_code == 200
+    aprovada = conta(Sessao, "novo")
+    assert aprovada.ATIVO and not aprovada.PENDENTE
+
+    r = c.post("/api/login", json={"usuario": "novo", "senha": "senha-boa"})
+    assert r.status_code == 200
+    # aprovada, mas sem vinculo: nao ve dado de equipe ate o admin definir
+    assert r.get_json()["usuario"]["sem_vinculo"] is True
+
+    # nao da para aprovar duas vezes nem conta que nunca foi pendente
+    assert cliente(1).post(f"/api/usuarios/{novo_id}/aprovar", json={}).status_code == 400
+    assert cliente(1).post("/api/usuarios/2/aprovar", json={}).status_code == 400
+
+
+def test_so_quem_gerencia_usuarios_aprova(Sessao):
+    pedir_cadastro()
+    novo_id = conta(Sessao, "novo").id
+    assert cliente(2).post(f"/api/usuarios/{novo_id}/aprovar", json={}).status_code == 403
+    assert modulo_app.app.test_client().post(f"/api/usuarios/{novo_id}/aprovar", json={}).status_code == 401
+    assert conta(Sessao, "novo").PENDENTE
+
+
+def test_aprovar_como_administrador_exige_ser_administrador(Sessao, monkeypatch):
+    pedir_cadastro()
+    novo_id = conta(Sessao, "novo").id
+    # GERENTE com permissao de gerenciar usuarios nao promove a Administrador
+    s = Sessao()
+    s.add(NivelPermissao(NIVEL="GERENTE", PERMISSAO=auth.GERENCIAR_USUARIOS))
+    s.commit()
+    s.close()
+    r = cliente(4).post(f"/api/usuarios/{novo_id}/aprovar", json={"nivel": "ADMINISTRADOR"})
+    assert r.status_code == 403
+    assert conta(Sessao, "novo").PENDENTE
+
+    r = cliente(1).post(f"/api/usuarios/{novo_id}/aprovar", json={"nivel": "COORDENADOR"})
+    assert r.status_code == 200 and conta(Sessao, "novo").NIVEL == "COORDENADOR"
+
+
+def test_ativar_pela_edicao_tambem_aprova(Sessao):
+    pedir_cadastro()
+    novo_id = conta(Sessao, "novo").id
+    r = cliente(1).put(f"/api/usuarios/{novo_id}", json=corpo_usuario("novo", "Novo Fulano", "SUPERVISOR"))
+    assert r.status_code == 200
+    editada = conta(Sessao, "novo")
+    assert editada.ATIVO and not editada.PENDENTE
+
+
+def test_recusar_e_apagar_a_conta_pendente(Sessao):
+    pedir_cadastro()
+    novo_id = conta(Sessao, "novo").id
+    assert cliente(1).delete(f"/api/usuarios/{novo_id}").status_code == 200
+    assert conta(Sessao, "novo") is None
