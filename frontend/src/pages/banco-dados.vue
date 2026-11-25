@@ -225,8 +225,11 @@
                 -->
                 <q-expansion-item
                   v-for="equipe in equipesFiltradas"
-                  :key="`${equipe.id}-${textoBuscaEquipe}`"
-                  :default-opened="buscaCasaComPessoa(equipe)"
+                  :key="`${equipe.id}-${textoBuscaEquipe}-${prefixoParaAbrir}`"
+                  :default-opened="
+                    buscaCasaComPessoa(equipe) ||
+                    (!!prefixoParaAbrir && equipe.prefixo === prefixoParaAbrir)
+                  "
                   expand-separator
                   :label="equipe.prefixo || 'Equipe'"
                   :caption="`${equipe.base || ''} — ${descricaoQuantidadeVagas(equipe)}`"
@@ -1411,6 +1414,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 
 import CabecalhoApp from '../components/CabecalhoApp.vue'
 import MarcaDaguaFundo from '../components/MarcaDaguaFundo.vue'
@@ -1487,6 +1491,9 @@ const primeiraCarga = ref(true)
 
 const erro = ref('')
 
+const route = useRoute()
+// prefixo que veio do Resumo e deve aparecer já expandido
+const prefixoParaAbrir = ref('')
 const baseSelecionada = ref([])
 // começam do que foi escolhido na outra tela (Resumo); sem nada, "Todos"
 function selecaoInicial(valores, todos) {
@@ -3051,6 +3058,15 @@ onMounted(() => {
       }
     } catch {
       baseSelecionada.value = [OPCAO_TODAS_BASES]
+    }
+
+    // vindo do Resumo (clique no prefixo): filtra pela base e pela equipe
+    const { base, equipe } = route.query
+    if (equipe) {
+      const baseExiste = opcoesBases.value.some(opcao => opcao.value === base)
+      baseSelecionada.value = baseExiste ? [base] : [OPCAO_TODAS_BASES]
+      prefixoParaAbrir.value = String(equipe)
+      filtroEquipe.value = String(equipe)
     }
   })
 })

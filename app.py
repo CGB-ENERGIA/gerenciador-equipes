@@ -1176,8 +1176,12 @@ def exportar_pessoas_resumo():
                     else "AFASTADO" if colaborador.AFASTADO
                     else ""
                 ),
-                "JUSTIFICATIVA": colaborador.JUSTIFICATIVA_AFASTAMENTO or "",
-                "DATA DO DESLIGAMENTO": data_br(colaborador.DATA_DESLIGAMENTO),
+                # desligamento não tem justificativa: a data ocupa a mesma coluna
+                "JUSTIFICATIVA": (
+                    data_br(colaborador.DATA_DESLIGAMENTO)
+                    if colaborador.DATA_DESLIGAMENTO
+                    else colaborador.JUSTIFICATIVA_AFASTAMENTO or ""
+                ),
                 "JUSTIFICADO POR": colaborador.AFASTADO_POR or "",
                 "DATA DA JUSTIFICATIVA": data_br(colaborador.AFASTADO_EM),
             })
@@ -1239,7 +1243,7 @@ def exportar_pessoas_resumo():
             ])),
             ("Pessoas não alocadas", pd.DataFrame(nao_alocadas, columns=[
                 "CHAPA", "COLABORADOR", "BASE (CADASTRO)", *colunas_cadastro,
-                "FORA DE OPERAÇÃO", "JUSTIFICATIVA", "DATA DO DESLIGAMENTO",
+                "FORA DE OPERAÇÃO", "JUSTIFICATIVA",
                 "JUSTIFICADO POR", "DATA DA JUSTIFICATIVA",
             ])),
             ("Indiretos", pd.DataFrame(indiretos, columns=[

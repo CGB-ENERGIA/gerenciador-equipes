@@ -918,7 +918,68 @@
                     hide-pagination
                     :rows-per-page-options="[0]"
                     no-data-label="Nenhuma equipe encontrada"
-                  />
+                  >
+                    <template #body="props">
+                      <q-tr :props="props">
+                        <q-td key="base" :props="props">{{ props.row.base }}</q-td>
+                        <q-td key="prefixo" :props="props">
+                          <q-btn
+                            flat
+                            dense
+                            no-caps
+                            color="primary"
+                            :icon-right="
+                              chaveEquipe(props.row) === prefixoAberto ? 'expand_less' : 'expand_more'
+                            "
+                            :label="props.row.prefixo"
+                            @click="clicarPrefixo(props.row)"
+                          >
+                            <q-tooltip>Ver componentes e funções</q-tooltip>
+                          </q-btn>
+                        </q-td>
+                      </q-tr>
+
+                      <q-tr v-if="chaveEquipe(props.row) === prefixoAberto">
+                        <q-td colspan="100%" class="componentes-equipe">
+                          <div v-if="carregandoComponentes" class="text-caption">Carregando...</div>
+                          <div v-else-if="erroComponentes" class="text-caption text-negative">
+                            {{ erroComponentes }}
+                          </div>
+                          <div v-else-if="!componentesAbertos.length" class="text-caption">
+                            Sem vagas cadastradas.
+                          </div>
+                          <template v-else>
+                            <q-markup-table flat dense bordered separator="cell">
+                              <thead>
+                                <tr>
+                                  <th class="text-left">FUNÇÃO</th>
+                                  <th class="text-left">COLABORADOR</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr v-for="(vaga, indice) in componentesAbertos" :key="indice">
+                                  <td class="text-left">{{ vaga.funcao_er }}</td>
+                                  <td class="text-left">{{ vaga.colaborador?.nome || '—' }}</td>
+                                </tr>
+                              </tbody>
+                            </q-markup-table>
+                          </template>
+
+                          <div class="q-mt-sm text-right">
+                            <q-btn
+                              unelevated
+                              dense
+                              no-caps
+                              color="primary"
+                              icon-right="open_in_new"
+                              label="Abrir no Banco de Dados"
+                              @click="clicarPrefixo(props.row)"
+                            />
+                          </div>
+                        </q-td>
+                      </q-tr>
+                    </template>
+                  </q-table>
                 </q-card-section>
               </q-card>
             </q-dialog>
@@ -1000,6 +1061,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 
 import CabecalhoApp from '../components/CabecalhoApp.vue'
 import MarcaDaguaFundo from '../components/MarcaDaguaFundo.vue'
@@ -1127,7 +1189,60 @@ function abrirEquipes(grupo, base = null) {
     contexto: base ? base.base : `${basesExibidas.value.length} base(s)`,
     codigo: base?.codigo || ''
   }
+  prefixoAberto.value = ''
   equipesAbertas.value = true
+}
+
+const router = useRouter()
+
+// Primeiro clique no prefixo: mostra os componentes e as funções ocupadas.
+// Segundo clique no mesmo prefixo: abre o Banco de Dados com ele expandido.
+const prefixoAberto = ref('')
+const componentesAbertos = ref([])
+const carregandoComponentes = ref(false)
+const erroComponentes = ref('')
+let equipesDetalhe = null
+
+const chaveEquipe = linha => `${linha.base}|${linha.prefixo}`
+
+async function carregarComponentes(linha) {
+  carregandoComponentes.value = true
+  erroComponentes.value = ''
+  componentesAbertos.value = []
+
+  try {
+    if (!equipesDetalhe) {
+      const resposta = await fetch('/api/equipes')
+      const dados = await resposta.json()
+      if (!resposta.ok || dados.erro) {
+        throw new Error(dados.erro || 'Não foi possível carregar os componentes.')
+      }
+      equipesDetalhe = dados
+    }
+
+    const equipe = equipesDetalhe.find(
+      item => item.prefixo === linha.prefixo && item.base === linha.base
+    )
+    componentesAbertos.value = equipe?.vagas || []
+  } catch (erro) {
+    erroComponentes.value = erro.message || 'Não foi possível carregar os componentes.'
+  } finally {
+    carregandoComponentes.value = false
+  }
+}
+
+function clicarPrefixo(linha) {
+  if (chaveEquipe(linha) !== prefixoAberto.value) {
+    prefixoAberto.value = chaveEquipe(linha)
+    carregarComponentes(linha)
+    return
+  }
+
+  equipesAbertas.value = false
+  router.push({
+    path: '/banco-dados',
+    query: { base: linha.base, equipe: linha.prefixo }
+  })
 }
 
 const colunasEquipes = [
@@ -2870,5 +2985,18 @@ watch(
 .tabela-necessidades :deep(th:nth-child(4)),
 .tabela-necessidades :deep(td:nth-child(4)) {
   width: 15%;
+}
+.componentes-equipe {
+  background: rgba(128, 128, 128, 0.08);
+}
+.componentes-equipe :deep(th) {
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+  font-size: 11px;
+}
+.componentes-equipe :deep(th),
+.componentes-equipe :deep(td) {
+  padding: 4px 8px;
 }
 </style>
