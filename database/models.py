@@ -59,6 +59,11 @@ class Colaborador(Base):
     # exclusao do usuario) e quando — migrations/014
     AFASTADO_POR = Column(String)
     AFASTADO_EM = Column(DateTime(timezone=True))
+    # "Fora de operacao" tem dois motivos: afastamento (com justificativa) e
+    # desligamento. No desligamento AFASTADO fica True (a pessoa sai das vagas
+    # e das listas de disponiveis do mesmo jeito) e esta data diz que o motivo
+    # e o desligamento -- migrations/027
+    DATA_DESLIGAMENTO = Column(Date)
 
     # Observacao livre (ex.: ferias de X a Y), sem mudar status nem vaga;
     # quem escreveu (login) e quando — migrations/019

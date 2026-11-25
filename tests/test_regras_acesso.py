@@ -1112,3 +1112,66 @@ def test_recusar_e_apagar_a_conta_pendente(Sessao):
     novo_id = conta(Sessao, "novo").id
     assert cliente(1).delete(f"/api/usuarios/{novo_id}").status_code == 200
     assert conta(Sessao, "novo") is None
+
+
+# ------------------------------------------------------------
+# Fora de operação: afastamento (justificativa) ou desligamento (data)
+# ------------------------------------------------------------
+
+def test_desligamento_exige_data_valida(Sessao):
+    adm = cliente(1)
+    for corpo in (
+        {"chapa": "40", "tipo": "desligamento"},
+        {"chapa": "40", "tipo": "desligamento", "data_desligamento": "31/12/2026"},
+        {"chapa": "40", "tipo": "desligamento", "data_desligamento": "2026-02-30"},
+    ):
+        assert adm.post("/api/colaboradores/afastar", json=corpo).status_code == 400
+    assert not colaborador(Sessao, "40").AFASTADO
+
+
+def test_desligamento_tira_da_vaga_e_guarda_a_data(Sessao):
+    r = cliente(1).post("/api/colaboradores/afastar", json={
+        "chapa": "10", "tipo": "desligamento", "data_desligamento": "2026-12-15",
+    })
+    assert r.status_code == 200
+    corpo = r.get_json()["colaborador"]
+    assert corpo["desligado"] and corpo["data_desligamento"] == "2026-12-15"
+    assert ocupante(Sessao, 1) is None
+    c = colaborador(Sessao, "10")
+    assert c.AFASTADO and c.DATA_DESLIGAMENTO.isoformat() == "2026-12-15"
+    assert not c.JUSTIFICATIVA_AFASTAMENTO
+
+
+def test_afastamento_continua_exigindo_justificativa_e_nao_tem_data(Sessao):
+    adm = cliente(1)
+    assert adm.post("/api/colaboradores/afastar", json={"chapa": "40"}).status_code == 400
+    assert adm.post("/api/colaboradores/afastar", json={
+        "chapa": "40", "justificativa": "LICENÇA", "data_desligamento": "2026-12-15",
+    }).status_code == 200
+    c = colaborador(Sessao, "40")
+    assert c.AFASTADO and c.DATA_DESLIGAMENTO is None
+
+
+def test_reativar_limpa_o_desligamento_e_aparece_em_fora_de_operacao(Sessao):
+    adm = cliente(1)
+    adm.post("/api/colaboradores/afastar", json={
+        "chapa": "40", "tipo": "desligamento", "data_desligamento": "2026-12-15",
+    })
+    lista = adm.get("/api/pessoas-afastadas").get_json()
+    assert {p["chapa"] for p in lista} == {"40", "50"}
+    assert next(p for p in lista if p["chapa"] == "40")["desligado"]
+    assert not next(p for p in lista if p["chapa"] == "50")["desligado"]
+
+    assert adm.post("/api/colaboradores/reativar", json={"chapa": "40"}).status_code == 200
+    c = colaborador(Sessao, "40")
+    assert not c.AFASTADO and c.DATA_DESLIGAMENTO is None
+
+
+def test_alocar_desligado_volta_a_operar(Sessao):
+    adm = cliente(1)
+    adm.post("/api/colaboradores/afastar", json={
+        "chapa": "40", "tipo": "desligamento", "data_desligamento": "2026-12-15",
+    })
+    assert adm.post("/api/equipes/alocar", json={"composicao_id": 2, "chapa": "40"}).status_code == 200
+    c = colaborador(Sessao, "40")
+    assert not c.AFASTADO and c.DATA_DESLIGAMENTO is None

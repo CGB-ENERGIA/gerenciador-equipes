@@ -873,6 +873,9 @@ def obter_resumo():
                     "folguista": dados_grupo["folguista"],
                     "rotulo": chave,
                     "equipes": len(dados_grupo["prefixos"]),
+                    # prefixos das equipes que compoem a contagem, para a lista
+                    # aberta ao clicar no numero de equipes
+                    "prefixos": sorted(dados_grupo["prefixos"]),
                     "funcoes": funcoes,
                     "vagas": vagas,
                     "alocados": alocados,
@@ -1168,8 +1171,13 @@ def exportar_pessoas_resumo():
                 "COLABORADOR": colaborador.NOME or "",
                 "BASE (CADASTRO)": base_da_secao(colaborador.SEÇÃO)["codigo"],
                 **cadastro(colaborador),
-                "AFASTADO": "SIM" if colaborador.AFASTADO else "",
+                "FORA DE OPERAÇÃO": (
+                    "DESLIGAMENTO" if colaborador.DATA_DESLIGAMENTO
+                    else "AFASTADO" if colaborador.AFASTADO
+                    else ""
+                ),
                 "JUSTIFICATIVA": colaborador.JUSTIFICATIVA_AFASTAMENTO or "",
+                "DATA DO DESLIGAMENTO": data_br(colaborador.DATA_DESLIGAMENTO),
                 "JUSTIFICADO POR": colaborador.AFASTADO_POR or "",
                 "DATA DA JUSTIFICATIVA": data_br(colaborador.AFASTADO_EM),
             })
@@ -1213,7 +1221,10 @@ def exportar_pessoas_resumo():
 
         # ---------- Colaboradores (cadastro inteiro)
         df_colaboradores = montar_consulta_colaboradores(session, colaboradores)
-        df_colaboradores["AFASTADO"] = ["SIM" if c.AFASTADO else "" for c in colaboradores]
+        df_colaboradores["AFASTADO"] = [
+            "SIM" if c.AFASTADO and not c.DATA_DESLIGAMENTO else "" for c in colaboradores
+        ]
+        df_colaboradores["DESLIGAMENTO"] = [data_br(c.DATA_DESLIGAMENTO) for c in colaboradores]
         df_colaboradores["ADMISSÃO"] = [data_br(c.ADMISSÃO) for c in colaboradores]
         df_colaboradores["OBSERVAÇÃO"] = [c.OBSERVACAO or "" for c in colaboradores]
 
@@ -1228,7 +1239,8 @@ def exportar_pessoas_resumo():
             ])),
             ("Pessoas não alocadas", pd.DataFrame(nao_alocadas, columns=[
                 "CHAPA", "COLABORADOR", "BASE (CADASTRO)", *colunas_cadastro,
-                "AFASTADO", "JUSTIFICATIVA", "JUSTIFICADO POR", "DATA DA JUSTIFICATIVA",
+                "FORA DE OPERAÇÃO", "JUSTIFICATIVA", "DATA DO DESLIGAMENTO",
+                "JUSTIFICADO POR", "DATA DA JUSTIFICATIVA",
             ])),
             ("Indiretos", pd.DataFrame(indiretos, columns=[
                 "SETOR", "SUBSETOR", "BASE", "CHAPA", "COLABORADOR", "FUNÇÃO NO CADASTRO",
@@ -1243,6 +1255,8 @@ def exportar_pessoas_resumo():
                 df.to_excel(writer, index=False, sheet_name=nome_aba)
                 planilhas_estilo.estilizar_aba(writer.sheets[nome_aba], consulta=True)
                 planilhas_estilo.destacar_valor(writer.sheets[nome_aba], "AFASTADO", "SIM")
+                planilhas_estilo.destacar_valor(writer.sheets[nome_aba], "FORA DE OPERAÇÃO", "AFASTADO")
+                planilhas_estilo.destacar_valor(writer.sheets[nome_aba], "FORA DE OPERAÇÃO", "DESLIGAMENTO")
 
             planilhas_estilo.adicionar_instrucoes(
                 writer.book,
@@ -1250,7 +1264,7 @@ def exportar_pessoas_resumo():
                 [
                     ("O que é", "Exportação do Resumo. É só consulta: o sistema não lê este arquivo de volta."),
                     ("Pessoas alocadas", "Quem ocupa uma vaga, entre as pessoas que a tela mostrava com os filtros do momento: equipe, disciplina, vaga, setor, supervisor, coordenador e os dados do cadastro."),
-                    ("Pessoas não alocadas", "Quem está no quadro e não ocupa vaga (com os mesmos filtros), com o afastamento: justificativa, quem justificou e a data."),
+                    ("Pessoas não alocadas", "Quem está no quadro e não ocupa vaga (com os mesmos filtros), com o motivo de estar fora de operação: afastamento (justificativa, quem justificou e a data) ou desligamento (data do desligamento)."),
                     ("Indiretos", "Todos os indiretos alocados na página Indiretos: setor, base e responsável."),
                     ("Colaboradores", "O cadastro inteiro, sem filtro."),
                     ("OBSERVAÇÃO", "Nas abas de pessoas e Colaboradores, a observação do colaborador escrita no Banco de Dados (ex.: férias). Na aba Indiretos, a observação da alocação no setor."),
@@ -2070,6 +2084,11 @@ def dados_afastamento(colaborador):
         "afastado_por": colaborador.AFASTADO_POR or "",
         "afastado_em": (
             colaborador.AFASTADO_EM.isoformat() if colaborador.AFASTADO_EM else ""
+        ),
+        # fora de operacao por desligamento (AFASTADO tambem fica True)
+        "desligado": colaborador.DATA_DESLIGAMENTO is not None,
+        "data_desligamento": (
+            colaborador.DATA_DESLIGAMENTO.isoformat() if colaborador.DATA_DESLIGAMENTO else ""
         ),
     }
 
@@ -4454,6 +4473,7 @@ def retirar_afastamento(colaborador):
     colaborador.JUSTIFICATIVA_AFASTAMENTO = None
     colaborador.AFASTADO_POR = None
     colaborador.AFASTADO_EM = None
+    colaborador.DATA_DESLIGAMENTO = None
 
 
 def erro_de_acesso_ao_colaborador(session, chapa, operacao):
@@ -4626,11 +4646,23 @@ def afastar_colaborador():
         return jsonify({"erro": "Dados não enviados."}), 400
 
     chapa = str(dados.get("chapa", "")).strip()
-    justificativa = str(dados.get("justificativa", "")).strip()
+    justificativa = str(dados.get("justificativa") or "").strip()
+    desligamento = str(dados.get("tipo") or "afastamento").strip().lower() == "desligamento"
+    data_desligamento = None
 
     if not chapa:
         return jsonify({"erro": "CHAPA não informada."}), 400
-    if not justificativa:
+
+    if desligamento:
+        # desligamento pede a data; afastamento pede a justificativa
+        try:
+            data_desligamento = datetime.strptime(
+                str(dados.get("data_desligamento") or "").strip(), "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            return jsonify({"erro": "Informe a data do desligamento."}), 400
+        justificativa = ""
+    elif not justificativa:
         return jsonify({"erro": "A justificativa é obrigatória."}), 400
 
     session = SessionLocal()
@@ -4658,7 +4690,8 @@ def afastar_colaborador():
                 session.delete(alocacao_existente)
 
             colaborador.AFASTADO = True
-            colaborador.JUSTIFICATIVA_AFASTAMENTO = justificativa
+            colaborador.JUSTIFICATIVA_AFASTAMENTO = justificativa or None
+            colaborador.DATA_DESLIGAMENTO = data_desligamento
             # login, e nao o nome completo: cabe melhor nas tabelas
             colaborador.AFASTADO_POR = (auth.usuario_logado() or {}).get("usuario")
             colaborador.AFASTADO_EM = datetime.now(timezone.utc)
@@ -4666,7 +4699,10 @@ def afastar_colaborador():
 
         return jsonify({
             "sucesso": True,
-            "mensagem": "Colaborador marcado como afastado.",
+            "mensagem": (
+                "Desligamento registrado." if desligamento
+                else "Colaborador marcado como afastado."
+            ),
             "colaborador": {
                 "chapa": chapa,
                 "nome": colaborador.NOME or "",
@@ -4791,6 +4827,8 @@ def reativar_colaborador():
                 "justificativa_afastamento": "",
                 "afastado_por": "",
                 "afastado_em": "",
+                "desligado": False,
+                "data_desligamento": "",
             },
         })
     except Exception as erro:

@@ -204,12 +204,16 @@
                       :key="grupo.rotulo"
                       dense
                       size="xs"
+                      clickable
                       class="chip-tonal chip-tipo-info"
                       :style="{ '--cor-chip': corDoTipo(grupo) }"
+                      @click="abrirEquipes(grupo, base)"
                     >
                       <span class="chip-tonal__num">{{ grupo.equipes }}</span>
                       <span class="chip-tonal__rotulo">{{ rotuloCurto(grupo) }}</span>
-                      <q-tooltip>{{ grupo.equipes }} {{ rotuloCurto(grupo) }}</q-tooltip>
+                      <q-tooltip>
+                        {{ grupo.equipes }} {{ rotuloCurto(grupo) }} · clique para ver as equipes
+                      </q-tooltip>
                     </q-chip>
                   </div>
                 </div>
@@ -248,9 +252,14 @@
                           :style="{ '--cor-grupo': corDoTipo(grupo) }"
                         >
                           <span class="grupo-rotulo">{{ grupo.rotulo }}</span>
-                          <span class="grupo-detalhe">
-                            {{ grupo.equipes }} equipe(s) · {{ grupo.vagas }} vaga(s)
+                          <span
+                            class="grupo-detalhe grupo-detalhe-clicavel"
+                            title="Ver as equipes"
+                            @click="abrirEquipes(grupo, base)"
+                          >
+                            {{ grupo.equipes }} equipe(s)
                           </span>
+                          <span class="grupo-detalhe">{{ grupo.vagas }} vaga(s)</span>
                         </td>
 
                         <td class="text-left text-weight-medium celula-funcao">
@@ -565,9 +574,14 @@
                               :style="{ '--cor-grupo': corDoTipo(grupo) }"
                             >
                               <span class="grupo-rotulo">{{ grupo.rotulo }}</span>
-                              <span class="grupo-detalhe">
-                                {{ grupo.equipes }} equipe(s) · {{ grupo.vagas }} vaga(s)
+                              <span
+                                class="grupo-detalhe grupo-detalhe-clicavel"
+                                title="Ver as equipes"
+                                @click="abrirEquipes(grupo)"
+                              >
+                                {{ grupo.equipes }} equipe(s)
                               </span>
+                              <span class="grupo-detalhe">{{ grupo.vagas }} vaga(s)</span>
                             </td>
 
                             <td class="text-left text-weight-medium celula-funcao">
@@ -696,7 +710,7 @@
                         >
                           <q-card-section>
                             <div class="text-caption text-grey-8">
-                              AFASTADO
+                              FORA DE OPERAÇÃO
                             </div>
 
                             <div class="text-h6 text-afastado">
@@ -829,7 +843,7 @@
             <q-dialog v-model="afastadosAbertos">
               <q-card class="detalhes-disponiveis tabela-afastados">
                 <q-card-section class="row items-center q-pb-sm">
-                  <div class="text-h6">Afastados</div>
+                  <div class="text-h6">Fora de operação</div>
 
                   <q-space />
 
@@ -848,7 +862,39 @@
                     :loading="carregandoAfastados"
                     hide-pagination
                     :rows-per-page-options="[0]"
-                    no-data-label="Nenhum colaborador afastado"
+                    no-data-label="Nenhum colaborador fora de operação"
+                  />
+                </q-card-section>
+              </q-card>
+            </q-dialog>
+
+            <q-dialog v-model="equipesAbertas">
+              <q-card class="detalhes-disponiveis">
+                <q-card-section class="row items-center q-pb-sm">
+                  <div>
+                    <div class="text-h6">Equipes · {{ equipesSelecionadas.rotulo }}</div>
+                    <div class="text-caption">
+                      {{ equipesSelecionadas.contexto }} · {{ equipesLinhas.length }} equipe(s)
+                    </div>
+                  </div>
+
+                  <q-space />
+
+                  <q-btn v-close-popup flat round dense icon="close" />
+                </q-card-section>
+
+                <q-separator />
+
+                <q-card-section>
+                  <q-table
+                    flat
+                    bordered
+                    dense
+                    :rows="equipesLinhas"
+                    :columns="colunasEquipes"
+                    hide-pagination
+                    :rows-per-page-options="[0]"
+                    no-data-label="Nenhuma equipe encontrada"
                   />
                 </q-card-section>
               </q-card>
@@ -938,6 +984,7 @@ import SelectFiltroMultiplo from '../components/SelectFiltroMultiplo.vue'
 import { PODE_VER_RESUMO, useSessao } from '../composables/useSessao'
 import {
   descreverAfastadoPor,
+  descreverMotivoForaOperacao,
   FUNCOES_SISTEMA,
   normalizarSelecaoBases,
   OPCAO_TODAS_BASES,
@@ -1045,6 +1092,44 @@ function abrirDiferenca(grupo, linha, base = null) {
   }
   diferencaAberta.value = true
 }
+
+// Lista as equipes (prefixos) que formam o numero de equipes de uma disciplina,
+// de uma base (card da base) ou de todas as bases do filtro (Composicao)
+const equipesAbertas = ref(false)
+const equipesSelecionadas = ref({ rotulo: '', contexto: '', codigo: '' })
+
+function abrirEquipes(grupo, base = null) {
+  equipesSelecionadas.value = {
+    rotulo: grupo.rotulo,
+    contexto: base ? base.base : `${basesExibidas.value.length} base(s)`,
+    codigo: base?.codigo || ''
+  }
+  equipesAbertas.value = true
+}
+
+const colunasEquipes = [
+  { name: 'base', label: 'BASE', field: 'base', align: 'left' },
+  { name: 'prefixo', label: 'PREFIXO', field: 'prefixo', align: 'left' }
+]
+
+const equipesLinhas = computed(() => {
+  const { rotulo, codigo } = equipesSelecionadas.value
+
+  return basesExibidas.value
+    .filter(base => !codigo || base.codigo === codigo)
+    .flatMap(base =>
+      (base.grupos || [])
+        .filter(grupo => grupo.rotulo === rotulo)
+        .flatMap(grupo =>
+          (grupo.prefixos || []).map(prefixo => ({ base: base.base, prefixo }))
+        )
+    )
+    .sort(
+      (a, b) =>
+        a.base.localeCompare(b.base, 'pt-BR') ||
+        a.prefixo.localeCompare(b.prefixo, 'pt-BR', { numeric: true })
+    )
+})
 
 const colunasDiferenca = [
   { name: 'equipe', label: 'EQUIPE', field: 'equipe', align: 'left' },
@@ -1427,6 +1512,12 @@ const colunasAfastados = [
     align: 'left'
   },
   {
+    name: 'motivo',
+    label: 'MOTIVO',
+    field: pessoa => descreverMotivoForaOperacao({ ...pessoa, afastado: true }),
+    align: 'left'
+  },
+  {
     name: 'justificativa',
     label: 'JUSTIFICATIVA',
     field: 'justificativa',
@@ -1434,7 +1525,7 @@ const colunasAfastados = [
   },
   {
     name: 'afastado_por',
-    label: 'AFASTADO POR',
+    label: 'REGISTRADO POR',
     // a tabela de afastados só lista afastados: sem registro = anterior
     // à migration 014
     field: pessoa => descreverAfastadoPor({ ...pessoa, afastado: true }),
@@ -1479,6 +1570,13 @@ const colunasNaoAlocadosDetalhes = [
     sortable: true
   },
   {
+    name: 'motivo',
+    label: 'MOTIVO',
+    field: descreverMotivoForaOperacao,
+    align: 'left',
+    sortable: true
+  },
+  {
     name: 'justificativa',
     label: 'JUSTIFICATIVA',
     field: 'justificativa',
@@ -1487,7 +1585,7 @@ const colunasNaoAlocadosDetalhes = [
   },
   {
     name: 'afastado_por',
-    label: 'AFASTADO POR',
+    label: 'REGISTRADO POR',
     field: descreverAfastadoPor,
     align: 'left',
     sortable: true
@@ -2340,6 +2438,11 @@ watch(
   line-height: 1;
   margin-top: 3px;
   color: var(--tinta-fraca);
+}
+
+.grupo-detalhe-clicavel {
+  cursor: pointer;
+  text-decoration: underline;
 }
 
 /* ============================================================

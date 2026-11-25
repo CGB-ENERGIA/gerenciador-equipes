@@ -270,6 +270,18 @@ export function descreverAfastadoPor(pessoa) {
   return `${pessoa.afastado_por} em ${data.toLocaleDateString('pt-BR')}`
 }
 
+// Motivo de estar fora de operação: "Afastado" ou "Desligamento em 25/09/2026"
+// (ver migrations/027). Vazio para quem está em operação.
+export function descreverMotivoForaOperacao(pessoa) {
+  if (pessoa?.desligado) {
+    const [ano, mes, dia] = String(pessoa.data_desligamento || '').split('-')
+    return ano && mes && dia
+      ? `Desligamento em ${dia}/${mes}/${ano}`
+      : 'Desligamento'
+  }
+  return pessoa?.afastado ? 'Afastado' : ''
+}
+
 // "FULANO em 25/09/2026" (login): quem escreveu a observação do colaborador
 // e quando (ver migrations/019).
 export function descreverObservacaoPor(pessoa) {

@@ -162,7 +162,7 @@
                   {{ colaboradoresLivres }} livres
                 </q-chip>
                 <q-chip dense class="chip-tonal" style="--cor-chip: var(--afastado)">
-                  {{ colaboradoresAfastados }} afastados
+                  {{ colaboradoresAfastados }} fora de operação
                 </q-chip>
               </div>
             </div>
@@ -529,12 +529,17 @@
                         RESPONSÁVEL NA PÁGINA INDIRETOS
                       </q-item-label>
 
-                      <q-item-label v-if="colaborador.afastado" caption>
+                      <q-item-label v-if="colaborador.desligado" caption>
+                        Desligamento em: {{ formatarDataDesligamento(colaborador.data_desligamento) }}
+                      </q-item-label>
+
+                      <q-item-label v-else-if="colaborador.afastado" caption>
                         Justificativa: {{ colaborador.justificativa_afastamento || 'Não informada' }}
                       </q-item-label>
 
                       <q-item-label v-if="colaborador.afastado" caption>
-                        Afastado por: {{ descreverAfastadoPor(colaborador) }}
+                        {{ colaborador.desligado ? 'Registrado por' : 'Afastado por' }}:
+                        {{ descreverAfastadoPor(colaborador) }}
                       </q-item-label>
 
                       <q-item-label v-if="colaborador.observacao" caption>
@@ -564,7 +569,7 @@
                         text-color="white"
                         size="sm"
                       >
-                        AFASTADO
+                        {{ colaborador.desligado ? 'DESLIGADO' : 'AFASTADO' }}
                       </q-chip>
 
                       <q-chip
@@ -646,7 +651,7 @@
                     size="sm"
                     dense
                   >
-                    Afastado
+                    {{ scope.opt.desligado ? "Desligado" : "Afastado" }}
                   </q-chip>
 
                   <q-chip v-else color="positive" text-color="white" size="sm" dense>
@@ -721,8 +726,24 @@
           <template v-if="tipoFuncaoOriginal === 'DIRETO'">
             <q-checkbox
               v-model="afastadoAlocacao"
-              label="Marcar como afastado"
+              label="Marcar como fora de operação"
+              class="q-mb-sm"
+            />
+
+            <q-btn-toggle
+              v-if="afastadoAlocacao"
+              v-model="tipoForaOperacao"
+              dense
+              no-caps
+              unelevated
+              toggle-color="primary"
+              color="grey-3"
+              text-color="grey-8"
               class="q-mb-md"
+              :options="[
+                { label: 'Afastado', value: 'afastamento' },
+                { label: 'Desligamento', value: 'desligamento' }
+              ]"
             />
 
             <template v-if="!afastadoAlocacao">
@@ -771,6 +792,17 @@
             </template>
 
             <q-input
+              v-else-if="tipoForaOperacao === 'desligamento'"
+              v-model="dataDesligamento"
+              label="Data do desligamento"
+              type="date"
+              outlined
+              dense
+              stack-label
+              hint="Obrigatória para confirmar o desligamento"
+            />
+
+            <q-input
               v-else
               v-model="justificativaAfastamento"
               label="Justificativa"
@@ -790,9 +822,9 @@
             v-if="tipoFuncaoOriginal === 'DIRETO' && afastadoAlocacao"
             color="warning"
             text-color="white"
-            label="Confirmar afastamento"
+            :label="tipoForaOperacao === 'desligamento' ? 'Confirmar desligamento' : 'Confirmar afastamento'"
             :loading="carregandoAlocacao"
-            :disable="!colaboradorSelecionado || !justificativaAfastamento.trim()"
+            :disable="!colaboradorSelecionado || !foraOperacaoValido"
             @click="afastarColaborador"
           />
 
@@ -925,7 +957,7 @@
                     size="sm"
                     dense
                   >
-                    Afastado
+                    {{ scope.opt.desligado ? "Desligado" : "Afastado" }}
                   </q-chip>
 
                   <q-chip v-else color="positive" text-color="white" size="sm" dense>
@@ -945,9 +977,9 @@
             <template #avatar>
               <q-icon name="warning" color="amber-10" />
             </template>
-            Este colaborador está afastado
-            ({{ colaboradorNovoEdicao.justificativa_afastamento || 'sem justificativa' }}).
-            Ao confirmar a troca, o afastamento será retirado.
+            Este colaborador está fora de operação
+            ({{ colaboradorNovoEdicao.desligado ? 'desligamento' : (colaboradorNovoEdicao.justificativa_afastamento || 'sem justificativa') }}).
+            Ao confirmar a troca, isso será retirado.
           </q-banner>
         </q-card-section>
 
@@ -1025,7 +1057,7 @@
                     size="sm"
                     dense
                   >
-                    Afastado
+                    {{ scope.opt.desligado ? "Desligado" : "Afastado" }}
                   </q-chip>
 
                   <q-chip v-else color="positive" text-color="white" size="sm" dense>
@@ -1045,9 +1077,9 @@
             <template #avatar>
               <q-icon name="warning" color="amber-10" />
             </template>
-            Este colaborador está afastado
-            ({{ colaboradorExtra.justificativa_afastamento || 'sem justificativa' }}).
-            Ao adicionar, o afastamento será retirado.
+            Este colaborador está fora de operação
+            ({{ colaboradorExtra.desligado ? 'desligamento' : (colaboradorExtra.justificativa_afastamento || 'sem justificativa') }}).
+            Ao adicionar, isso será retirado.
           </q-banner>
 
           <q-select
@@ -1298,7 +1330,7 @@
               <template #avatar>
                 <q-icon name="warning" color="amber-10" />
               </template>
-              Ao aplicar, será retirado o afastamento de:
+              Ao aplicar, será retirado o status de fora de operação de:
               {{ planoAlocacoes.alocar.filter(item => item.afastado).map(item => item.nome).join(', ') }}.
             </q-banner>
 
@@ -1558,7 +1590,30 @@ const equipeAlocacao = ref(null)
 const vagaAlocacao = ref(null)
 const afastadoAlocacao = ref(false)
 const justificativaAfastamento = ref('')
+// "fora de operação": afastamento (pede justificativa) ou desligamento (pede data)
+const tipoForaOperacao = ref('afastamento')
+const dataDesligamento = ref('')
 const colaboradorEraAfastado = ref(false)
+
+const foraOperacaoValido = computed(() =>
+  tipoForaOperacao.value === 'desligamento'
+    ? Boolean(dataDesligamento.value)
+    : Boolean(justificativaAfastamento.value.trim())
+)
+
+function formatarDataDesligamento(iso) {
+  const [ano, mes, dia] = String(iso || '').split('-')
+  return ano && mes && dia ? `${dia}/${mes}/${ano}` : 'Não informada'
+}
+
+// carrega no diálogo o estado de fora de operação do colaborador escolhido
+function carregarForaOperacao(colaborador) {
+  afastadoAlocacao.value = Boolean(colaborador?.afastado)
+  justificativaAfastamento.value = colaborador?.justificativa_afastamento || ''
+  tipoForaOperacao.value = colaborador?.desligado ? 'desligamento' : 'afastamento'
+  dataDesligamento.value = colaborador?.data_desligamento || ''
+  colaboradorEraAfastado.value = Boolean(colaborador?.afastado)
+}
 
 const tipoFuncaoSelecionada = ref('DIRETO')
 const tipoFuncaoOriginal = ref('DIRETO')
@@ -2036,7 +2091,7 @@ const opcoesSituacao = computed(() => [
   { valor: 'TODOS', rotulo: 'Todos', quantidade: colaboradoresDoTipo.value.length, cor: 'var(--marca)' },
   { valor: 'ALOCADOS', rotulo: 'Alocados', quantidade: colaboradoresAlocados.value, cor: 'var(--positivo)' },
   { valor: 'LIVRES', rotulo: 'Livres', quantidade: colaboradoresLivres.value, cor: 'var(--neutro)' },
-  { valor: 'AFASTADOS', rotulo: 'Afastados', quantidade: colaboradoresAfastados.value, cor: 'var(--afastado)' }
+  { valor: 'AFASTADOS', rotulo: 'Fora de operação', quantidade: colaboradoresAfastados.value, cor: 'var(--afastado)' }
 ])
 
 // CHAPA -> onde a pessoa esta alocada hoje (prefixo + base da equipe) — usa
@@ -2201,9 +2256,7 @@ function selecionarColaborador(colaborador) {
   colaboradorSelecionado.value = colaborador
   chapaExcluidaAlocacao.value = ''
   opcoesColaboradoresAlocacao.value = opcoesColaboradoresParaFiltro()
-  afastadoAlocacao.value = Boolean(colaborador.afastado)
-  justificativaAfastamento.value = colaborador.justificativa_afastamento || ''
-  colaboradorEraAfastado.value = Boolean(colaborador.afastado)
+  carregarForaOperacao(colaborador)
   tipoFuncaoSelecionada.value = colaborador.tipo_funcao === 'INDIRETO' ? 'INDIRETO' : 'DIRETO'
   tipoFuncaoOriginal.value = tipoFuncaoSelecionada.value
 
@@ -2217,9 +2270,7 @@ function abrirAlocacaoParaVaga(equipe, vaga) {
   vagaAlocacao.value = vaga.id
   chapaExcluidaAlocacao.value = ''
   opcoesColaboradoresAlocacao.value = opcoesColaboradoresParaFiltro()
-  afastadoAlocacao.value = false
-  justificativaAfastamento.value = ''
-  colaboradorEraAfastado.value = false
+  carregarForaOperacao(null)
   tipoFuncaoSelecionada.value = 'DIRETO'
   tipoFuncaoOriginal.value = 'DIRETO'
   dialogAlocacao.value = true
@@ -2232,9 +2283,7 @@ function filtrarColaboradoresAlocacao(valor, atualizar) {
 }
 
 function atualizarAfastamentoSelecionado(colaborador) {
-  afastadoAlocacao.value = Boolean(colaborador?.afastado)
-  justificativaAfastamento.value = colaborador?.justificativa_afastamento || ''
-  colaboradorEraAfastado.value = Boolean(colaborador?.afastado)
+  carregarForaOperacao(colaborador)
   tipoFuncaoSelecionada.value = colaborador?.tipo_funcao === 'INDIRETO' ? 'INDIRETO' : 'DIRETO'
   tipoFuncaoOriginal.value = tipoFuncaoSelecionada.value
 }
@@ -2755,10 +2804,11 @@ async function salvarObservacao() {
 }
 
 async function afastarColaborador() {
-  if (!colaboradorSelecionado.value || !justificativaAfastamento.value.trim()) {
+  if (!colaboradorSelecionado.value || !foraOperacaoValido.value) {
     return
   }
 
+  const desligamento = tipoForaOperacao.value === 'desligamento'
   carregandoAlocacao.value = true
 
   try {
@@ -2769,14 +2819,16 @@ async function afastarColaborador() {
       },
       body: JSON.stringify({
         chapa: colaboradorSelecionado.value.chapa,
-        justificativa: justificativaAfastamento.value.trim()
+        tipo: desligamento ? 'desligamento' : 'afastamento',
+        justificativa: desligamento ? '' : justificativaAfastamento.value.trim(),
+        data_desligamento: desligamento ? dataDesligamento.value : ''
       })
     })
 
     const dados = await resposta.json()
 
     if (!resposta.ok || dados.erro) {
-      throw new Error(dados.erro || 'Erro ao marcar colaborador como afastado.')
+      throw new Error(dados.erro || 'Erro ao registrar o colaborador fora de operação.')
     }
 
     dialogAlocacao.value = false
@@ -2792,7 +2844,7 @@ async function afastarColaborador() {
 
     await carregarDados()
   } catch (e) {
-    erro.value = e.message || 'Erro ao marcar colaborador como afastado.'
+    erro.value = e.message || 'Erro ao registrar o colaborador fora de operação.'
   } finally {
     carregandoAlocacao.value = false
   }
