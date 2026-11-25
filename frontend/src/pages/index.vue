@@ -506,9 +506,32 @@
                             :key="'total-na-' + base.codigo"
                             class="text-center"
                           >
-                            {{ totalNaoAlocadosPorBase[base.codigo] || 0 }}
+                            <q-btn
+                              v-if="totalNaoAlocadosPorBase[base.codigo]"
+                              flat
+                              dense
+                              color="primary"
+                              :label="String(totalNaoAlocadosPorBase[base.codigo])"
+                              @click="abrirNaoAlocados('', base.codigo)"
+                            >
+                              <q-tooltip>Ver todos os não alocados em {{ base.codigo }}</q-tooltip>
+                            </q-btn>
+                            <span v-else>0</span>
                           </q-td>
-                          <q-td class="text-center">{{ totalNaoAlocadosGeral }}</q-td>
+                          <q-td class="text-center">
+                            <q-btn
+                              v-if="totalNaoAlocadosGeral"
+                              flat
+                              dense
+                              color="primary"
+                              class="text-weight-bold"
+                              :label="String(totalNaoAlocadosGeral)"
+                              @click="abrirNaoAlocados('')"
+                            >
+                              <q-tooltip>Ver todas as pessoas não alocadas</q-tooltip>
+                            </q-btn>
+                            <span v-else>0</span>
+                          </q-td>
                         </q-tr>
                       </template>
                     </q-table>
@@ -1823,11 +1846,14 @@ const linhasNaoAlocadas = computed(() => {
 })
 
 const naoAlocadosTitulo = computed(() => {
+  // sem função: o total (todas as funções)
+  const funcao = naoAlocadosSelecionados.value.funcao || 'Pessoas não alocadas'
+
   if (naoAlocadosSelecionados.value.codigo) {
-    return `${naoAlocadosSelecionados.value.funcao} em ${naoAlocadosSelecionados.value.codigo}`
+    return `${funcao} em ${naoAlocadosSelecionados.value.codigo}`
   }
 
-  return `${naoAlocadosSelecionados.value.funcao} em todas as bases`
+  return `${funcao} em todas as bases`
 })
 
 const necessidadesExibidas = computed(() => {
@@ -2090,7 +2116,7 @@ function exportarNaoAlocados() {
   const link = document.createElement('a')
 
   link.href = url
-  link.download = `pessoas-nao-alocadas-${naoAlocadosSelecionados.value.funcao.toLowerCase()}.csv`
+  link.download = `pessoas-nao-alocadas${naoAlocadosSelecionados.value.funcao ? '-' + naoAlocadosSelecionados.value.funcao.toLowerCase() : ''}.csv`
   link.click()
   URL.revokeObjectURL(url)
 }

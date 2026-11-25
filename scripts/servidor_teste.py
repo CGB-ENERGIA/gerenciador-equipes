@@ -77,13 +77,15 @@ def semear():
         ("1007", "GISELE LIVRE", "ELETRICISTA"),
         ("1008", "HUGO LIVRE", "MOTORISTA"),
     ]
+    secoes = {"1004": "PEDREIRAS", "1005": "PEDREIRAS", "1008": "PEDREIRAS"}
     for chapa, nome, funcao in nomes:
         s.add(Colaborador(
             CHAPA=chapa, NOME=nome, FUNÇÃO=funcao, TIPO_FUNÇÃO="DIRETO", AFASTADO=False,
+            SEÇÃO=secoes.get(chapa, "BACABAL"),
         ))
     s.add(Colaborador(
         CHAPA="1009", NOME="IRENE AFASTADA", FUNÇÃO="ELETRICISTA", TIPO_FUNÇÃO="DIRETO",
-        AFASTADO=True, JUSTIFICATIVA_AFASTAMENTO="LICENÇA MÉDICA", AFASTADO_POR="admin",
+        SEÇÃO="BACABAL", AFASTADO=True, JUSTIFICATIVA_AFASTAMENTO="LICENÇA MÉDICA", AFASTADO_POR="admin",
     ))
     s.flush()
 
