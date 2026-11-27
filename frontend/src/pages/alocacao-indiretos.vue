@@ -1565,7 +1565,7 @@ import OrganogramaNo from '../components/OrganogramaNo.vue'
 import SelectFiltroMultiplo from '../components/SelectFiltroMultiplo.vue'
 import { PODE_VER_INDIRETOS, useSessao } from '../composables/useSessao'
 import { useConfirmacao } from '../composables/useConfirmacao'
-import { proximaSelecaoMultipla } from '../utils/equipes'
+import { manterSelecionadas, proximaSelecaoMultipla } from '../utils/equipes'
 
 // mesmas regras do Banco de Dados; enquanto a página está em liberação
 // gradual, só o Administrador abre (ver router/index.js e indiretos.py)
@@ -1770,43 +1770,91 @@ const nomesSetores = computed(() =>
     a.localeCompare(b, 'pt-BR')
   )
 )
-const opcoesBases = computed(() => [
-  { label: 'Todas as bases', value: TODOS },
-  ...opcoesUnicas(alocados.value.map(p => p.alocacao.base))
-])
-const opcoesSubsetores = computed(() => {
-  const alocadosDosSetores = setoresAtivos.value.length
-    ? alocados.value.filter(p => setoresAtivos.value.includes(p.alocacao.setor))
-    : alocados.value
-  return [
-    { label: 'Todos os subsetores', value: TODOS },
-    // sem subsetor atribuído = o setor geral
-    { label: 'Geral', value: SEM_SUBSETOR },
-    ...opcoesUnicas(alocadosDosSetores.map(subsetorEfetivo))
-  ]
-})
+// Os filtros se reconhecem: cada um lista só o que sobra com os outros já
+// escolhidos (filtrar o responsável X deixa em Base só as bases dele). Quem já
+// está marcado continua na lista, para dar para desmarcar.
+function alocadosParaOpcoes(ignorar) {
+  return alocados.value.filter(pessoa => {
+    const a = pessoa.alocacao
+    if (ignorar !== 'base' && basesAtivas.value.length && !basesAtivas.value.includes(a.base)) {
+      return false
+    }
+    if (ignorar !== 'setor' && setoresAtivos.value.length && !setoresAtivos.value.includes(a.setor)) {
+      return false
+    }
+    if (
+      ignorar !== 'subsetor' &&
+      subsetoresAtivos.value.length &&
+      !subsetoresAtivos.value.includes(subsetorEfetivo(pessoa) || SEM_SUBSETOR)
+    ) {
+      return false
+    }
+    if (
+      ignorar !== 'responsavel' &&
+      responsaveisAtivos.value.length &&
+      !responsaveisAtivos.value.includes(topoDaCadeia(pessoa))
+    ) {
+      return false
+    }
+    return true
+  })
+}
 
-const opcoesSetores = computed(() => [
-  { label: 'Todos os setores', value: TODOS },
-  ...opcoesUnicas(nomesSetores.value)
-])
+const opcoesBases = computed(() =>
+  manterSelecionadas(
+    [
+      { label: 'Todas as bases', value: TODOS },
+      ...opcoesUnicas(alocadosParaOpcoes('base').map(p => p.alocacao.base))
+    ],
+    filtroBases.value,
+    TODOS
+  )
+)
+const opcoesSubsetores = computed(() =>
+  manterSelecionadas(
+    [
+      { label: 'Todos os subsetores', value: TODOS },
+      // sem subsetor atribuído = o setor geral
+      { label: 'Geral', value: SEM_SUBSETOR },
+      ...opcoesUnicas(alocadosParaOpcoes('subsetor').map(subsetorEfetivo))
+    ],
+    filtroSubsetores.value,
+    TODOS
+  )
+)
+
+const opcoesSetores = computed(() =>
+  manterSelecionadas(
+    [
+      { label: 'Todos os setores', value: TODOS },
+      ...opcoesUnicas(alocadosParaOpcoes('setor').map(p => p.alocacao.setor))
+    ],
+    filtroSetores.value,
+    TODOS
+  )
+)
 // só os dois primeiros nomes, como no chip; se dois ficarem iguais, a chapa
 // desempata
 // Responsável é uma CADEIA (coordenador > supervisor > analista...): o filtro
 // lista só o topo de cada cadeia — o mesmo responsável dos cartões — e
 // escolher alguém traz a cadeia inteira dele.
 const opcoesResponsaveis = computed(() => {
-  const opcoes = [...new Set(alocados.value.map(topoDaCadeia).filter(Boolean))]
+  const opcoes = [...new Set(alocadosParaOpcoes('responsavel').map(topoDaCadeia).filter(Boolean))]
     .map(chapa => ({ label: nomeCurto(responsavelPorChapa(chapa)?.nome) || chapa, value: chapa }))
   const repetidos = new Set(
     opcoes.map(o => o.label).filter((label, i, todos) => todos.indexOf(label) !== i)
   )
-  return [
-    { label: 'Todos os responsáveis', value: TODOS },
-    ...opcoes
-      .map(o => (repetidos.has(o.label) ? { ...o, label: `${o.label} (${o.value})` } : o))
-      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
-  ]
+  return manterSelecionadas(
+    [
+      { label: 'Todos os responsáveis', value: TODOS },
+      ...opcoes
+        .map(o => (repetidos.has(o.label) ? { ...o, label: `${o.label} (${o.value})` } : o))
+        .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
+    ],
+    filtroResponsaveis.value,
+    TODOS,
+    chapa => nomeCurto(responsavelPorChapa(chapa)?.nome) || chapa
+  )
 })
 
 function casaComBusca(pessoa, texto = busca.value) {

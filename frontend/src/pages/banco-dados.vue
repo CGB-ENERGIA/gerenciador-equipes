@@ -1438,7 +1438,9 @@ import {
   equipeCombinaComResponsavel,
   equipeCombinaComSetor,
   equipeCombinaComTipo,
+  equipesParaOpcoes,
   FUNCOES_SISTEMA,
+  manterSelecionadas,
   normalizarSelecaoBases,
   OPCAO_TODAS_BASES,
   opcoesResponsavelFiltro,
@@ -1520,6 +1522,14 @@ const coordenadorSelecionado = ref(
 const supervisorSelecionado = ref(
   selecaoInicial(filtrosCompartilhados.value.supervisores, RESPONSAVEL_TODOS)
 )
+
+const filtrosAtuais = computed(() => ({
+  base: baseSelecionada.value,
+  tipo: tipoSelecionado.value,
+  setor: setorSelecionado.value,
+  coordenador: coordenadorSelecionado.value,
+  supervisor: supervisorSelecionado.value
+}))
 
 watch(
   [tipoSelecionado, setorSelecionado, coordenadorSelecionado, supervisorSelecionado],
@@ -1855,7 +1865,8 @@ const opcoesBases = computed(() => {
     }
   ]
 
-  for (const equipe of equipes.value) {
+  // só as bases que ainda existem com os outros filtros escolhidos
+  for (const equipe of equipesParaOpcoes(equipes.value, filtrosAtuais.value, 'base')) {
     const base = String(equipe.base || '').trim()
 
     if (!base) {
@@ -1871,23 +1882,56 @@ const opcoesBases = computed(() => {
     }
   }
 
-  return bases.sort((a, b) => {
+  const ordenadas = bases.sort((a, b) => {
     if (a.value === OPCAO_TODAS_BASES) return -1
     if (b.value === OPCAO_TODAS_BASES) return 1
     return a.label.localeCompare(b.label, 'pt-BR')
   })
+
+  return manterSelecionadas(ordenadas, baseSelecionada.value, OPCAO_TODAS_BASES)
 })
 
-const opcoesTipos = computed(() => opcoesTipoFiltro(equipes.value))
+// Os filtros se reconhecem: cada um lista só o que sobra com os outros já
+// escolhidos (ver equipesParaOpcoes em utils/equipes.js)
+const opcoesTipos = computed(() =>
+  manterSelecionadas(
+    opcoesTipoFiltro(equipesParaOpcoes(equipes.value, filtrosAtuais.value, 'tipo')),
+    tipoSelecionado.value,
+    TIPO_TODOS,
+    valor => String(valor).toUpperCase()
+  )
+)
 
-const opcoesSetores = computed(() => opcoesSetorFiltro(equipes.value))
+const opcoesSetores = computed(() =>
+  manterSelecionadas(
+    opcoesSetorFiltro(equipesParaOpcoes(equipes.value, filtrosAtuais.value, 'setor')),
+    setorSelecionado.value,
+    SETOR_TODOS
+  )
+)
 
 const opcoesCoordenadores = computed(() =>
-  opcoesResponsavelFiltro(equipes.value, 'coordenador', 'Todos os coordenadores')
+  manterSelecionadas(
+    opcoesResponsavelFiltro(
+      equipesParaOpcoes(equipes.value, filtrosAtuais.value, 'coordenador'),
+      'coordenador',
+      'Todos os coordenadores'
+    ),
+    coordenadorSelecionado.value,
+    RESPONSAVEL_TODOS
+  )
 )
 
 const opcoesSupervisores = computed(() =>
-  opcoesResponsavelFiltro(equipes.value, 'supervisor', 'Todos os supervisores')
+  manterSelecionadas(
+    opcoesResponsavelFiltro(
+      equipesParaOpcoes(equipes.value, filtrosAtuais.value, 'supervisor'),
+      'supervisor',
+      'Todos os supervisores'
+    ),
+    supervisorSelecionado.value,
+    RESPONSAVEL_TODOS
+  )
 )
 
 // ============================================================

@@ -1077,6 +1077,7 @@ import {
   descreverAfastadoPor,
   descreverMotivoForaOperacao,
   FUNCOES_SISTEMA,
+  manterSelecionadas,
   normalizarSelecaoBases,
   OPCAO_TODAS_BASES,
   proximaSelecaoBases,
@@ -1338,31 +1339,59 @@ const afastadosAbertos = ref(false)
 // OPÇÕES DE BASE
 // ============================================================
 
-const opcoesTipos = computed(() => [
-  { label: 'Todos os tipos', value: '' },
-  ...tiposFiltro.value.map(tipo => ({ label: tipo.toUpperCase(), value: tipo }))
-])
+// Os filtros se reconhecem: o servidor devolve, para cada um, só o que existe com
+// os outros já escolhidos (inclusive as bases). Quem já está marcado continua na
+// lista, para dar para desmarcar.
+const opcoesTipos = computed(() =>
+  manterSelecionadas(
+    [
+      { label: 'Todos os tipos', value: '' },
+      ...tiposFiltro.value.map(tipo => ({ label: tipo.toUpperCase(), value: tipo }))
+    ],
+    tipoSelecionado.value,
+    '',
+    valor => String(valor).toUpperCase()
+  )
+)
 
-const opcoesSetores = computed(() => [
-  { label: 'Todos os setores', value: '' },
-  ...setoresFiltro.value.map(setor => ({ label: setor, value: setor }))
-])
+const opcoesSetores = computed(() =>
+  manterSelecionadas(
+    [
+      { label: 'Todos os setores', value: '' },
+      ...setoresFiltro.value.map(setor => ({ label: setor, value: setor }))
+    ],
+    setorSelecionado.value,
+    ''
+  )
+)
 
-const opcoesCoordenadores = computed(() => [
-  { label: 'Todos os coordenadores', value: '' },
-  ...coordenadoresFiltro.value.map(coordenador => ({
-    label: coordenador,
-    value: coordenador
-  }))
-])
+const opcoesCoordenadores = computed(() =>
+  manterSelecionadas(
+    [
+      { label: 'Todos os coordenadores', value: '' },
+      ...coordenadoresFiltro.value.map(coordenador => ({
+        label: coordenador,
+        value: coordenador
+      }))
+    ],
+    coordenadorSelecionado.value,
+    ''
+  )
+)
 
-const opcoesSupervisores = computed(() => [
-  { label: 'Todos os supervisores', value: '' },
-  ...supervisoresFiltro.value.map(supervisor => ({
-    label: supervisor,
-    value: supervisor
-  }))
-])
+const opcoesSupervisores = computed(() =>
+  manterSelecionadas(
+    [
+      { label: 'Todos os supervisores', value: '' },
+      ...supervisoresFiltro.value.map(supervisor => ({
+        label: supervisor,
+        value: supervisor
+      }))
+    ],
+    supervisorSelecionado.value,
+    ''
+  )
+)
 
 const opcoesBases = computed(() => {
   const opcoes = [
@@ -1381,6 +1410,8 @@ const opcoesBases = computed(() => {
 
 function atualizarSelecaoBases(selecao) {
   baseSelecionada.value = proximaSelecaoBases(baseSelecionada.value, selecao)
+  // as opções dos outros filtros dependem das bases escolhidas
+  carregarResumo()
 }
 
 // as opcoes "Todos" destes 4 filtros usam '' como valor-sentinela
@@ -2347,6 +2378,10 @@ async function carregarResumo() {
     for (const valor of supervisorSelecionado.value) {
       if (valor) parametros.append('supervisor', valor)
     }
+    // só para as opções dos filtros (a resposta continua trazendo todas as bases)
+    for (const valor of baseSelecionada.value) {
+      if (valor && valor !== OPCAO_TODAS_BASES) parametros.append('opcoes_base', valor)
+    }
 
     const resposta = await fetch(`/api/resumo?${parametros}`)
 
@@ -2419,6 +2454,11 @@ onMounted(async () => {
     }
   } catch {
     baseSelecionada.value = [OPCAO_TODAS_BASES]
+  }
+
+  // base restaurada da outra tela: as opções dos demais filtros acompanham
+  if (!baseSelecionada.value.includes(OPCAO_TODAS_BASES)) {
+    await carregarResumo()
   }
 })
 

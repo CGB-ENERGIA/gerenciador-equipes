@@ -90,17 +90,11 @@
 
                 <div class="row q-col-gutter-sm">
                   <div class="col-12 col-sm-4">
-                    <q-select
+                    <SelectFiltroMultiplo
                       :model-value="baseFiltro"
-                      outlined
-                      dense
-                      clearable
-                      multiple
-                      use-chips
-                      emit-value
-                      map-options
-                      label="Base"
                       :options="opcoesBaseFiltro"
+                      icon="place"
+                      label="Base"
                       @update:model-value="atualizarSelecaoBaseFiltro"
                     />
                   </div>
@@ -997,7 +991,9 @@ import {
   equipeCombinaComSetor,
   equipeCombinaComTipo,
   equipeNaSelecaoDeBases,
+  equipesParaOpcoes,
   FUNCOES_SISTEMA,
+  manterSelecionadas,
   OPCAO_TODAS_BASES,
   opcoesResponsavelFiltro,
   opcoesSetorFiltro,
@@ -1029,7 +1025,7 @@ const erro = ref('')
 const sucesso = ref('')
 
 const filtroEquipe = ref('')
-const baseFiltro = ref([])
+const baseFiltro = ref([OPCAO_TODAS_BASES])
 const tipoFiltro = ref(TIPO_TODOS)
 const setorFiltro = ref(SETOR_TODOS)
 const coordenadorFiltro = ref([RESPONSAVEL_TODOS])
@@ -1152,22 +1148,72 @@ const bases = computed(() =>
   [...new Set(equipes.value.map(equipe => equipe.base).filter(Boolean))].sort()
 )
 
-const opcoesBaseFiltro = computed(() => [
-  { label: 'Todas as bases', value: OPCAO_TODAS_BASES },
-  ...bases.value.map(base => ({ label: base, value: base }))
-])
+// Os filtros se reconhecem: cada um lista só o que sobra com os outros já
+// escolhidos (ver equipesParaOpcoes em utils/equipes.js). Extra e situação
+// também entram, porque tiram equipes da lista.
+const filtrosAtuais = computed(() => ({
+  base: baseFiltro.value,
+  tipo: tipoFiltro.value,
+  setor: setorFiltro.value,
+  coordenador: coordenadorFiltro.value,
+  supervisor: supervisorFiltro.value
+}))
+
+function equipesParaOpcoesDe(ignorar) {
+  return equipesParaOpcoes(
+    equipes.value,
+    filtrosAtuais.value,
+    ignorar,
+    equipe => equipeCombinaComExtra(equipe) && equipeCombinaComStatus(equipe)
+  )
+}
+
+const opcoesBaseFiltro = computed(() => {
+  const existentes = new Set(equipesParaOpcoesDe('base').map(equipe => equipe.base))
+  return manterSelecionadas(
+    [
+      { label: 'Todas as bases', value: OPCAO_TODAS_BASES },
+      ...bases.value
+        .filter(base => existentes.has(base))
+        .map(base => ({ label: base, value: base }))
+    ],
+    baseFiltro.value,
+    OPCAO_TODAS_BASES
+  )
+})
 
 function atualizarSelecaoBaseFiltro(selecao) {
   baseFiltro.value = proximaSelecaoBases(baseFiltro.value, selecao)
 }
 
-const opcoesTipos = computed(() => opcoesTipoFiltro(equipes.value))
-const opcoesSetores = computed(() => opcoesSetorFiltro(equipes.value))
+const opcoesTipos = computed(() =>
+  manterSelecionadas(
+    opcoesTipoFiltro(equipesParaOpcoesDe('tipo')),
+    tipoFiltro.value,
+    TIPO_TODOS,
+    valor => String(valor).toUpperCase()
+  )
+)
+const opcoesSetores = computed(() =>
+  manterSelecionadas(
+    opcoesSetorFiltro(equipesParaOpcoesDe('setor')),
+    setorFiltro.value,
+    SETOR_TODOS
+  )
+)
 const opcoesCoordenadores = computed(() =>
-  opcoesResponsavelFiltro(equipes.value, 'coordenador', 'Todos os coordenadores')
+  manterSelecionadas(
+    opcoesResponsavelFiltro(equipesParaOpcoesDe('coordenador'), 'coordenador', 'Todos os coordenadores'),
+    coordenadorFiltro.value,
+    RESPONSAVEL_TODOS
+  )
 )
 const opcoesSupervisores = computed(() =>
-  opcoesResponsavelFiltro(equipes.value, 'supervisor', 'Todos os supervisores')
+  manterSelecionadas(
+    opcoesResponsavelFiltro(equipesParaOpcoesDe('supervisor'), 'supervisor', 'Todos os supervisores'),
+    supervisorFiltro.value,
+    RESPONSAVEL_TODOS
+  )
 )
 
 const equipesFiltradas = computed(() => {

@@ -66,7 +66,10 @@ export function opcoesTipoFiltro(equipes) {
     { label: 'Todos os tipos', value: TIPO_TODOS },
     // nome de tipo de equipe sempre em caixa alta
     ...[...disciplinas].sort().map(tipo => ({ label: tipo.toUpperCase(), value: tipo })),
-    { label: TIPO_FOLGUISTA, value: TIPO_FOLGUISTA }
+    // Folguista só entra na lista se existir equipe Folguista no contexto
+    ...((equipes || []).some(ehEquipeFolguista)
+      ? [{ label: TIPO_FOLGUISTA, value: TIPO_FOLGUISTA }]
+      : [])
   ]
 }
 
@@ -313,4 +316,80 @@ export function descreverTipoFuncaoAlteradoPor(pessoa) {
     return pessoa.tipo_funcao_alterado_por
   }
   return `${pessoa.tipo_funcao_alterado_por} em ${data.toLocaleDateString('pt-BR')}`
+}
+
+// ------------------------------------------------------------
+// Filtros que se reconhecem (em cascata)
+// ------------------------------------------------------------
+//
+// Ao abrir um filtro, as opções são só as que ainda existem com os OUTROS
+// filtros já escolhidos: filtrando o coordenador JACKSON, o filtro de base
+// lista só as bases dele. Cada filtro ignora a si mesmo (senão escolher um valor
+// escondia os demais valores do mesmo filtro).
+
+function valoresAtivos(selecao, valorTodos) {
+  const lista = Array.isArray(selecao) ? selecao : selecao ? [selecao] : []
+  return lista.filter(valor => valor && valor !== valorTodos)
+}
+
+// As equipes com SÓ as vagas que batem com os filtros, exceto o da dimensão
+// 'ignorar' ('base' | 'tipo' | 'setor' | 'coordenador' | 'supervisor').
+// 'aceita' é um filtro extra opcional por equipe (ex.: só ativas, só extras).
+// Tipo, setor, coordenador e supervisor valem por vaga, como nas telas.
+export function equipesParaOpcoes(equipes, filtros, ignorar, aceita) {
+  const bases = valoresAtivos(filtros.base, OPCAO_TODAS_BASES)
+  const tipos = valoresAtivos(filtros.tipo, TIPO_TODOS)
+  const setores = valoresAtivos(filtros.setor, SETOR_TODOS)
+  const coordenadores = valoresAtivos(filtros.coordenador, RESPONSAVEL_TODOS)
+  const supervisores = valoresAtivos(filtros.supervisor, RESPONSAVEL_TODOS)
+
+  const filtraPorVaga =
+    (ignorar !== 'tipo' && tipos.length) ||
+    (ignorar !== 'setor' && setores.length) ||
+    (ignorar !== 'coordenador' && coordenadores.length) ||
+    (ignorar !== 'supervisor' && supervisores.length)
+
+  const resultado = []
+
+  for (const equipe of equipes || []) {
+    if (aceita && !aceita(equipe)) {
+      continue
+    }
+    if (ignorar !== 'base' && bases.length && !bases.includes(String(equipe.base || '').trim())) {
+      continue
+    }
+
+    const vagas = (equipe.vagas || []).filter(
+      vaga =>
+        (ignorar === 'tipo' ||
+          !tipos.length ||
+          tipos.some(t => (t === TIPO_FOLGUISTA ? ehEquipeFolguista(equipe) : t === vaga.tipo))) &&
+        (ignorar === 'setor' || !setores.length || setores.includes(vaga.setor)) &&
+        (ignorar === 'coordenador' || !coordenadores.length || coordenadores.includes(vaga.coordenador)) &&
+        (ignorar === 'supervisor' || !supervisores.length || supervisores.includes(vaga.supervisor))
+    )
+
+    if (filtraPorVaga && !vagas.length) {
+      continue
+    }
+
+    resultado.push({
+      ...equipe,
+      vagas,
+      tipos: [...new Set(vagas.map(vaga => vaga.tipo).filter(Boolean))],
+      setores: [...new Set(vagas.map(vaga => vaga.setor).filter(Boolean))]
+    })
+  }
+
+  return resultado
+}
+
+// Quem já está escolhido continua na lista mesmo que os outros filtros o
+// tenham tirado das opções, para dar para desmarcar.
+export function manterSelecionadas(opcoes, selecao, valorTodos, rotuloDe = valor => valor) {
+  const existentes = new Set(opcoes.map(opcao => opcao.value))
+  const faltando = valoresAtivos(selecao, valorTodos)
+    .filter(valor => !existentes.has(valor))
+    .map(valor => ({ label: rotuloDe(valor), value: valor }))
+  return [...opcoes, ...faltando]
 }

@@ -640,6 +640,13 @@ def obter_resumo():
         filtro_coordenadores = [c.strip() for c in request.args.getlist("coordenador") if c.strip()]
         filtro_supervisores = [s.strip() for s in request.args.getlist("supervisor") if s.strip()]
 
+        # bases escolhidas na tela: a Resumo filtra as bases do lado da tela (a
+        # resposta traz todas), mas as OPCOES dos outros filtros so mostram o que
+        # existe nessas bases (filtros em cascata)
+        bases_das_opcoes = {
+            normalizar(b) for b in request.args.getlist("opcoes_base") if b.strip()
+        }
+
         tipos_normalizados = {normalizar(t) for t in filtro_tipos}
         setores_normalizados = {normalizar(s) for s in filtro_setores}
         coordenadores_normalizados = {normalizar(c) for c in filtro_coordenadores}
@@ -725,10 +732,15 @@ def obter_resumo():
             ]
 
             # o tipo, o setor, o coordenador e o supervisor alimentam o filtro
-            # mesmo quando a base esta filtrada fora; cada um considera os
-            # demais filtros ja selecionados (filtros em cascata), exceto a
-            # si mesmo, para nao esconder a propria opcao marcada
+            # considerando as bases escolhidas na tela (opcoes_base); cada um
+            # considera os demais filtros ja selecionados (filtros em cascata),
+            # exceto a si mesmo, para nao esconder a propria opcao marcada
+            base_nas_opcoes = not bases_das_opcoes or normalizar(base) in bases_das_opcoes
+
             for composicao in composicoes_visiveis:
+                if not base_nas_opcoes:
+                    break
+
                 tipo = tipo_equipe_da_vaga(composicao)
 
                 if vaga_bate_outros_filtros(composicao, tipo, folguista, ignorar="tipo"):
