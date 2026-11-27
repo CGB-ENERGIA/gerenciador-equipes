@@ -36,7 +36,13 @@ from openpyxl.worksheet.datavalidation import DataValidation
 import auth
 import planilhas_estilo as estilo
 from database.database import SessionLocal
-from database.models import AlocacaoIndireto, Colaborador, SetorGerencia, VagaIndireto
+from database.models import (
+    AlocacaoIndireto,
+    Colaborador,
+    ComposicaoEquipe,
+    SetorGerencia,
+    VagaIndireto,
+)
 
 bp = Blueprint("indiretos", __name__)
 
@@ -252,7 +258,9 @@ def obter_indiretos():
         bases = list(BASES_PADRAO) + sorted(
             {a.BASE for a in alocacoes.values()} - set(BASES_PADRAO) - {BASE_GERENCIA}
         )
-        setores_permitidos = auth.setores_de_indiretos_do_usuario(auth.usuario_logado())
+        setores_permitidos = auth.setores_de_indiretos_do_usuario(
+            auth.usuario_logado(), setores_da_operacao(session)
+        )
         return jsonify({
             # onde esta conta aloca e remove: todos (Administrador) ou uma lista
             "pode_alterar": {
@@ -359,9 +367,27 @@ def vaga_no_setor(session, vaga_id, setor):
     return vaga.id if vaga and vaga.SETOR == setor else None
 
 
+def setores_da_operacao(session):
+    """Setores que existem nas vagas das equipes (GOMAN, GSTC...): o mesmo setor
+    vale nos Indiretos (ver auth.setores_de_indiretos_do_usuario)."""
+    return {
+        str(valor).strip().upper()
+        for (valor,) in session.query(ComposicaoEquipe.SETOR).distinct()
+        if valor and str(valor).strip()
+    }
+
+
 def erro_de_setor(setor):
     """Resposta 403 quando a conta nao pode mexer neste setor, ou None."""
-    if auth.pode_alterar_setor_de_indiretos(auth.usuario_logado(), setor, SETOR_GERENCIA):
+    usuario = auth.usuario_logado()
+    if (usuario or {}).get("ignora_vinculos"):
+        return None
+    session = SessionLocal()
+    try:
+        operacao = setores_da_operacao(session)
+    finally:
+        session.close()
+    if auth.pode_alterar_setor_de_indiretos(usuario, setor, SETOR_GERENCIA, operacao):
         return None
     return jsonify({
         "erro": "Seu acesso não permite alterar indiretos neste setor."

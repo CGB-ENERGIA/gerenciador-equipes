@@ -1683,3 +1683,74 @@ def test_criar_equipe_extra_so_administrador(Sessao):
     assert cliente(1).post("/api/equipes", json={"base": "BACABAL", "prefixo": "EXTRA-1", "extra": True}).status_code == 200
     lista = {e["prefixo"]: e for e in cliente(1).get("/api/equipes").get_json()}
     assert lista["EXTRA-1"]["extra"] is True
+
+
+# ------------------------------------------------------------
+# O setor da operação e o dos Indiretos são o mesmo (GOMAN = GOMAN)
+# ------------------------------------------------------------
+
+def vinculo_de_setor(Sessao, usuario_id, *setores):
+    s = Sessao()
+    for setor in setores:
+        s.add(VinculoUsuario(usuario_id=usuario_id, TIPO="SETOR", VALOR=setor))
+    s.commit()
+    s.close()
+
+
+def vagas_com_setor(Sessao, *setores):
+    s = Sessao()
+    equipe = s.query(Equipe).filter_by(BASE="BACABAL").first()
+    for setor in setores:
+        s.add(ComposicaoEquipe(equipe_id=equipe.id, FUNÇÃO_ER="ELETRICISTA", ESTRUTURA="CONSTRUÇÃO", SETOR=setor))
+    s.commit()
+    s.close()
+
+
+def test_setor_da_operacao_vale_nos_indiretos_sem_marcar_setor_de_indiretos(Sessao):
+    vinculo_de_setor(Sessao, 2, "GOMAN")
+    c = cliente(2)
+    r = c.post("/api/indiretos/alocar", json=alocar_corpo("60", "GOMAN", base="ITM", responsavel="60"))
+    assert r.status_code == 200, r.get_json()
+    assert c.delete("/api/indiretos/alocacao/60").status_code == 200
+    # outro setor continua fora
+    assert c.post("/api/indiretos/alocar", json=alocar_corpo("60", "FROTA", responsavel="60")).status_code == 403
+
+
+def test_mescla_ignora_maiusculas_e_espacos_no_nome_do_setor(Sessao):
+    vinculo_de_setor(Sessao, 2, " goman ")
+    r = cliente(2).post("/api/indiretos/alocar", json=alocar_corpo("60", "Goman", responsavel="60"))
+    assert r.status_code == 200, r.get_json()
+
+
+def test_pode_alterar_lista_os_setores_vindos_da_operacao_e_dos_indiretos(Sessao):
+    vinculo_de_setor(Sessao, 2, "GOMAN", "GSTC")
+    direto_com_setor_de_indiretos(Sessao, ["ADMINISTRATIVO"])
+    assert cliente(2).get("/api/indiretos").get_json()["pode_alterar"]["setores"] == [
+        "ADMINISTRATIVO", "GOMAN", "GSTC",
+    ]
+
+
+def test_setor_todos_da_operacao_vale_so_para_setores_que_existem_na_operacao(Sessao):
+    vagas_com_setor(Sessao, "GOMAN", "GSTC")
+    vinculo_de_setor(Sessao, 2, "TODOS")
+    c = cliente(2)
+    assert c.get("/api/indiretos").get_json()["pode_alterar"]["setores"] == ["GOMAN", "GSTC"]
+    assert c.post("/api/indiretos/alocar", json=alocar_corpo("60", "GSTC", responsavel="60")).status_code == 200
+    # setor que so existe nos Indiretos nao entra pelo TODOS da operacao
+    assert c.post("/api/indiretos/alocar", json=alocar_corpo("60", "ADMINISTRATIVO", responsavel="60")).status_code == 403
+    assert c.post("/api/indiretos/alocar", json=alocar_corpo("60", "GERÊNCIA", responsavel="60")).status_code == 403
+
+
+def test_sem_vinculo_de_setor_a_conta_continua_so_consultando_os_indiretos(Sessao):
+    assert cliente(2).get("/api/indiretos").get_json()["pode_alterar"]["setores"] == []
+    assert cliente(2).post("/api/indiretos/alocar", json=alocar_corpo("60", "GOMAN", responsavel="60")).status_code == 403
+
+
+def test_coordenador_herda_o_setor_dos_supervisores_tambem_nos_indiretos(Sessao):
+    s = Sessao()
+    s.query(Usuario).filter_by(id=4).update({"NIVEL": "COORDENADOR"})
+    s.query(Usuario).filter_by(id=2).update({"RESPONSAVEL_ID": 4})
+    s.add(VinculoUsuario(usuario_id=2, TIPO="SETOR", VALOR="GOMAN"))
+    s.commit()
+    s.close()
+    assert cliente(4).get("/api/indiretos").get_json()["pode_alterar"]["setores"] == ["GOMAN"]

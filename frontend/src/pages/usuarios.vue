@@ -474,9 +474,11 @@
                     Indiretos, aloca e remove só no(s) setor(es) escolhido(s) abaixo.
                   </template>
                   <template v-else>
-                    Vê e aloca as equipes do vínculo (base, setor, tipo). Os Indiretos ficam para
-                    consulta, a menos que a conta tenha o vínculo "Setor de indiretos": aí aloca e
-                    remove nos Indiretos desse setor, em qualquer base.
+                    Vê e aloca as equipes do vínculo (base, setor, tipo). O setor do vínculo (ex.:
+                    GOMAN, GSTC) vale automaticamente também nos Indiretos desse mesmo setor, em
+                    qualquer base. Setores que só existem nos Indiretos (Administrativo, Frota...)
+                    precisam do vínculo "Setor de indiretos". Sem nenhum dos dois, os Indiretos
+                    ficam só para consulta.
                   </template>
                 </div>
               </div>

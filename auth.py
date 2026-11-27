@@ -699,12 +699,18 @@ def tem_algum_vinculo(usuario):
     )
 
 
-def setores_de_indiretos_do_usuario(usuario):
+def setores_de_indiretos_do_usuario(usuario, setores_da_operacao=()):
     """Os setores da tela de Indiretos onde a conta pode alocar e remover.
     Devolve None para quem pode em todos (Administrador) e, para os demais, o
-    conjunto de setores em maiusculas do vinculo SETOR_INDIRETO (Direto ou
-    Indireto) — vazio sem esse vinculo.
-    TODOS cobre todos os setores, exceto a GERÊNCIA (so o Administrador mexe)."""
+    conjunto de setores em maiusculas.
+
+    O setor da operacao e o dos Indiretos sao o MESMO setor: quem tem o vinculo
+    SETOR = GOMAN (equipes diretas) ja pode alocar nos Indiretos da GOMAN, sem
+    precisar do vinculo "Setor de indiretos". Esse continua existindo para os
+    setores que so existem nos Indiretos (Administrativo, Frota...). SETOR =
+    TODOS vale para os setores que existem na operacao ('setores_da_operacao',
+    que quem chama le do banco). O vinculo SETOR_INDIRETO = TODOS cobre todos os
+    setores, exceto a GERÊNCIA (so o Administrador mexe)."""
     if not usuario:
         return set()
     if usuario.get("ignora_vinculos"):
@@ -714,16 +720,23 @@ def setores_de_indiretos_do_usuario(usuario):
     if escopos is None:
         escopos = [usuario.get("vinculos") or {}]
     setores = set()
+    operacao = {str(s).strip().upper() for s in setores_da_operacao if str(s).strip()}
     for escopo in escopos:
         setores.update(str(v).strip().upper() for v in escopo.get(VINCULO_SETOR_INDIRETO, []))
+        for valor in escopo.get(VINCULO_SETOR, []):
+            valor = str(valor).strip().upper()
+            if valor == VALOR_TODOS:
+                setores.update(operacao)
+            elif valor:
+                setores.add(valor)
     return setores
 
 
-def pode_alterar_setor_de_indiretos(usuario, setor, setor_gerencia="GERÊNCIA"):
+def pode_alterar_setor_de_indiretos(usuario, setor, setor_gerencia="GERÊNCIA", setores_da_operacao=()):
     """Diz se a conta pode alocar/remover alguem neste setor da tela de
     Indiretos. So o setor conta: nunca o subsetor, a base ou a posicao no
     organograma."""
-    setores = setores_de_indiretos_do_usuario(usuario)
+    setores = setores_de_indiretos_do_usuario(usuario, setores_da_operacao)
     if setores is None:
         return True
     setor = str(setor or "").strip().upper()
