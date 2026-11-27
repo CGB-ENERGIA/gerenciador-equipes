@@ -138,6 +138,26 @@
                       @update:model-value="selecao => (supervisorFiltro = proximaSelecaoMultipla(supervisorFiltro, selecao, RESPONSAVEL_TODOS))"
                     />
                   </div>
+                  <div class="col-6 col-sm-6">
+                    <SelectFiltroMultiplo
+                      v-model="extraFiltro"
+                      :multiple="false"
+                      valor-todos="TODAS"
+                      icon="add_circle_outline"
+                      label="Equipe extra"
+                      :options="opcoesExtra"
+                    />
+                  </div>
+                  <div class="col-6 col-sm-6">
+                    <SelectFiltroMultiplo
+                      v-model="statusFiltro"
+                      :multiple="false"
+                      valor-todos="TODAS"
+                      icon="toggle_on"
+                      label="Situação"
+                      :options="opcoesStatus"
+                    />
+                  </div>
                 </div>
               </q-card-section>
 
@@ -209,7 +229,11 @@
                   </q-item-section>
 
                   <q-item-section>
-                    <q-item-label class="text-weight-medium">{{ equipe.prefixo || 'Equipe' }}</q-item-label>
+                    <q-item-label class="text-weight-medium" :class="{ 'text-grey-6': equipe.ativa === false }">
+                      {{ equipe.prefixo || 'Equipe' }}
+                      <q-badge v-if="equipe.extra" color="deep-purple-5" class="q-ml-xs" label="EXTRA" />
+                      <q-badge v-if="equipe.ativa === false" color="grey-7" class="q-ml-xs" label="INATIVA" />
+                    </q-item-label>
                     <q-item-label caption>
                       {{ equipe.base }}<template v-if="(equipe.setores || []).length"> · {{ equipe.setores.join(', ') }}</template>
                     </q-item-label>
@@ -289,6 +313,15 @@
                     :error-message="erroPrefixo"
                     @keyup.enter="avancarParaVagas"
                   />
+
+                  <q-toggle
+                    v-if="souAdministrador"
+                    v-model="painel.extra"
+                    label="Equipe extra"
+                  />
+                  <div v-if="souAdministrador" class="text-caption text-grey-7 q-mt-none">
+                    As vagas de uma equipe extra não entram no previsto do Resumo, só no realizado.
+                  </div>
                 </q-card-section>
 
                 <q-separator />
@@ -338,6 +371,24 @@
                       <div class="col-12 col-sm-7">
                         <q-input v-model="painel.prefixo" outlined dense label="Prefixo" />
                       </div>
+                    </div>
+                    <div v-if="souAdministrador" class="row q-col-gutter-sm q-mt-xs">
+                      <div class="col-12 col-sm-6">
+                        <q-toggle v-model="painel.extra" label="Equipe extra" />
+                        <div class="text-caption text-grey-7">
+                          As vagas não entram no previsto do Resumo, só no realizado.
+                        </div>
+                      </div>
+                      <div class="col-12 col-sm-6">
+                        <q-toggle v-model="painel.ativa" label="Equipe ativa" />
+                        <div class="text-caption text-grey-7">
+                          Inativar deixa os colaboradores livres e tira a equipe das listas.
+                        </div>
+                      </div>
+                    </div>
+                    <div v-else class="q-mt-xs">
+                      <q-badge v-if="painel.extra" color="deep-purple-5" label="EXTRA" class="q-mr-xs" />
+                      <q-badge v-if="!painel.ativa" color="grey-7" label="INATIVA" />
                     </div>
                     <div class="text-caption text-grey-7 q-mt-sm">
                       {{ resumoPainel.ocupadas }} de {{ resumoPainel.total }} vagas ocupadas
@@ -938,7 +989,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import CabecalhoApp from '../components/CabecalhoApp.vue'
 import MarcaDaguaFundo from '../components/MarcaDaguaFundo.vue'
 import SelectFiltroMultiplo from '../components/SelectFiltroMultiplo.vue'
-import { PODE_GERENCIAR_VAGAS } from '../composables/useSessao'
+import { PODE_GERENCIAR_VAGAS, useSessao } from '../composables/useSessao'
 import { useConfirmacao } from '../composables/useConfirmacao'
 import { criarOrdenacaoTabela, ordenarLista } from '../utils/ordenacaoTabela'
 import {
@@ -983,6 +1034,34 @@ const tipoFiltro = ref(TIPO_TODOS)
 const setorFiltro = ref(SETOR_TODOS)
 const coordenadorFiltro = ref([RESPONSAVEL_TODOS])
 const supervisorFiltro = ref([RESPONSAVEL_TODOS])
+
+// Equipe extra (só realizado) e equipe ativa/inativa
+const FILTRO_TODAS = 'TODAS'
+const extraFiltro = ref(FILTRO_TODAS)
+const statusFiltro = ref(FILTRO_TODAS)
+const opcoesExtra = [
+  { label: 'Todas', value: FILTRO_TODAS },
+  { label: 'Só equipes extras', value: 'EXTRA' },
+  { label: 'Sem equipes extras', value: 'COMUM' }
+]
+const opcoesStatus = [
+  { label: 'Todas', value: FILTRO_TODAS },
+  { label: 'Só ativas', value: 'ATIVAS' },
+  { label: 'Só inativas', value: 'INATIVAS' }
+]
+
+function equipeCombinaComExtra(equipe) {
+  if (extraFiltro.value === 'EXTRA') return Boolean(equipe.extra)
+  if (extraFiltro.value === 'COMUM') return !equipe.extra
+  return true
+}
+
+function equipeCombinaComStatus(equipe) {
+  const ativa = equipe.ativa !== false
+  if (statusFiltro.value === 'ATIVAS') return ativa
+  if (statusFiltro.value === 'INATIVAS') return !ativa
+  return true
+}
 
 const setoresNegocio = ref([])
 
@@ -1101,6 +1180,8 @@ const equipesFiltradas = computed(() => {
       equipeCombinaComSetor(equipe, setorFiltro.value) &&
       equipeCombinaComResponsavel(equipe, 'coordenador', coordenadorFiltro.value) &&
       equipeCombinaComResponsavel(equipe, 'supervisor', supervisorFiltro.value) &&
+      equipeCombinaComExtra(equipe) &&
+      equipeCombinaComStatus(equipe) &&
       (!termo || `${equipe.prefixo} ${equipe.base}`.toLowerCase().includes(termo))
   )
 })
@@ -1117,7 +1198,10 @@ function contagemDaEquipe(equipe) {
 }
 
 const equipesComVagaLivre = computed(
-  () => equipesFiltradas.value.filter(equipe => contagemDaEquipe(equipe).livres).length
+  () =>
+    equipesFiltradas.value.filter(
+      equipe => equipe.ativa !== false && contagemDaEquipe(equipe).livres
+    ).length
 )
 
 // ------------------------------------------------------------
@@ -1238,7 +1322,13 @@ async function carregarContasResponsaveis() {
 let proximaChave = 0
 const chave = () => ++proximaChave
 
+// Equipe extra e equipe ativa só o Administrador muda (o servidor também barra)
+const { usuario } = useSessao()
+const souAdministrador = computed(() => Boolean(usuario.value?.ignora_vinculos))
+
 const painel = reactive({
+  extra: false,
+  ativa: true,
   modo: null, // null | 'nova' | 'editar'
   passo: 1, // só na nova: 1 = base e prefixo, 2 = vagas
   equipeId: null,
@@ -1301,7 +1391,14 @@ function disciplinasDaEquipe(equipe) {
 }
 
 function retratoAtual() {
-  return JSON.stringify([painel.base, painel.prefixo, painel.disciplinas, painel.removidas])
+  return JSON.stringify([
+    painel.base,
+    painel.prefixo,
+    painel.disciplinas,
+    painel.removidas,
+    painel.extra,
+    painel.ativa
+  ])
 }
 
 const painelAlterado = computed(() => Boolean(painel.modo) && retratoAtual() !== retratoPainel)
@@ -1324,11 +1421,26 @@ function preencherPainel(modo, dados) {
     base: dados.base || '',
     prefixo: dados.prefixo || '',
     extras: dados.extras || 0,
+    extra: Boolean(dados.extra),
+    ativa: dados.ativa !== false,
     disciplinas: dados.disciplinas || [],
     removidas: []
   })
   painelTocado.value = false
   retratoPainel = retratoAtual()
+}
+
+// Põe a equipe no painel, sem perguntar nada (quem chama já decidiu)
+function mostrarEquipeNoPainel(equipe) {
+  preencherPainel('editar', {
+    equipeId: equipe.id,
+    base: equipe.base,
+    prefixo: equipe.prefixo,
+    extras: (equipe.vagas || []).length - vagasPadrao(equipe).length,
+    extra: equipe.extra,
+    ativa: equipe.ativa,
+    disciplinas: disciplinasDaEquipe(equipe)
+  })
 }
 
 async function abrirEquipe(equipe) {
@@ -1338,13 +1450,7 @@ async function abrirEquipe(equipe) {
   if (!(await podeTrocarDePainel())) {
     return
   }
-  preencherPainel('editar', {
-    equipeId: equipe.id,
-    base: equipe.base,
-    prefixo: equipe.prefixo,
-    extras: (equipe.vagas || []).length - vagasPadrao(equipe).length,
-    disciplinas: disciplinasDaEquipe(equipe)
-  })
+  mostrarEquipeNoPainel(equipe)
 }
 
 async function iniciarNovaEquipe() {
@@ -1568,7 +1674,8 @@ async function enviarEquipe(equipeId, linhas, confirmarRemocoes) {
       base: painel.base.trim().toUpperCase(),
       prefixo: painel.prefixo.trim(),
       vagas: linhas,
-      confirmar_remocoes: confirmarRemocoes
+      confirmar_remocoes: confirmarRemocoes,
+      ...(souAdministrador.value ? { extra: painel.extra, ativa: painel.ativa } : {})
     })
   })
   const dados = await resposta.json()
@@ -1609,6 +1716,19 @@ async function salvarPainel() {
     }
   }
 
+  if (painel.modo === 'editar' && !painel.ativa) {
+    const atual = equipes.value.find(item => item.id === painel.equipeId)
+    const alocados = (atual?.vagas || []).filter(vaga => vaga.ocupada).length
+    if (atual?.ativa !== false) {
+      const texto = alocados
+        ? `Inativar ${painel.prefixo}? ${alocados} colaborador(es) ficarão livres (sem vaga) e a equipe sai das listas e do Resumo.`
+        : `Inativar ${painel.prefixo}? A equipe sai das listas e do Resumo.`
+      if (!(await confirmar(texto, { titulo: 'Inativar equipe', textoConfirmar: 'Inativar' }))) {
+        return
+      }
+    }
+  }
+
   salvandoPainel.value = true
   let equipeId = painel.equipeId
   try {
@@ -1616,7 +1736,11 @@ async function salvarPainel() {
       const resposta = await fetch('/api/equipes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base: painel.base.trim().toUpperCase(), prefixo: painel.prefixo.trim() })
+        body: JSON.stringify({
+          base: painel.base.trim().toUpperCase(),
+          prefixo: painel.prefixo.trim(),
+          ...(souAdministrador.value && painel.extra ? { extra: true } : {})
+        })
       })
       const dados = await resposta.json()
       if (!resposta.ok || dados.erro) {
@@ -1629,13 +1753,15 @@ async function salvarPainel() {
     }
 
     const dados = await enviarEquipe(equipeId, linhas, confirmarRemocoes)
-    sucesso.value = `Equipe ${dados.equipe.prefixo} salva.`
+    sucesso.value = dados.liberados
+      ? `Equipe ${dados.equipe.prefixo} inativada: ${dados.liberados} colaborador(es) ficaram livres.`
+      : `Equipe ${dados.equipe.prefixo} salva.`
     await carregarEquipes()
     const atualizada = equipes.value.find(item => item.id === equipeId)
     if (atualizada) {
-      retratoPainel = ''
-      painel.equipeId = null
-      await abrirEquipe(atualizada)
+      // acabou de salvar: recarrega o painel com o que ficou gravado, sem a
+      // pergunta de "descartar mudanças" (não há mais mudança pendente)
+      mostrarEquipeNoPainel(atualizada)
     }
   } catch (e) {
     erro.value = e.message || 'Não foi possível salvar a equipe.'
@@ -1764,7 +1890,7 @@ async function carregarEquipes() {
   carregando.value = true
 
   try {
-    const resposta = await fetch('/api/equipes')
+    const resposta = await fetch('/api/equipes?incluir_inativas=1')
     const dados = await resposta.json()
     if (!resposta.ok || dados.erro) {
       throw new Error(dados.erro || 'Erro ao carregar as equipes.')

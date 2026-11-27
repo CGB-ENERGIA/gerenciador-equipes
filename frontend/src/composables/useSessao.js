@@ -7,6 +7,7 @@ const usuario = ref(null)
 const niveis = ref([])
 const tiposVinculo = ref({})
 const setoresNegocio = ref([])
+const setoresIndiretos = ref([])
 const carregada = ref(false)
 
 // Tipo, setor, coordenador e supervisor escolhidos nos filtros do Resumo e do
@@ -30,6 +31,7 @@ async function buscarSessao() {
   niveis.value = dados.niveis || []
   tiposVinculo.value = dados.tipos_vinculo || {}
   setoresNegocio.value = dados.setores_negocio || []
+  setoresIndiretos.value = dados.setores_indiretos || []
   carregada.value = true
 
   return usuario.value
@@ -164,6 +166,7 @@ export function useSessao() {
     niveis,
     tiposVinculo,
     setoresNegocio,
+    setoresIndiretos,
     autenticado: computed(() => Boolean(usuario.value)),
     temPermissao: permissao =>
       Boolean(usuario.value?.permissoes?.includes(permissao)),
@@ -182,6 +185,7 @@ export function useSessao() {
 // Permissões, iguais às do auth.py
 export const PODE_VER_RESUMO = 'ver_resumo'
 export const PODE_VER_EQUIPES = 'ver_equipes'
+export const PODE_VER_INDIRETOS = 'ver_indiretos'
 export const PODE_REMOVER_ALOCACAO = 'remover_alocacao'
 export const PODE_GERENCIAR_VAGAS = 'gerenciar_vagas'
 export const PODE_GERENCIAR_USUARIOS = 'gerenciar_usuarios'

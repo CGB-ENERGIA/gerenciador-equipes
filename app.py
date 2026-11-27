@@ -50,7 +50,7 @@ app = Flask(__name__, static_folder=None, template_folder=None)
 import database.responsaveis_vaga  # noqa: E402,F401
 
 # rotas da página Indiretos (alocação nominal do pessoal indireto)
-from indiretos import bp as bp_indiretos, subsetor_efetivo  # noqa: E402
+from indiretos import bp as bp_indiretos, setores_de_indiretos, subsetor_efetivo, topo_do_setor  # noqa: E402
 
 app.register_blueprint(bp_indiretos)
 
@@ -558,6 +558,7 @@ def obter_sessao():
     session = SessionLocal()
     try:
         niveis = niveis_para_tela(session)
+        setores_indiretos = setores_de_indiretos(session) if usuario else []
     finally:
         session.close()
 
@@ -567,6 +568,7 @@ def obter_sessao():
         "niveis": niveis,
         "tipos_vinculo": auth.TIPOS_VINCULO,
         "setores_negocio": list(SETORES_NEGOCIO),
+        "setores_indiretos": setores_indiretos,
     })
 
 
@@ -696,6 +698,10 @@ def obter_resumo():
         supervisores_existentes = set()
 
         for equipe in equipes:
+            # equipe inativa não existe para o Resumo
+            if not equipe.ATIVA:
+                continue
+
             if not auth.equipe_visivel(
                 usuario, equipe.BASE, tipos_e_setores_da_equipe(equipe), equipe_id=equipe.id,
             ):
@@ -786,14 +792,19 @@ def obter_resumo():
                     "tipo": chave,
                     "folguista": folguista,
                     "prefixos": set(),
+                    "prefixos_extra": set(),
                     "funcoes": {},
                 })
                 grupo["prefixos"].add(prefixo)
+                if equipe.EXTRA:
+                    grupo["prefixos_extra"].add(prefixo)
 
                 registro = grupo["funcoes"].setdefault(
                     funcao_exibicao, {"vagas": 0, "alocados": 0, "extra": 0}
                 )
-                vaga_extra = eh_extra(composicao)
+                # vaga de Folguista Extra ou de uma equipe extra: conta como
+                # alocado (realizado), não como vaga prevista
+                vaga_extra = eh_extra(composicao) or bool(equipe.EXTRA)
                 if not vaga_extra:
                     registro["vagas"] += 1
 
@@ -876,6 +887,7 @@ def obter_resumo():
                     # prefixos das equipes que compoem a contagem, para a lista
                     # aberta ao clicar no numero de equipes
                     "prefixos": sorted(dados_grupo["prefixos"]),
+                    "prefixos_extra": sorted(dados_grupo["prefixos_extra"]),
                     "funcoes": funcoes,
                     "vagas": vagas,
                     "alocados": alocados,
@@ -1059,7 +1071,7 @@ def obter_pessoas_nao_alocadas():
                 "base": dados_base["nome"],
                 "codigo": dados_base["codigo"],
                 "afastado": bool(colab.AFASTADO),
-                "justificativa": colab.JUSTIFICATIVA_AFASTAMENTO or "",
+                "justificativa": justificativa_visivel(colab),
                 **dados_afastamento(colab),
             })
 
@@ -1100,6 +1112,10 @@ def exportar_pessoas_resumo():
     chapas_alocadas = chapas_da_lista("alocadas")
     chapas_nao_alocadas = chapas_da_lista("nao_alocadas")
 
+    # afastamento e desligamento (marcação, justificativa, data e quem
+    # registrou) só saem no arquivo de Administrador, Gerente e Coordenador
+    eh_administrador = auth.pode_ver_motivo_fora_de_operacao(auth.usuario_logado())
+
     session = SessionLocal()
     try:
         colaboradores = session.query(Colaborador).order_by(Colaborador.NOME).all()
@@ -1126,6 +1142,30 @@ def exportar_pessoas_resumo():
             .all()
         }
 
+        # A tela diz QUEM (para respeitar os filtros dela), mas o servidor só
+        # entrega o que o escopo da conta alcança: quem altera a lista na
+        # requisição não ganha acesso a pessoas de outras equipes e bases.
+        usuario = auth.usuario_logado()
+        bases_do_escopo = bases_visiveis_do_usuario(session, usuario)
+
+        def alocada_no_escopo(vaga):
+            return vaga_no_escopo(usuario, vaga.equipe, vaga)
+
+        chapas_alocadas = [
+            c for c in chapas_alocadas
+            if c in vagas and alocada_no_escopo(vagas[c])
+        ]
+        chapas_nao_alocadas = [
+            c for c in chapas_nao_alocadas
+            if c not in vagas
+            and (por_chapa.get(c) is not None)
+            and (por_chapa[c].TIPO_FUNÇÃO or "").upper() == "DIRETO"
+            and (
+                bases_do_escopo is None
+                or base_da_secao(por_chapa[c].SEÇÃO)["codigo"] in bases_do_escopo
+            )
+        ]
+
         def cadastro(colaborador):
             return {
                 "FUNÇÃO NO CADASTRO": colaborador.FUNÇÃO or "",
@@ -1151,7 +1191,7 @@ def exportar_pessoas_resumo():
                 "EQUIPE": equipe.PREFIXO if equipe else "",
                 "TIPO EQUIPE": tipo_equipe_da_vaga(vaga),
                 "FUNÇÃO DA VAGA": vaga.FUNÇÃO_ER or "",
-                "VAGA": "EXTRA" if eh_extra(vaga) else "PADRÃO",
+                "VAGA": "EXTRA" if (eh_extra(vaga) or (equipe and equipe.EXTRA)) else "PADRÃO",
                 "SETOR": vaga.SETOR or "",
                 "SUPERVISOR": vaga.SUPERVISOR or "",
                 "COORDENADOR": vaga.COORDENADOR or "",
@@ -1204,7 +1244,10 @@ def exportar_pessoas_resumo():
         alocacoes_por_chapa = {a.CHAPA: a for a in alocacoes_indiretos}
         for alocacao in alocacoes_indiretos:
             colaborador = por_chapa.get(alocacao.CHAPA)
-            responsavel = por_chapa.get(alocacao.RESPONSAVEL_CHAPA)
+            # RESPONSÁVEL é o topo do setor; o chefe imediato vai em coluna própria
+            chapa_topo = topo_do_setor(alocacoes_por_chapa, alocacao.CHAPA)
+            responsavel = por_chapa.get(chapa_topo)
+            imediato = por_chapa.get(alocacao.RESPONSAVEL_CHAPA)
             indiretos.append({
                 "SETOR": alocacao.SETOR,
                 "SUBSETOR": subsetor_efetivo(alocacoes_por_chapa, alocacao.CHAPA) or "GERAL",
@@ -1215,8 +1258,10 @@ def exportar_pessoas_resumo():
                 # a escolhida na página Indiretos, se houver (migrations/020)
                 "FUNÇÃO NO SETOR": alocacao.FUNCAO
                 or ((colaborador.FUNÇÃO or "") if colaborador else ""),
-                "CHAPA RESPONSÁVEL": alocacao.RESPONSAVEL_CHAPA or "",
+                "CHAPA RESPONSÁVEL": chapa_topo,
                 "RESPONSÁVEL": responsavel.NOME if responsavel else "",
+                "CHAPA CHEFE IMEDIATO": alocacao.RESPONSAVEL_CHAPA or "",
+                "CHEFE IMEDIATO": imediato.NOME if imediato else "",
                 "OBSERVAÇÃO": alocacao.OBSERVACAO or "",
                 "ALOCADO POR": alocacao.ALOCADO_POR or "",
                 "ALOCADO EM": data_br(alocacao.ALOCADO_EM),
@@ -1225,10 +1270,11 @@ def exportar_pessoas_resumo():
 
         # ---------- Colaboradores (cadastro inteiro)
         df_colaboradores = montar_consulta_colaboradores(session, colaboradores)
-        df_colaboradores["AFASTADO"] = [
-            "SIM" if c.AFASTADO and not c.DATA_DESLIGAMENTO else "" for c in colaboradores
-        ]
-        df_colaboradores["DESLIGAMENTO"] = [data_br(c.DATA_DESLIGAMENTO) for c in colaboradores]
+        if eh_administrador:
+            df_colaboradores["AFASTADO"] = [
+                "SIM" if c.AFASTADO and not c.DATA_DESLIGAMENTO else "" for c in colaboradores
+            ]
+            df_colaboradores["DESLIGAMENTO"] = [data_br(c.DATA_DESLIGAMENTO) for c in colaboradores]
         df_colaboradores["ADMISSÃO"] = [data_br(c.ADMISSÃO) for c in colaboradores]
         df_colaboradores["OBSERVAÇÃO"] = [c.OBSERVACAO or "" for c in colaboradores]
 
@@ -1236,6 +1282,14 @@ def exportar_pessoas_resumo():
             "FUNÇÃO NO CADASTRO", "SEÇÃO", "TIPO CCUSTO", "RATEIO_FUNCIONARIO",
             "GRPCCUSTO", "SITUAÇÃO", "ADMISSÃO", "OBSERVAÇÃO",
         ]
+        colunas_fora_operacao = (
+            [
+                "FORA DE OPERAÇÃO", "JUSTIFICATIVA",
+                "JUSTIFICADO POR", "DATA DA JUSTIFICATIVA",
+            ]
+            if eh_administrador
+            else []
+        )
         abas = [
             ("Pessoas alocadas", pd.DataFrame(alocadas, columns=[
                 "BASE", "EQUIPE", "TIPO EQUIPE", "FUNÇÃO DA VAGA", "VAGA", "SETOR",
@@ -1243,12 +1297,12 @@ def exportar_pessoas_resumo():
             ])),
             ("Pessoas não alocadas", pd.DataFrame(nao_alocadas, columns=[
                 "CHAPA", "COLABORADOR", "BASE (CADASTRO)", *colunas_cadastro,
-                "FORA DE OPERAÇÃO", "JUSTIFICATIVA",
-                "JUSTIFICADO POR", "DATA DA JUSTIFICATIVA",
+                *colunas_fora_operacao,
             ])),
             ("Indiretos", pd.DataFrame(indiretos, columns=[
                 "SETOR", "SUBSETOR", "BASE", "CHAPA", "COLABORADOR", "FUNÇÃO NO CADASTRO",
-                "FUNÇÃO NO SETOR", "CHAPA RESPONSÁVEL", "RESPONSÁVEL", "OBSERVAÇÃO", "ALOCADO POR", "ALOCADO EM",
+                "FUNÇÃO NO SETOR", "CHAPA RESPONSÁVEL", "RESPONSÁVEL",
+                "CHAPA CHEFE IMEDIATO", "CHEFE IMEDIATO", "OBSERVAÇÃO", "ALOCADO POR", "ALOCADO EM",
             ])),
             ("Colaboradores", df_colaboradores),
         ]
@@ -1268,11 +1322,23 @@ def exportar_pessoas_resumo():
                 [
                     ("O que é", "Exportação do Resumo. É só consulta: o sistema não lê este arquivo de volta."),
                     ("Pessoas alocadas", "Quem ocupa uma vaga, entre as pessoas que a tela mostrava com os filtros do momento: equipe, disciplina, vaga, setor, supervisor, coordenador e os dados do cadastro."),
-                    ("Pessoas não alocadas", "Quem está no quadro e não ocupa vaga (com os mesmos filtros), com o motivo de estar fora de operação: afastamento (justificativa, quem justificou e a data) ou desligamento (data do desligamento)."),
-                    ("Indiretos", "Todos os indiretos alocados na página Indiretos: setor, base e responsável."),
+                    (
+                        "Pessoas não alocadas",
+                        "Quem está no quadro e não ocupa vaga (com os mesmos filtros)"
+                        + (
+                            ", com o motivo de estar fora de operação: afastamento (justificativa, quem justificou e a data) ou desligamento (data do desligamento)."
+                            if eh_administrador
+                            else "."
+                        ),
+                    ),
+                    ("Indiretos", "Todos os indiretos alocados na página Indiretos: setor, base, responsável (o topo do setor) e chefe imediato."),
                     ("Colaboradores", "O cadastro inteiro, sem filtro."),
                     ("OBSERVAÇÃO", "Nas abas de pessoas e Colaboradores, a observação do colaborador escrita no Banco de Dados (ex.: férias). Na aba Indiretos, a observação da alocação no setor."),
-                    ("AFASTADO", "Linhas com SIM aparecem destacadas em amarelo."),
+                    *(
+                        [("AFASTADO", "Linhas com SIM aparecem destacadas em amarelo.")]
+                        if eh_administrador
+                        else []
+                    ),
                 ],
                 legenda=False,
             )
@@ -1333,7 +1399,7 @@ def obter_pessoas_afastadas():
                 "secao_sistema": str(colaborador.SEÇÃO_TRATADA).strip()
                 if colaborador.SEÇÃO_TRATADA
                 else base_da_secao(colaborador.SEÇÃO)["nome"],
-                "justificativa": colaborador.JUSTIFICATIVA_AFASTAMENTO or "",
+                "justificativa": justificativa_visivel(colaborador),
                 **dados_afastamento(colaborador),
             })
 
@@ -1367,8 +1433,13 @@ def obter_equipes():
             .all()
         )
 
+        # equipe inativa só aparece onde se cadastra (?incluir_inativas=1)
+        incluir_inativas = request.args.get("incluir_inativas") == "1"
+
         resultado = []
         for equipe in equipes:
+            if not equipe.ATIVA and not incluir_inativas:
+                continue
             if not auth.equipe_visivel(
                 usuario, equipe.BASE, tipos_e_setores_da_equipe(equipe), equipe_id=equipe.id,
             ):
@@ -1414,6 +1485,8 @@ def obter_equipes():
                 "tipos": tipos_da_equipe(equipe),
                 "setores": setores_da_equipe(equipe),
                 "folguista": eh_folguista(equipe.PREFIXO),
+                "extra": bool(equipe.EXTRA),
+                "ativa": bool(equipe.ATIVA),
                 "vagas": vagas,
             })
 
@@ -1489,6 +1562,10 @@ def criar_equipe():
             return jsonify({"erro": "Já existe uma equipe com essa base e prefixo."}), 400
 
         equipe = Equipe(BASE=base, PREFIXO=prefixo)
+        if "extra" in dados:
+            if not (auth.usuario_logado() or {}).get("ignora_vinculos"):
+                return jsonify({"erro": "Só o Administrador marca uma equipe como extra."}), 403
+            equipe.EXTRA = bool(dados.get("extra"))
         session.add(equipe)
         session.commit()
 
@@ -1567,6 +1644,29 @@ def atualizar_equipe(equipe_id):
         equipe.BASE = base
         equipe.PREFIXO = prefixo
 
+        # Equipe extra e equipe inativa: só o Administrador muda. Inativar
+        # deixa os colaboradores livres (sem vaga) e a equipe sai das listas.
+        liberados = 0
+        for campo, atual in (("extra", bool(equipe.EXTRA)), ("ativa", bool(equipe.ATIVA))):
+            if campo in dados and bool(dados.get(campo)) != atual:
+                if not (auth.usuario_logado() or {}).get("ignora_vinculos"):
+                    return jsonify({
+                        "erro": "Só o Administrador altera se a equipe é extra ou está ativa."
+                    }), 403
+        if "extra" in dados:
+            equipe.EXTRA = bool(dados.get("extra"))
+        if "ativa" in dados:
+            nova_ativa = bool(dados.get("ativa"))
+            if equipe.ATIVA and not nova_ativa:
+                for composicao in equipe.composicoes:
+                    if composicao.membro:
+                        session.delete(composicao.membro)
+                        liberados += 1
+                if liberados:
+                    session.flush()
+                    session.refresh(equipe)
+            equipe.ATIVA = nova_ativa
+
         # edicao completa (opcional): setor/supervisor/coordenador propagados
         # para TODAS as vagas padrao da equipe, e quantidade de vagas por
         # (tipo, funcao) reaproveitando o mesmo motor de diff da planilha.
@@ -1638,7 +1738,11 @@ def atualizar_equipe(equipe_id):
 
         return jsonify({
             "sucesso": True,
-            "equipe": {"id": equipe.id, "base": equipe.BASE, "prefixo": equipe.PREFIXO},
+            "liberados": liberados,
+            "equipe": {
+                "id": equipe.id, "base": equipe.BASE, "prefixo": equipe.PREFIXO,
+                "extra": bool(equipe.EXTRA), "ativa": bool(equipe.ATIVA),
+            },
         })
     except EntradaInvalida as erro:
         session.rollback()
@@ -2004,6 +2108,24 @@ def vaga_no_escopo(usuario, equipe, composicao):
     listagem/resumo/exportacao — nao para decidir se a equipe aparece
     (isso continua com auth.equipe_visivel).
     """
+    if (usuario or {}).get("le_tudo"):
+        return True
+
+    return auth.pode_atuar_na_base_e_tipo(
+        usuario,
+        equipe.BASE,
+        tipo_equipe_da_vaga(composicao),
+        setor=composicao.SETOR,
+        equipe_id=equipe.id,
+    )
+
+
+def vaga_extra_no_escopo_de_escrita(usuario, equipe, composicao):
+    """Escopo para ALTERAR (excluir a vaga extra ou tirar o ocupante dela) —
+    diferente de vaga_no_escopo, que é para LER. O perfil Indireto lê tudo,
+    mas nunca altera a operação."""
+    if (usuario or {}).get("le_tudo"):
+        return False
     return auth.pode_atuar_na_base_e_tipo(
         usuario,
         equipe.BASE,
@@ -2082,8 +2204,44 @@ def montar_planilha_equipes(session):
     return pd.DataFrame(linhas, columns=list(COLUNAS_FIXAS_PLANILHA) + funcoes)
 
 
+def bases_visiveis_do_usuario(session, usuario):
+    """Códigos das bases das equipes que a conta enxerga, ou None quando ela
+    enxerga todas (Administrador e perfil Indireto). É o escopo dos "não
+    alocados" no Resumo: quem está sem vaga é visto pela base do cadastro."""
+    if not usuario or usuario.get("ignora_vinculos") or usuario.get("le_tudo"):
+        return None
+    codigos = set()
+    for equipe in (
+        session.query(Equipe)
+        .options(joinedload(Equipe.composicoes))
+        .all()
+    ):
+        if auth.equipe_visivel(
+            usuario, equipe.BASE, tipos_e_setores_da_equipe(equipe), equipe_id=equipe.id
+        ):
+            codigos.add(DE_PARA_BASES.get(normalizar(equipe.BASE or ""), equipe.BASE))
+    return codigos
+
+
+def justificativa_visivel(colaborador):
+    """A justificativa do afastamento, só para quem pode ver o motivo."""
+    if not auth.pode_ver_motivo_fora_de_operacao(auth.usuario_logado()):
+        return ""
+    return colaborador.JUSTIFICATIVA_AFASTAMENTO or ""
+
+
 def dados_afastamento(colaborador):
-    """Quem marcou o afastamento e quando, no formato das tabelas."""
+    """Quem marcou o afastamento e quando, no formato das tabelas. Quem não
+    pode ver o motivo (ver auth.pode_ver_motivo_fora_de_operacao) recebe só os
+    campos vazios: sabe que a pessoa está fora de operação (o campo
+    "afastado"), sem justificativa, data, tipo nem quem registrou."""
+    if not auth.pode_ver_motivo_fora_de_operacao(auth.usuario_logado()):
+        return {
+            "afastado_por": "",
+            "afastado_em": "",
+            "desligado": False,
+            "data_desligamento": "",
+        }
     return {
         "afastado_por": colaborador.AFASTADO_POR or "",
         "afastado_em": (
@@ -2858,7 +3016,7 @@ def remover_vaga(vaga_id):
         if auth.GERENCIAR_VAGAS not in (usuario.get("permissoes") or ()) and not eh_extra(vaga):
             return jsonify({"erro": "Seu nível de acesso não permite esta ação."}), 403
 
-        if not vaga_no_escopo(usuario, vaga.equipe, vaga):
+        if not vaga_extra_no_escopo_de_escrita(usuario, vaga.equipe, vaga):
             return jsonify({"erro": "Seu acesso não cobre a base ou o tipo de equipe desta vaga."}), 403
 
         if vaga.membro:
@@ -3550,7 +3708,7 @@ def obter_opcoes_alocacao():
             base = str(equipe.BASE).strip() if equipe.BASE is not None else ""
             prefixo = str(equipe.PREFIXO).strip() if equipe.PREFIXO is not None else ""
 
-            if not base:
+            if not base or not equipe.ATIVA:
                 continue
 
             if base not in resultado:
@@ -3631,7 +3789,7 @@ def obter_colaboradores():
                 "codigo_base": dados_base["codigo"],
                 "alocado": chapa in chapas_alocadas,
                 "afastado": bool(colaborador.AFASTADO),
-                "justificativa_afastamento": colaborador.JUSTIFICATIVA_AFASTAMENTO or "",
+                "justificativa_afastamento": justificativa_visivel(colaborador),
                 **dados_afastamento(colaborador),
                 **dados_tipo_funcao(colaborador),
                 **dados_observacao(colaborador),
@@ -4576,6 +4734,9 @@ def alocar_colaborador():
                     "erro": "Seu acesso não cobre a base ou o tipo de equipe desta vaga."
                 }), 403
 
+            if equipe_da_vaga is not None and not equipe_da_vaga.ATIVA:
+                return jsonify({"erro": "Esta equipe está inativa."}), 400
+
             if composicao.membro:
                 return jsonify({"erro": "Esta vaga já está ocupada."}), 400
 
@@ -4711,7 +4872,11 @@ def afastar_colaborador():
                 "chapa": chapa,
                 "nome": colaborador.NOME or "",
                 "afastado": True,
-                "justificativa_afastamento": justificativa,
+                "justificativa_afastamento": (
+                    justificativa
+                    if auth.pode_ver_motivo_fora_de_operacao(auth.usuario_logado())
+                    else ""
+                ),
                 **dados_resposta_afastamento,
             },
         })
@@ -4960,7 +5125,7 @@ def remover_colaborador():
         # permissao REMOVER_ALOCACAO (ex.: usuarios nao administradores), mas
         # ainda precisa do vinculo. Qualquer outra vaga exige a checagem normal.
         if composicao and eh_extra(composicao):
-            permitido = vaga_no_escopo(usuario, equipe_da_vaga, composicao)
+            permitido = vaga_extra_no_escopo_de_escrita(usuario, equipe_da_vaga, composicao)
         else:
             permitido = auth.pode_realizar_operacao(
                 usuario,
@@ -5046,6 +5211,8 @@ def editar_alocacao():
                 }), 400
 
             equipe_da_vaga = composicao.equipe
+            if equipe_da_vaga is not None and not equipe_da_vaga.ATIVA:
+                return jsonify({"erro": "Esta equipe está inativa."}), 400
             if not auth.pode_realizar_operacao(
                 auth.usuario_logado(),
                 auth.OPERACAO_EDITAR,
@@ -5178,6 +5345,7 @@ def dados_do_formulario_usuario(dados):
         "vinculos": dados.get("vinculos") or {},
         "responsavel_id": responsavel_id,
         "chapa": chapa or None,
+        "perfil": auth.normalizar_perfil(dados.get("perfil")),
     }, None
 
 
@@ -5310,6 +5478,7 @@ def criar_usuario():
             SENHA_HASH=auth.gerar_hash_senha(senha),
             RESPONSAVEL_ID=campos["responsavel_id"],
             CHAPA=campos["chapa"],
+            PERFIL=campos["perfil"],
         )
         session.add(usuario)
         session.flush()
@@ -5415,6 +5584,7 @@ def atualizar_usuario(usuario_id):
             usuario.PENDENTE = False
         usuario.RESPONSAVEL_ID = campos["responsavel_id"]
         usuario.CHAPA = campos["chapa"]
+        usuario.PERFIL = campos["perfil"]
 
         if senha:
             usuario.SENHA_HASH = auth.gerar_hash_senha(senha)

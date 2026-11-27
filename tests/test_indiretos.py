@@ -240,7 +240,7 @@ def test_gerente_sem_base_e_responsavel_fica_acima_de_todos(sessao, monkeypatch)
     sessao.commit()
     monkeypatch.setattr(indiretos, "SessionLocal", lambda: sessao)
     monkeypatch.setattr(sessao, "close", lambda: None)
-    monkeypatch.setattr(auth, "usuario_logado", lambda: {"ignora_vinculos": True, "nome": "T"})
+    monkeypatch.setattr(auth, "usuario_logado", lambda: {"ignora_vinculos": True, "nome": "T", "permissoes": ["ver_indiretos"]})
     monkeypatch.setattr(indiretos, "quem_esta_logado", lambda: "T")
     app = Flask(__name__)
     app.register_blueprint(indiretos.bp)
@@ -266,7 +266,7 @@ def test_setor_inteiro_ligado_ao_gerente(sessao, monkeypatch):
     sessao.commit()
     monkeypatch.setattr(indiretos, "SessionLocal", lambda: sessao)
     monkeypatch.setattr(sessao, "close", lambda: None)
-    monkeypatch.setattr(auth, "usuario_logado", lambda: {"ignora_vinculos": True, "nome": "T"})
+    monkeypatch.setattr(auth, "usuario_logado", lambda: {"ignora_vinculos": True, "nome": "T", "permissoes": ["ver_indiretos"]})
     monkeypatch.setattr(indiretos, "quem_esta_logado", lambda: "T")
     app = Flask(__name__)
     app.register_blueprint(indiretos.bp)
@@ -304,7 +304,7 @@ def cliente_da_api(sessao, monkeypatch):
     import auth
     monkeypatch.setattr(indiretos, "SessionLocal", lambda: sessao)
     monkeypatch.setattr(sessao, "close", lambda: None)
-    monkeypatch.setattr(auth, "usuario_logado", lambda: {"ignora_vinculos": True, "nome": "T"})
+    monkeypatch.setattr(auth, "usuario_logado", lambda: {"ignora_vinculos": True, "nome": "T", "permissoes": ["ver_indiretos"]})
     monkeypatch.setattr(indiretos, "quem_esta_logado", lambda: "T")
     app = Flask(__name__)
     app.register_blueprint(indiretos.bp)
@@ -519,7 +519,7 @@ def test_planilha_baixa_no_formato_do_bid(sessao, monkeypatch):
     resposta = cliente.get("/api/indiretos/planilha")
     assert resposta.status_code == 200
     abas = pd.read_excel(io.BytesIO(resposta.data), sheet_name=None)
-    assert list(abas["Alocação"].columns[:3]) == ["SETOR", "FUNÇÃO (BID)", "CHAPA INDIRETO"]
+    assert list(abas["Alocação"].columns[:4]) == ["SETOR", "FUNÇÃO (BID)", "NOME INDIRETO", "CHAPA INDIRETO"]
 
 
 def test_planilha_traz_e_aceita_extras_com_bid_em_branco(sessao, monkeypatch):
@@ -537,7 +537,7 @@ def test_planilha_traz_e_aceita_extras_com_bid_em_branco(sessao, monkeypatch):
 
     # baixada: a vaga e, no fim do setor, o extra com FUNÇÃO (BID) em branco
     baixada = baixar_planilha(cliente)
-    assert baixada[["FUNÇÃO (BID)", "CHAPA INDIRETO"]].values.tolist() == [["TEC", "100"], ["", "101"]]
+    assert baixada[["FUNÇÃO (BID)", "NOME INDIRETO"]].values.tolist() == [["TEC", "ANA INDIRETA"], ["", "BRUNO INDIRETO"]]
     # reenviar sem mexer: nada muda
     previa = cliente.post("/api/indiretos/planilha/previa",
                           data={"arquivo": (io.BytesIO(cliente.get("/api/indiretos/planilha").data), "p.xlsx")})
@@ -616,3 +616,157 @@ def test_posicionar_vagas_no_organograma(sessao, monkeypatch):
     assert cliente.post(url, json={"vaga_ids": [a.id], "base": "XYZ"}).status_code == 400
     assert cliente.post(url, json={"vaga_ids": [a.id], "responsavel_chapa": "777"}).status_code == 404
     assert cliente.post(url, json={"vaga_ids": [a.id, c.id]}).status_code == 400
+
+
+# ------------------------------------------------------------
+# Responsável = topo do setor; chefe imediato; planilha preenchida pelo nome
+# ------------------------------------------------------------
+
+def arvore_do_setor(sessao):
+    """CHEFE UM (900) no topo do ALMOXARIFADO, CHEFE DOIS (901) abaixo dele e
+    ANA (100) abaixo do 901 — o 'Pryscilla -> Joselma -> Sylas'."""
+    sessao.query(Colaborador).filter_by(CHAPA="901").update({"TIPO_FUNÇÃO": "INDIRETO"})
+    sessao.add_all([
+        AlocacaoIndireto(CHAPA="900", SETOR="ALMOXARIFADO", BASE="BCB", RESPONSAVEL_CHAPA="900"),
+        AlocacaoIndireto(CHAPA="901", SETOR="ALMOXARIFADO", BASE="BCB", RESPONSAVEL_CHAPA="900"),
+        AlocacaoIndireto(CHAPA="100", SETOR="ALMOXARIFADO", BASE="BCB", RESPONSAVEL_CHAPA="901"),
+    ])
+    sessao.commit()
+
+
+def alocacoes_por_chapa(sessao):
+    return {a.CHAPA: a for a in sessao.query(AlocacaoIndireto).all()}
+
+
+def test_topo_do_setor_e_o_mais_alto_da_cadeia_e_nao_o_chefe_imediato(sessao):
+    arvore_do_setor(sessao)
+    todas = alocacoes_por_chapa(sessao)
+    assert indiretos.topo_do_setor(todas, "100") == "900"   # nao o 901
+    assert indiretos.topo_do_setor(todas, "901") == "900"
+    assert indiretos.topo_do_setor(todas, "900") == "900"
+
+
+def test_responsavel_por_base_e_o_topo_daquela_base(sessao):
+    arvore_do_setor(sessao)
+    todas = alocacoes_por_chapa(sessao)
+    todas["901"].BASES_RESPONSAVEL = "BCB"
+    assert indiretos.topo_do_setor(todas, "100") == "901"
+
+
+def test_topo_para_no_chefe_de_outro_setor_e_nao_entra_em_ciclo(sessao):
+    sessao.add_all([
+        AlocacaoIndireto(CHAPA="900", SETOR="FROTA", BASE="BCB", RESPONSAVEL_CHAPA="900"),
+        AlocacaoIndireto(CHAPA="100", SETOR="ALMOXARIFADO", BASE="BCB", RESPONSAVEL_CHAPA="900"),
+        AlocacaoIndireto(CHAPA="101", SETOR="ALMOXARIFADO", BASE="BCB", RESPONSAVEL_CHAPA="101"),
+    ])
+    sessao.commit()
+    todas = alocacoes_por_chapa(sessao)
+    assert indiretos.topo_do_setor(todas, "100") == "900"   # o chefe dele e quem responde
+    assert indiretos.topo_do_setor(todas, "101") == "101"
+
+
+def test_topo_pode_ser_alguem_que_nao_esta_alocado(sessao):
+    # a gerente do setor so existe no cadastro: continua sendo o responsavel
+    sessao.add_all([
+        AlocacaoIndireto(CHAPA="100", SETOR="ADMINISTRATIVO", BASE="BCB", RESPONSAVEL_CHAPA="900"),
+        AlocacaoIndireto(CHAPA="101", SETOR="ADMINISTRATIVO", BASE="BCB", RESPONSAVEL_CHAPA="100"),
+    ])
+    sessao.commit()
+    todas = alocacoes_por_chapa(sessao)
+    assert indiretos.topo_do_setor(todas, "100") == "900"
+    assert indiretos.topo_do_setor(todas, "101") == "900"
+
+
+def test_planilha_baixada_traz_o_topo_como_responsavel_e_o_chefe_imediato(sessao, monkeypatch):
+    arvore_do_setor(sessao)
+    cliente = cliente_da_api(sessao, monkeypatch)
+    tabela = baixar_planilha(cliente).set_index("NOME INDIRETO")
+    # a Ana responde ao CHEFE DOIS, que responde ao CHEFE UM (topo)
+    assert tabela.loc["ANA INDIRETA", "NOME RESPONSÁVEL"] == "CHEFE UM"
+    assert tabela.loc["ANA INDIRETA", "NOME CHEFE IMEDIATO"] == "CHEFE DOIS"
+    # o CHEFE DOIS responde direto ao topo: chefe imediato em branco
+    assert tabela.loc["CHEFE DOIS", "NOME RESPONSÁVEL"] == "CHEFE UM"
+    assert tabela.loc["CHEFE DOIS", "NOME CHEFE IMEDIATO"] == ""
+
+
+def planilha_por_nome(linhas):
+    colunas = ["SETOR", "BASE", "NOME INDIRETO", "NOME RESPONSÁVEL", "NOME CHEFE IMEDIATO"]
+    arquivo = io.BytesIO()
+    with pd.ExcelWriter(arquivo, engine="openpyxl") as writer:
+        pd.DataFrame(linhas, columns=colunas).to_excel(writer, index=False, sheet_name="Alocação")
+    arquivo.seek(0)
+    return arquivo
+
+
+def linha_nome(indireto="ana indireta", responsavel="chefe um", imediato=None, setor="ALMOXARIFADO", base="BCB"):
+    return {"SETOR": setor, "BASE": base, "NOME INDIRETO": indireto,
+            "NOME RESPONSÁVEL": responsavel, "NOME CHEFE IMEDIATO": imediato}
+
+
+def test_planilha_so_com_nome_responsavel_o_chefe_imediato_e_o_proprio_responsavel(sessao):
+    plano = indiretos.analisar_planilha_indiretos(planilha_por_nome([linha_nome()]), sessao)
+    assert not plano["erros"], plano["erros"]
+    item = plano["alocar"][0]
+    assert (item["chapa"], item["responsavel_chapa"]) == ("100", "900")
+
+
+def test_planilha_com_chefe_imediato_grava_a_arvore_do_organograma(sessao):
+    plano = indiretos.analisar_planilha_indiretos(
+        planilha_por_nome([linha_nome(imediato="CHEFE DOIS")]), sessao
+    )
+    assert not plano["erros"], plano["erros"]
+    # o que fica gravado como "responde a" e o chefe imediato
+    assert plano["alocar"][0]["responsavel_chapa"] == "901"
+
+
+def test_planilha_por_nome_aceita_acento_e_caixa_diferentes(sessao):
+    plano = indiretos.analisar_planilha_indiretos(
+        planilha_por_nome([linha_nome(indireto="  Ana   Indireta ", responsavel="Chefe  Um")]), sessao
+    )
+    assert not plano["erros"], plano["erros"]
+
+
+@pytest.mark.parametrize("alteracao, trecho", [
+    ({"indireto": "FULANA QUE NAO EXISTE"}, "não está no cadastro"),
+    ({"responsavel": "CHEFE QUE NAO EXISTE"}, "não está no cadastro"),
+    ({"imediato": "NINGUEM"}, "não está no cadastro"),
+])
+def test_nome_fora_do_cadastro_vira_erro_com_o_nome(sessao, alteracao, trecho):
+    plano = indiretos.analisar_planilha_indiretos(planilha_por_nome([linha_nome(**alteracao)]), sessao)
+    assert len(plano["erros"]) == 1 and trecho in plano["erros"][0]["erro"]
+    assert not plano["alocar"]
+
+
+def test_nome_repetido_no_cadastro_pede_a_chapa(sessao):
+    sessao.add(Colaborador(CHAPA="102", NOME="ANA INDIRETA", TIPO_FUNÇÃO="INDIRETO"))
+    sessao.commit()
+    plano = indiretos.analisar_planilha_indiretos(planilha_por_nome([linha_nome()]), sessao)
+    assert "mais de uma pessoa" in plano["erros"][0]["erro"]
+
+
+def test_baixar_e_reenviar_sem_mexer_nao_muda_nada(sessao, monkeypatch):
+    arvore_do_setor(sessao)
+    cliente = cliente_da_api(sessao, monkeypatch)
+    previa = cliente.post(
+        "/api/indiretos/planilha/previa",
+        data={"arquivo": (io.BytesIO(cliente.get("/api/indiretos/planilha").data), "p.xlsx")},
+    ).get_json()
+    assert not previa["erros"], previa["erros"]
+    assert not previa["alocar"] + previa["mover"] + previa["atualizar"]
+    assert previa["sem_mudanca"] == 3
+
+
+def test_aplicar_com_chefe_imediato_nao_altera_o_responsavel_do_topo(sessao, monkeypatch):
+    arvore_do_setor(sessao)
+    cliente = cliente_da_api(sessao, monkeypatch)
+    # a Ana passa a responder direto ao CHEFE UM (imediato em branco)
+    arquivo = planilha_por_nome([
+        linha_nome(indireto="CHEFE UM", responsavel="CHEFE UM"),
+        linha_nome(indireto="CHEFE DOIS", responsavel="CHEFE UM"),
+        linha_nome(indireto="ANA INDIRETA", responsavel="CHEFE UM"),
+    ])
+    r = cliente.post("/api/indiretos/planilha/aplicar", data={"arquivo": (arquivo, "p.xlsx")})
+    assert r.status_code == 200, r.get_json()
+    todas = alocacoes_por_chapa(sessao)
+    assert todas["100"].RESPONSAVEL_CHAPA == "900"
+    assert indiretos.topo_do_setor(todas, "100") == "900"

@@ -175,7 +175,7 @@
 
         <div v-else class="row q-col-gutter-md">
           <!-- SETORES -->
-          <div :class="podeEditar ? 'col-12 col-lg-8 coluna-setores' : 'col-12'">
+          <div :class="podeAlocar ? 'col-12 col-lg-8 coluna-setores' : 'col-12'">
             <div class="row items-center q-mb-sm">
               <div class="text-h6">Setores</div>
               <q-chip dense class="q-ml-sm">{{ gruposSetor.length }}</q-chip>
@@ -354,7 +354,7 @@
                               {{ funcaoExibida(linha.pessoa) }}
                             </span>
                           </template>
-                          <template v-if="podeEditar">
+                          <template v-if="podeNoSetor(grupo.nome)">
                             <!-- alocar nas vagas direto na linha -->
                             <button
                               v-if="!linha.pessoa"
@@ -391,7 +391,7 @@
                     </q-item>
                   </q-list>
 
-                  <q-card-actions v-if="podeEditar">
+                  <q-card-actions v-if="podeNoSetor(grupo.nome)">
                     <q-btn
                       flat
                       no-caps
@@ -406,7 +406,7 @@
           </div>
 
           <!-- SEM SETOR (só para quem edita: é a lista de quem falta alocar) -->
-          <div v-if="podeEditar" class="col-12 col-lg-4 coluna-sem-setor">
+          <div v-if="podeAlocar" class="col-12 col-lg-4 coluna-sem-setor">
             <q-card class="cartao-sem-setor">
               <q-card-section>
                 <div class="row items-center no-wrap">
@@ -902,6 +902,8 @@
             emit-value
             map-options
             use-input
+            hide-selected
+            fill-input
             input-debounce="0"
             :label="alocandoGerente ? 'Responsável' : 'Responsável *'"
             :clearable="alocandoGerente"
@@ -1241,6 +1243,8 @@
                   emit-value
                   map-options
                   use-input
+                  hide-selected
+                  fill-input
                   input-debounce="0"
                   label="Responsável *"
                   :options="opcoesResponsavelSelect"
@@ -1309,6 +1313,8 @@
             emit-value
             map-options
             use-input
+            hide-selected
+            fill-input
             input-debounce="0"
             label="Novo responsável *"
             :options="opcoesResponsavelSelect"
@@ -1364,27 +1370,36 @@
             continua onde está.
           </div>
 
+          <div class="text-body2">
+            Preencha pelo <strong>nome</strong> (as chapas se preenchem sozinhas). O
+            <strong>responsável</strong> é o topo do setor; o <strong>chefe imediato</strong> é
+            quem fica logo acima da pessoa no organograma e, em branco, vale o próprio
+            responsável.
+          </div>
+
           <q-markup-table flat bordered dense class="tabela-modelo">
             <thead>
               <tr class="tabela-ocupacao__grupos">
                 <th colspan="2" class="tabela-ocupacao__grupo-bid">BID</th>
-                <th colspan="3" class="tabela-ocupacao__grupo-real">REAL</th>
+                <th colspan="4" class="tabela-ocupacao__grupo-real">REAL</th>
               </tr>
               <tr>
                 <th>SETOR</th>
                 <th>FUNÇÃO (BID)</th>
-                <th>CHAPA INDIRETO</th>
+                <th>NOME INDIRETO</th>
                 <th>BASE</th>
-                <th>CHAPA RESPONSÁVEL</th>
+                <th>NOME RESPONSÁVEL</th>
+                <th>NOME CHEFE IMEDIATO</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td>GOMAN</td>
                 <td>SUPERVISOR OPERACIONAL</td>
-                <td>12345</td>
+                <td>CARLOS SOUZA</td>
                 <td>BCB</td>
-                <td>19837</td>
+                <td>PRYSCILLA LIMA</td>
+                <td>JOSELMA ALVES</td>
               </tr>
               <tr class="linha-vaga-vazia">
                 <td>GOMAN</td>
@@ -1392,13 +1407,15 @@
                 <td></td>
                 <td></td>
                 <td></td>
+                <td></td>
               </tr>
               <tr class="linha-extra">
                 <td>GOMAN</td>
                 <td></td>
-                <td>23456</td>
+                <td>MARIA ROCHA</td>
                 <td>BCB</td>
-                <td>19837</td>
+                <td>PRYSCILLA LIMA</td>
+                <td></td>
               </tr>
             </tbody>
           </q-markup-table>
@@ -1546,18 +1563,33 @@ import CabecalhoApp from '../components/CabecalhoApp.vue'
 import MarcaDaguaFundo from '../components/MarcaDaguaFundo.vue'
 import OrganogramaNo from '../components/OrganogramaNo.vue'
 import SelectFiltroMultiplo from '../components/SelectFiltroMultiplo.vue'
-import { PODE_VER_EQUIPES, useSessao } from '../composables/useSessao'
+import { PODE_VER_INDIRETOS, useSessao } from '../composables/useSessao'
 import { useConfirmacao } from '../composables/useConfirmacao'
 import { proximaSelecaoMultipla } from '../utils/equipes'
 
 // mesmas regras do Banco de Dados; enquanto a página está em liberação
 // gradual, só o Administrador abre (ver router/index.js e indiretos.py)
-definePage({ meta: { permissao: PODE_VER_EQUIPES } })
+definePage({ meta: { permissao: PODE_VER_INDIRETOS } })
 
 // Todos que veem equipes consultam a página; editar (alocar, mover, trocar
 // responsável, planilha) é só do Administrador — o servidor também barra.
 const { usuario } = useSessao()
 const podeEditar = computed(() => Boolean(usuario.value?.ignora_vinculos))
+
+// Conta de perfil Indireto: aloca e remove só nos setores do vínculo (o
+// servidor devolve a lista e também barra o resto). O restante da edição —
+// BID, responsáveis, organograma, planilha — fica com o Administrador.
+const setoresPermitidos = ref([])
+const podeAlocar = computed(() => podeEditar.value || setoresPermitidos.value.length > 0)
+
+function podeNoSetor(nome) {
+  if (podeEditar.value) return true
+  const setor = String(nome || '').trim().toUpperCase()
+  return (
+    setor !== SETOR_GERENCIA &&
+    (setoresPermitidos.value.includes('TODOS') || setoresPermitidos.value.includes(setor))
+  )
+}
 
 const { confirmar } = useConfirmacao()
 
@@ -1599,6 +1631,7 @@ async function carregar() {
     setoresGerencia.value = dados.setores_gerencia || []
     funcoes.value = dados.funcoes || []
     vagas.value = dados.vagas || []
+    setoresPermitidos.value = dados.pode_alterar?.setores || []
   } catch (e) {
     if (minhaSequencia === sequenciaCarga) {
       erro.value = e.message || 'Erro ao carregar os indiretos.'
@@ -3413,7 +3446,9 @@ function filtrarPessoas(termo, atualizar) {
 
 const opcoesSetorDialogo = computed(() => {
   const termo = termoSetor.value.toLowerCase()
-  return nomesSetores.value.filter(nome => !termo || nome.toLowerCase().includes(termo))
+  return nomesSetores.value.filter(
+    nome => podeNoSetor(nome) && (!termo || nome.toLowerCase().includes(termo))
+  )
 })
 
 function filtrarSetores(termo, atualizar) {

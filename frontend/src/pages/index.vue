@@ -936,6 +936,12 @@
                           >
                             <q-tooltip>Ver componentes e funções</q-tooltip>
                           </q-btn>
+                          <q-badge
+                            v-if="props.row.extra"
+                            color="deep-purple-5"
+                            class="q-ml-xs"
+                            label="EXTRA"
+                          />
                         </q-td>
                       </q-tr>
 
@@ -1080,8 +1086,12 @@ import {
 // mantem /resumo valendo como atalho para a tela principal
 definePage({ alias: '/resumo', meta: { permissao: PODE_VER_RESUMO } })
 
-const { lerBasesSelecionadas, gravarBasesSelecionadas, filtrosCompartilhados } =
+const { usuario, lerBasesSelecionadas, gravarBasesSelecionadas, filtrosCompartilhados } =
   useSessao()
+
+// Administrador, Gerente e Coordenador veem o motivo de estar fora de operação
+// (justificativa, desligamento, quem registrou); os demais só veem a marca.
+const veMotivo = computed(() => Boolean(usuario.value?.ve_motivo))
 
 // ============================================================
 // ESTADO
@@ -1259,7 +1269,11 @@ const equipesLinhas = computed(() => {
       (base.grupos || [])
         .filter(grupo => grupo.rotulo === rotulo)
         .flatMap(grupo =>
-          (grupo.prefixos || []).map(prefixo => ({ base: base.base, prefixo }))
+          (grupo.prefixos || []).map(prefixo => ({
+            base: base.base,
+            prefixo,
+            extra: (grupo.prefixos_extra || []).includes(prefixo)
+          }))
         )
     )
     .sort(
@@ -1624,7 +1638,7 @@ const colunasDisponiveis = computed(() => {
   return colunas
 })
 
-const colunasAfastados = [
+const colunasAfastadosCompletas = [
   {
     name: 'chapa',
     label: 'CHAPA',
@@ -1652,7 +1666,7 @@ const colunasAfastados = [
   {
     name: 'motivo',
     label: 'MOTIVO',
-    field: pessoa => descreverMotivoForaOperacao({ ...pessoa, afastado: true }),
+    field: pessoa => descreverMotivoForaOperacao({ ...pessoa, afastado: true }, veMotivo.value),
     align: 'left'
   },
   {
@@ -1671,7 +1685,7 @@ const colunasAfastados = [
   }
 ]
 
-const colunasNaoAlocadosDetalhes = [
+const colunasNaoAlocadosDetalhesCompletas = [
   {
     name: 'chapa',
     label: 'CHAPA',
@@ -1710,7 +1724,7 @@ const colunasNaoAlocadosDetalhes = [
   {
     name: 'motivo',
     label: 'MOTIVO',
-    field: descreverMotivoForaOperacao,
+    field: pessoa => descreverMotivoForaOperacao(pessoa, veMotivo.value),
     align: 'left',
     sortable: true
   },
@@ -1729,6 +1743,14 @@ const colunasNaoAlocadosDetalhes = [
     sortable: true
   }
 ]
+
+const COLUNAS_DO_MOTIVO = ['justificativa', 'afastado_por']
+const semColunasDoMotivo = colunas =>
+  veMotivo.value ? colunas : colunas.filter(coluna => !COLUNAS_DO_MOTIVO.includes(coluna.name))
+const colunasAfastados = computed(() => semColunasDoMotivo(colunasAfastadosCompletas))
+const colunasNaoAlocadosDetalhes = computed(() =>
+  semColunasDoMotivo(colunasNaoAlocadosDetalhesCompletas)
+)
 
 const colunasNaoAlocadas = computed(() => {
   const colunas = [

@@ -284,7 +284,6 @@ def test_supervisor_afasta_livre_e_alocado_da_propria_base(Sessao):
         "/api/alocacoes/planilha",
         "/api/opcoes-alocacao",
         "/api/colaboradores",
-        "/api/indiretos",
     ],
 )
 def test_conta_sem_vinculo_nao_le_dados(Sessao, rota):
@@ -293,7 +292,7 @@ def test_conta_sem_vinculo_nao_le_dados(Sessao, rota):
 
 def test_sessao_sem_vinculo_avisa_e_nao_entrega_permissao_de_dados(Sessao):
     dados = cliente(3).get("/api/sessao").get_json()["usuario"]
-    assert dados["sem_vinculo"] is True and dados["permissoes"] == []
+    assert dados["sem_vinculo"] is True and dados["permissoes"] == ["ver_indiretos"]
 
 
 def test_vinculo_proprio_e_administrador_continuam_lendo(Sessao):
@@ -498,9 +497,9 @@ def test_planilha_de_indiretos_protege_texto_e_mantem_as_formulas_dela(Sessao):
     r = cliente(1).get("/api/indiretos/planilha")
     assert r.status_code == 200
     aba = load_workbook(io.BytesIO(r.data))["Alocação"]
-    # C = CHAPA INDIRETO, I = OBSERVAÇÃO, D = NOME INDIRETO (fórmula)
-    linha = next(n for n in range(2, aba.max_row + 1) if aba.cell(row=n, column=3).value == "70")
-    assert aba.cell(row=linha, column=9).data_type == "s"
+    # C = NOME INDIRETO (preenchido), K = OBSERVAÇÃO, D = CHAPA INDIRETO (fórmula)
+    linha = next(n for n in range(2, aba.max_row + 1) if aba.cell(row=n, column=3).value == "FABIO CHEFE")
+    assert aba.cell(row=linha, column=11).data_type == "s"
     assert aba.cell(row=linha, column=4).data_type == "f"
 
 
@@ -1175,3 +1174,512 @@ def test_alocar_desligado_volta_a_operar(Sessao):
     assert adm.post("/api/equipes/alocar", json={"composicao_id": 2, "chapa": "40"}).status_code == 200
     c = colaborador(Sessao, "40")
     assert not c.AFASTADO and c.DATA_DESLIGAMENTO is None
+
+
+# ------------------------------------------------------------
+# Perfil da conta: DIRETO (vinculo) ou INDIRETO (le tudo, nao opera equipes)
+# ------------------------------------------------------------
+
+def definir_perfil(Sessao, usuario_id, perfil):
+    s = Sessao()
+    s.query(Usuario).filter_by(id=usuario_id).update({"PERFIL": perfil})
+    s.commit()
+    s.close()
+
+
+def test_conta_antiga_continua_direta(Sessao):
+    dados = cliente(2).get("/api/sessao").get_json()["usuario"]
+    assert dados["perfil"] == "DIRETO" and not dados.get("le_tudo")
+
+
+def test_direto_ve_so_o_proprio_vinculo_e_abre_os_indiretos(Sessao):
+    equipes = cliente(2).get("/api/equipes").get_json()
+    assert {e["base"] for e in equipes} == {"BACABAL"}
+    assert cliente(2).get("/api/indiretos").status_code == 200
+
+
+def test_indireto_ve_todas_as_equipes_do_resumo_e_do_banco(Sessao):
+    definir_perfil(Sessao, 2, "INDIRETO")
+    equipes = cliente(2).get("/api/equipes").get_json()
+    assert {e["base"] for e in equipes} == {"BACABAL", "PEDREIRAS"}
+    resumo = cliente(2).get("/api/resumo").get_json()
+    assert resumo.get("erro") is None
+    assert cliente(2).get("/api/colaboradores").status_code == 200
+    assert cliente(2).get("/api/indiretos").status_code == 200
+
+
+def test_indireto_sem_vinculo_le_tudo(Sessao):
+    definir_perfil(Sessao, 3, "INDIRETO")
+    for rota in ("/api/equipes", "/api/resumo", "/api/colaboradores", "/api/indiretos"):
+        assert cliente(3).get(rota).status_code == 200, rota
+    assert cliente(3).get("/api/sessao").get_json()["usuario"]["sem_vinculo"] is False
+
+
+def test_direto_sem_vinculo_so_abre_os_indiretos(Sessao):
+    assert cliente(3).get("/api/indiretos").status_code == 200
+    for rota in ("/api/equipes", "/api/resumo", "/api/colaboradores"):
+        assert cliente(3).get(rota).status_code == 403, rota
+
+
+def test_indireto_nao_altera_a_operacao(Sessao):
+    definir_perfil(Sessao, 2, "INDIRETO")
+    c = cliente(2)
+    assert c.post("/api/equipes/alocar", json={"composicao_id": 2, "chapa": "40"}).status_code == 403
+    assert c.post("/api/equipes/remover", json={"composicao_id": 1}).status_code == 403
+    assert c.post("/api/equipes/editar-alocacao", json={"composicao_id": 1, "chapa": "40"}).status_code == 403
+    assert c.post("/api/colaboradores/afastar", json={"chapa": "40", "justificativa": "x"}).status_code == 403
+    assert c.post("/api/colaboradores/observacao", json={"chapa": "10", "observacao": "x"}).status_code == 403
+    assert ocupante(Sessao, 1) == "10" and ocupante(Sessao, 2) is None
+
+
+def test_administrador_ignora_o_perfil_gravado(Sessao):
+    definir_perfil(Sessao, 1, "INDIRETO")
+    dados = cliente(1).get("/api/sessao").get_json()["usuario"]
+    assert not dados["le_tudo"] and "alocar" in dados["permissoes"]
+
+
+def corpo_usuario_perfil(**extra):
+    return {"usuario": "novo", "nome": "NOVO", "nivel": "SUPERVISOR", "senha": "abc123", **extra}
+
+
+def test_administrador_define_o_perfil_ao_criar_e_editar(Sessao):
+    r = cliente(1).post("/api/usuarios", json=corpo_usuario_perfil(perfil="INDIRETO"))
+    assert r.status_code == 200 and r.get_json()["usuario"]["perfil"] == "INDIRETO"
+    novo_id = r.get_json()["usuario"]["id"]
+
+    r = cliente(1).put(f"/api/usuarios/{novo_id}", json=corpo_usuario_perfil(perfil="DIRETO"))
+    assert r.get_json()["usuario"]["perfil"] == "DIRETO"
+
+    r = cliente(1).put(f"/api/usuarios/{novo_id}", json=corpo_usuario_perfil(perfil="qualquer"))
+    assert r.get_json()["usuario"]["perfil"] == "DIRETO"
+    lista = cliente(1).get("/api/usuarios").get_json()
+    assert {u["usuario"]: u["perfil"] for u in lista}["novo"] == "DIRETO"
+
+
+# ------------------------------------------------------------
+# Exportação do Resumo: afastado/desligado só no arquivo do Administrador
+# ------------------------------------------------------------
+
+def cabecalhos_da_exportacao(usuario_id):
+    r = cliente(usuario_id).post("/api/exportar-pessoas", json={
+        "alocadas": [{"chapa": "10"}],
+        "nao_alocadas": [{"chapa": "40"}, {"chapa": "50"}],
+    })
+    assert r.status_code == 200
+    livro = load_workbook(io.BytesIO(r.data))
+    return {aba.title: [c.value for c in aba[1]] for aba in livro.worksheets}
+
+
+COLUNAS_FORA_OPERACAO = ["FORA DE OPERAÇÃO", "JUSTIFICATIVA", "JUSTIFICADO POR", "DATA DA JUSTIFICATIVA"]
+
+
+def test_exportacao_do_administrador_traz_afastamento_e_desligamento(Sessao):
+    abas = cabecalhos_da_exportacao(1)
+    for coluna in COLUNAS_FORA_OPERACAO:
+        assert coluna in abas["Pessoas não alocadas"]
+    assert "AFASTADO" in abas["Colaboradores"] and "DESLIGAMENTO" in abas["Colaboradores"]
+
+
+def test_exportacao_de_quem_nao_e_administrador_nao_traz_afastamento_nem_desligamento(Sessao):
+    abas = cabecalhos_da_exportacao(2)
+    for coluna in COLUNAS_FORA_OPERACAO:
+        assert coluna not in abas["Pessoas não alocadas"]
+    assert "AFASTADO" not in abas["Colaboradores"] and "DESLIGAMENTO" not in abas["Colaboradores"]
+
+
+# ------------------------------------------------------------
+# Indireto aloca e remove só no próprio setor da tela de Indiretos
+# ------------------------------------------------------------
+
+def indireto_do_setor(Sessao, setores):
+    """Conta 2 vira INDIRETO, vinculada aos setores de indiretos dados."""
+    s = Sessao()
+    s.query(Usuario).filter_by(id=2).update({"PERFIL": "INDIRETO"})
+    for setor in setores:
+        s.add(VinculoUsuario(usuario_id=2, TIPO="SETOR_INDIRETO", VALOR=setor))
+    # 60 (indireta do cadastro) e 61 (outra) para alocar
+    s.add(Colaborador(CHAPA="61", NOME="FABI INDIRETA", TIPO_FUNÇÃO="INDIRETO", AFASTADO=False))
+    s.commit()
+    s.close()
+
+
+def alocar_corpo(chapa, setor, base="BCB", responsavel="60"):
+    return {"chapa": chapa, "setor": setor, "base": base, "responsavel_chapa": responsavel}
+
+
+def alocacao_indireto(Sessao, chapa):
+    return ler(Sessao, lambda s: s.query(AlocacaoIndireto).filter_by(CHAPA=chapa).first())
+
+
+def test_indireto_aloca_e_remove_no_proprio_setor(Sessao):
+    indireto_do_setor(Sessao, ["ADMINISTRATIVO"])
+    c = cliente(2)
+    r = c.post("/api/indiretos/alocar", json=alocar_corpo("60", "administrativo", responsavel="60"))
+    assert r.status_code == 200, r.get_json()
+    assert alocacao_indireto(Sessao, "60").SETOR == "ADMINISTRATIVO"
+
+    assert c.delete("/api/indiretos/alocacao/60").status_code == 200
+    assert alocacao_indireto(Sessao, "60") is None
+
+
+def test_indireto_nao_aloca_em_outro_setor_pela_api(Sessao):
+    indireto_do_setor(Sessao, ["ADMINISTRATIVO"])
+    r = cliente(2).post("/api/indiretos/alocar", json=alocar_corpo("60", "FROTA", responsavel="60"))
+    assert r.status_code == 403
+    assert alocacao_indireto(Sessao, "60") is None
+
+
+def test_indireto_nao_remove_de_outro_setor(Sessao):
+    indireto_do_setor(Sessao, ["ADMINISTRATIVO"])
+    r = cliente(1).post("/api/indiretos/alocar", json=alocar_corpo("60", "FROTA", responsavel="60"))
+    assert r.status_code == 200
+    assert cliente(2).delete("/api/indiretos/alocacao/60").status_code == 403
+    assert alocacao_indireto(Sessao, "60") is not None
+
+
+def test_indireto_com_todos_cobre_todos_os_setores_menos_a_gerencia(Sessao):
+    indireto_do_setor(Sessao, ["TODOS"])
+    c = cliente(2)
+    assert c.post("/api/indiretos/alocar", json=alocar_corpo("60", "FROTA", responsavel="60")).status_code == 200
+    r = c.post("/api/indiretos/alocar", json={"chapa": "61", "setor": "GERÊNCIA"})
+    assert r.status_code == 403
+
+
+def test_direto_nao_aloca_indiretos(Sessao):
+    r = cliente(2).post("/api/indiretos/alocar", json=alocar_corpo("60", "ADMINISTRATIVO", responsavel="60"))
+    assert r.status_code == 403
+
+
+def test_indireto_sem_setor_nao_aloca_em_lugar_nenhum(Sessao):
+    indireto_do_setor(Sessao, [])
+    r = cliente(2).post("/api/indiretos/alocar", json=alocar_corpo("60", "ADMINISTRATIVO", responsavel="60"))
+    assert r.status_code == 403
+
+
+def test_indireto_nao_altera_responsavel_organograma_nem_planilha(Sessao):
+    indireto_do_setor(Sessao, ["ADMINISTRATIVO"])
+    c = cliente(2)
+    assert c.post("/api/indiretos/responsavel", json={"chapas": ["60"], "responsavel_chapa": "61"}).status_code == 403
+    assert c.post("/api/indiretos/organograma", json={"mudancas": [{"chapa": "60", "responsavel_chapa": "61"}]}).status_code == 403
+    assert c.post("/api/indiretos/vagas/definir", json={"setor": "ADMINISTRATIVO", "funcoes": []}).status_code == 403
+    assert c.get("/api/indiretos/planilha").status_code == 403
+
+
+def test_resposta_de_indiretos_diz_onde_a_conta_altera(Sessao):
+    indireto_do_setor(Sessao, ["FROTA", "ADMINISTRATIVO"])
+    assert cliente(2).get("/api/indiretos").get_json()["pode_alterar"] == {
+        "todos": False, "setores": ["ADMINISTRATIVO", "FROTA"],
+    }
+    assert cliente(1).get("/api/indiretos").get_json()["pode_alterar"]["todos"] is True
+
+
+# ------------------------------------------------------------
+# Motivo de estar fora de operação: só Administrador, Gerente e Coordenador
+# ------------------------------------------------------------
+
+CAMPOS_DO_MOTIVO = (
+    "justificativa_afastamento", "afastado_por", "afastado_em", "data_desligamento",
+)
+
+
+def conta_com_nivel(Sessao, usuario_id, nivel):
+    s = Sessao()
+    s.query(Usuario).filter_by(id=usuario_id).update({"NIVEL": nivel})
+    s.add(VinculoUsuario(usuario_id=usuario_id, TIPO="BASE", VALOR="TODOS"))
+    s.commit()
+    s.close()
+
+
+def afastada_na_lista_de_colaboradores(usuario_id):
+    r = cliente(usuario_id).get("/api/colaboradores")
+    assert r.status_code == 200
+    lista = r.get_json()
+    lista = lista.get("colaboradores", lista) if isinstance(lista, dict) else lista
+    return next(c for c in lista if c["chapa"] == "50")
+
+
+def test_supervisor_sabe_que_esta_fora_de_operacao_mas_nao_o_motivo(Sessao):
+    pessoa = afastada_na_lista_de_colaboradores(2)
+    assert pessoa["afastado"] is True
+    assert pessoa["justificativa_afastamento"] == "" and pessoa["afastado_por"] == ""
+    assert pessoa["afastado_em"] == "" and pessoa["desligado"] is False
+    assert pessoa["data_desligamento"] == ""
+
+
+@pytest.mark.parametrize("usuario_id, nivel", [(1, "ADMINISTRADOR"), (4, "GERENTE"), (3, "COORDENADOR")])
+def test_administrador_gerente_e_coordenador_veem_o_motivo(Sessao, usuario_id, nivel):
+    if usuario_id != 1:
+        conta_com_nivel(Sessao, usuario_id, nivel)
+    pessoa = afastada_na_lista_de_colaboradores(usuario_id)
+    assert pessoa["justificativa_afastamento"] == "LICENÇA"
+    assert pessoa["afastado_por"] == "alguem"
+
+
+def test_lista_de_afastados_tambem_esconde_o_motivo_do_supervisor(Sessao):
+    lista = cliente(2).get("/api/pessoas-afastadas").get_json()
+    linha = next(p for p in lista if p["chapa"] == "50")
+    assert linha["justificativa"] == "" and linha["afastado_por"] == ""
+    admin = cliente(1).get("/api/pessoas-afastadas").get_json()
+    assert next(p for p in admin if p["chapa"] == "50")["justificativa"] == "LICENÇA"
+
+
+def test_resposta_de_afastar_do_supervisor_nao_devolve_o_motivo(Sessao):
+    r = cliente(2).post("/api/colaboradores/afastar", json={"chapa": "10", "justificativa": "ATESTADO"})
+    assert r.status_code == 200
+    assert r.get_json()["colaborador"]["justificativa_afastamento"] == ""
+    # mas o motivo foi gravado: o administrador enxerga
+    assert colaborador(Sessao, "10").JUSTIFICATIVA_AFASTAMENTO == "ATESTADO"
+
+
+def test_sessao_diz_quem_ve_o_motivo(Sessao):
+    assert cliente(1).get("/api/sessao").get_json()["usuario"]["ve_motivo"] is True
+    assert cliente(2).get("/api/sessao").get_json()["usuario"]["ve_motivo"] is False
+
+
+def test_exportacao_de_gerente_traz_o_motivo_e_a_de_supervisor_nao(Sessao):
+    conta_com_nivel(Sessao, 4, "GERENTE")
+    assert "JUSTIFICATIVA" in cabecalhos_da_exportacao(4)["Pessoas não alocadas"]
+    assert "JUSTIFICATIVA" not in cabecalhos_da_exportacao(2)["Pessoas não alocadas"]
+
+
+# ------------------------------------------------------------
+# Exportação: alocadas/não alocadas no escopo da conta; cadastro inteiro para todos
+# ------------------------------------------------------------
+
+def linhas_da_aba(usuario_id, aba, alocadas, nao_alocadas=()):
+    r = cliente(usuario_id).post("/api/exportar-pessoas", json={
+        "alocadas": [{"chapa": c} for c in alocadas],
+        "nao_alocadas": [{"chapa": c} for c in nao_alocadas],
+    })
+    assert r.status_code == 200
+    planilha = load_workbook(io.BytesIO(r.data))[aba]
+    cabecalho = [c.value for c in planilha[1]]
+    return [dict(zip(cabecalho, [c.value for c in linha])) for linha in planilha.iter_rows(min_row=2)]
+
+
+def test_exportacao_do_supervisor_so_leva_alocadas_do_proprio_escopo(Sessao):
+    # 10 esta em BACABAL (dele) e 30 em PEDREIRAS (fora do vinculo), mesmo a tela mandando os dois
+    chapas = {l["CHAPA"] for l in linhas_da_aba(2, "Pessoas alocadas", ["10", "30"])}
+    assert chapas == {"10"}
+
+
+def test_exportacao_do_administrador_leva_todas_as_alocadas_pedidas(Sessao):
+    chapas = {l["CHAPA"] for l in linhas_da_aba(1, "Pessoas alocadas", ["10", "30"])}
+    assert chapas == {"10", "30"}
+
+
+def test_exportacao_do_indireto_le_tudo_nas_alocadas(Sessao):
+    definir_perfil(Sessao, 2, "INDIRETO")
+    chapas = {l["CHAPA"] for l in linhas_da_aba(2, "Pessoas alocadas", ["10", "30"])}
+    assert chapas == {"10", "30"}
+
+
+def test_exportacao_nao_entrega_alocado_pedido_como_nao_alocado(Sessao):
+    # 10 esta alocado: pedir como "nao alocado" nao o faz aparecer nessa aba
+    assert linhas_da_aba(1, "Pessoas não alocadas", [], ["10"]) == []
+
+
+@pytest.mark.parametrize("usuario_id", [1, 2])
+def test_aba_colaboradores_traz_o_cadastro_inteiro_para_qualquer_conta(Sessao, usuario_id):
+    chapas = {str(l["CHAPA"]) for l in linhas_da_aba(usuario_id, "Colaboradores", [])}
+    assert {"10", "30", "40", "50", "60"} <= chapas
+
+
+# ------------------------------------------------------------
+# Direto com "Setor de indiretos": opera as equipes dele e aloca nos Indiretos do setor
+# ------------------------------------------------------------
+
+def direto_com_setor_de_indiretos(Sessao, setores):
+    s = Sessao()
+    for setor in setores:
+        s.add(VinculoUsuario(usuario_id=2, TIPO="SETOR_INDIRETO", VALOR=setor))
+    s.commit()
+    s.close()
+
+
+def test_direto_com_setor_de_indiretos_aloca_e_remove_nesse_setor(Sessao):
+    direto_com_setor_de_indiretos(Sessao, ["GOMAN"])
+    c = cliente(2)
+    r = c.post("/api/indiretos/alocar", json=alocar_corpo("60", "goman", base="ITM", responsavel="60"))
+    assert r.status_code == 200, r.get_json()
+    assert alocacao_indireto(Sessao, "60").SETOR == "GOMAN"
+    assert c.delete("/api/indiretos/alocacao/60").status_code == 200
+
+
+def test_direto_so_vale_o_setor_a_base_nao_restringe(Sessao):
+    # o vinculo de operacao dele e BACABAL (BCB); nos Indiretos conta so o setor
+    direto_com_setor_de_indiretos(Sessao, ["GOMAN"])
+    c = cliente(2)
+    for base in ("BCB", "ITM", "STI"):
+        r = c.post("/api/indiretos/alocar", json=alocar_corpo("60", "GOMAN", base=base, responsavel="60"))
+        assert r.status_code == 200, (base, r.get_json())
+
+
+def test_direto_com_setor_de_indiretos_nao_aloca_em_outro_setor(Sessao):
+    direto_com_setor_de_indiretos(Sessao, ["GOMAN"])
+    r = cliente(2).post("/api/indiretos/alocar", json=alocar_corpo("60", "FROTA", responsavel="60"))
+    assert r.status_code == 403
+    assert alocacao_indireto(Sessao, "60") is None
+
+
+def test_direto_com_setor_de_indiretos_continua_operando_so_a_propria_base(Sessao):
+    direto_com_setor_de_indiretos(Sessao, ["GOMAN"])
+    c = cliente(2)
+    assert {e["base"] for e in c.get("/api/equipes").get_json()} == {"BACABAL"}
+    assert c.post("/api/equipes/alocar", json={"composicao_id": 4, "chapa": "40"}).status_code == 403
+
+
+def test_direto_com_setor_de_indiretos_nao_mexe_no_resto_dos_indiretos(Sessao):
+    direto_com_setor_de_indiretos(Sessao, ["GOMAN"])
+    c = cliente(2)
+    assert c.post("/api/indiretos/responsavel", json={"chapas": ["60"], "responsavel_chapa": "61"}).status_code == 403
+    assert c.get("/api/indiretos/planilha").status_code == 403
+    assert cliente(2).get("/api/indiretos").get_json()["pode_alterar"]["setores"] == ["GOMAN"]
+
+
+def test_direto_sem_vinculo_de_operacao_mas_com_setor_de_indiretos_aloca_so_la(Sessao):
+    s = Sessao()
+    s.add(VinculoUsuario(usuario_id=3, TIPO="SETOR_INDIRETO", VALOR="GOMAN"))
+    s.add(Colaborador(CHAPA="61", NOME="FABI INDIRETA", TIPO_FUNÇÃO="INDIRETO", AFASTADO=False))
+    s.commit()
+    s.close()
+    c = cliente(3)
+    assert c.get("/api/equipes").status_code == 403
+    assert c.post("/api/indiretos/alocar", json=alocar_corpo("60", "GOMAN", responsavel="60")).status_code == 200
+
+
+def vaga_extra_de_pedreiras(Sessao):
+    s = Sessao()
+    folguista = Equipe(BASE="PEDREIRAS", PREFIXO="FOLGUISTA-2")
+    s.add(folguista)
+    s.flush()
+    livre = ComposicaoEquipe(equipe_id=folguista.id, FUNÇÃO_ER="ELETRICISTA", ESTRUTURA="CONSTRUÇÃO", ORIGEM="EXTRA")
+    ocupada = ComposicaoEquipe(equipe_id=folguista.id, FUNÇÃO_ER="ELETRICISTA", ESTRUTURA="CONSTRUÇÃO", ORIGEM="EXTRA")
+    s.add_all([livre, ocupada])
+    s.flush()
+    s.add(MembroEquipe(composicao_id=ocupada.id, CHAPA="40"))
+    s.commit()
+    ids = livre.id, ocupada.id
+    s.close()
+    return ids
+
+
+def test_indireto_nao_exclui_vaga_extra_nem_tira_ocupante_dela(Sessao):
+    livre, ocupada = vaga_extra_de_pedreiras(Sessao)
+    definir_perfil(Sessao, 2, "INDIRETO")
+    c = cliente(2)
+    # ve a equipe (le tudo), mas nao altera
+    assert c.delete(f"/api/equipes/vagas/{livre}").status_code == 403
+    assert c.post("/api/equipes/remover", json={"composicao_id": ocupada}).status_code == 403
+    assert ocupante(Sessao, ocupada) == "40"
+
+
+def test_indireto_nao_altera_tipo_de_funcao(Sessao):
+    definir_perfil(Sessao, 2, "INDIRETO")
+    r = cliente(2).post("/api/colaboradores/tipo-funcao", json={"chapa": "40", "tipo_funcao": "INDIRETO"})
+    assert r.status_code == 403
+    assert colaborador(Sessao, "40").TIPO_FUNÇÃO == "DIRETO"
+
+
+def test_direto_continua_excluindo_vaga_extra_do_proprio_escopo(Sessao):
+    s = Sessao()
+    equipe = s.query(Equipe).filter_by(BASE="BACABAL").first()
+    vaga = ComposicaoEquipe(equipe_id=equipe.id, FUNÇÃO_ER="ELETRICISTA", ESTRUTURA="CONSTRUÇÃO", ORIGEM="EXTRA")
+    s.add(vaga)
+    s.commit()
+    vaga_id = vaga.id
+    s.close()
+    assert cliente(2).delete(f"/api/equipes/vagas/{vaga_id}").status_code == 200
+
+
+# ------------------------------------------------------------
+# Equipe extra (só realizado) e equipe inativa (colaboradores ficam livres)
+# ------------------------------------------------------------
+
+def equipe_bacabal(Sessao):
+    return ler(Sessao, lambda s: s.query(Equipe).filter_by(BASE="BACABAL").first().id)
+
+
+def grupo_do_resumo(usuario_id=1, base="BCB"):
+    resumo = cliente(usuario_id).get("/api/resumo").get_json()
+    bases = {b["codigo"]: b for b in resumo["bases"]}
+    return bases[base]["grupos"][0] if base in bases and bases[base]["grupos"] else None
+
+
+def totais(grupo):
+    return {f["funcao"]: (f["vagas"], f["alocados"]) for f in grupo["funcoes"]}
+
+
+def test_equipe_comum_conta_vaga_e_alocado(Sessao):
+    assert totais(grupo_do_resumo()) == {"ELETRICISTA": (2, 1)}
+
+
+def test_equipe_extra_conta_so_no_realizado(Sessao):
+    eq = equipe_bacabal(Sessao)
+    r = cliente(1).put(f"/api/equipes/{eq}", json={"base": "BACABAL", "prefixo": "BCB-01", "extra": True})
+    assert r.status_code == 200 and r.get_json()["equipe"]["extra"] is True
+    grupo = grupo_do_resumo()
+    # vagas 0, alocados 1 (o 10): previsto zero, realizado um
+    assert totais(grupo) == {"ELETRICISTA": (0, 1)}
+    assert grupo["prefixos_extra"] == ["BCB-01"]
+    assert grupo["funcoes"][0]["extra"] == 1 and grupo["funcoes"][0]["diferenca"] == 1
+
+
+def test_equipes_expoem_extra_e_ativa(Sessao):
+    cliente(1).put(f"/api/equipes/{equipe_bacabal(Sessao)}", json={"base": "BACABAL", "prefixo": "BCB-01", "extra": True})
+    lista = {e["prefixo"]: e for e in cliente(1).get("/api/equipes").get_json()}
+    assert lista["BCB-01"]["extra"] is True and lista["BCB-01"]["ativa"] is True
+    assert lista["PED-01"]["extra"] is False
+
+
+def test_inativar_libera_os_colaboradores_e_some_das_listas(Sessao):
+    eq = equipe_bacabal(Sessao)
+    r = cliente(1).put(f"/api/equipes/{eq}", json={"base": "BACABAL", "prefixo": "BCB-01", "ativa": False})
+    assert r.status_code == 200 and r.get_json()["liberados"] == 1
+    assert ocupante(Sessao, 1) is None                      # o 10 ficou livre
+    assert colaborador(Sessao, "10") is not None            # a pessoa continua no cadastro
+    assert "BCB-01" not in {e["prefixo"] for e in cliente(1).get("/api/equipes").get_json()}
+    incluindo = {e["prefixo"]: e for e in cliente(1).get("/api/equipes?incluir_inativas=1").get_json()}
+    assert incluindo["BCB-01"]["ativa"] is False
+    opcoes = cliente(1).get("/api/opcoes-alocacao").get_json()
+    assert "BACABAL" not in opcoes or all(e["prefixo"] != "BCB-01" for e in opcoes["BACABAL"])
+    assert grupo_do_resumo(base="BCB") is None              # fora do Resumo
+
+
+def test_equipe_inativa_nao_recebe_alocacao(Sessao):
+    eq = equipe_bacabal(Sessao)
+    cliente(1).put(f"/api/equipes/{eq}", json={"base": "BACABAL", "prefixo": "BCB-01", "ativa": False})
+    r = cliente(1).post("/api/equipes/alocar", json={"composicao_id": 2, "chapa": "40"})
+    assert r.status_code == 400 and "inativa" in r.get_json()["erro"]
+    assert ocupante(Sessao, 2) is None
+
+
+def test_reativar_traz_a_equipe_de_volta_sem_devolver_ninguem(Sessao):
+    eq = equipe_bacabal(Sessao)
+    cliente(1).put(f"/api/equipes/{eq}", json={"base": "BACABAL", "prefixo": "BCB-01", "ativa": False})
+    cliente(1).put(f"/api/equipes/{eq}", json={"base": "BACABAL", "prefixo": "BCB-01", "ativa": True})
+    assert "BCB-01" in {e["prefixo"] for e in cliente(1).get("/api/equipes").get_json()}
+    assert ocupante(Sessao, 1) is None
+    assert cliente(1).post("/api/equipes/alocar", json={"composicao_id": 2, "chapa": "40"}).status_code == 200
+
+
+def test_so_o_administrador_marca_extra_ou_inativa(Sessao):
+    s = Sessao()
+    for permissao in (auth.VER_EQUIPES, auth.GERENCIAR_VAGAS):
+        s.add(NivelPermissao(NIVEL="SUPERVISOR", PERMISSAO=permissao))
+    s.commit()
+    s.close()
+    eq = equipe_bacabal(Sessao)
+    c = cliente(2)
+    corpo = {"base": "BACABAL", "prefixo": "BCB-01"}
+    assert c.put(f"/api/equipes/{eq}", json={**corpo, "extra": True}).status_code == 403
+    assert c.put(f"/api/equipes/{eq}", json={**corpo, "ativa": False}).status_code == 403
+    assert ocupante(Sessao, 1) == "10"
+    # mandar o mesmo valor que já está não é mudança
+    assert c.put(f"/api/equipes/{eq}", json={**corpo, "extra": False, "ativa": True}).status_code == 200
+
+
+def test_criar_equipe_extra_so_administrador(Sessao):
+    assert cliente(1).post("/api/equipes", json={"base": "BACABAL", "prefixo": "EXTRA-1", "extra": True}).status_code == 200
+    lista = {e["prefixo"]: e for e in cliente(1).get("/api/equipes").get_json()}
+    assert lista["EXTRA-1"]["extra"] is True

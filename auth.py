@@ -33,6 +33,7 @@ from database.models import NivelPermissao, Usuario, VinculoUsuario
 # monte uma combinacao destas em NIVEIS.
 VER_RESUMO = "ver_resumo"
 VER_EQUIPES = "ver_equipes"
+VER_INDIRETOS = "ver_indiretos"        # abrir a tela de Indiretos (leitura)
 ALOCAR = "alocar"                 # colocar colaborador numa vaga
 EDITAR_ALOCACAO = "editar_alocacao"    # trocar o colaborador de uma vaga ocupada
 REMOVER_ALOCACAO = "remover_alocacao"  # tirar colaborador de uma vaga
@@ -43,6 +44,7 @@ GERENCIAR_COLABORADORES = "gerenciar_colaboradores"  # atualizar cadastro por pl
 TODAS_PERMISSOES = (
     VER_RESUMO,
     VER_EQUIPES,
+    VER_INDIRETOS,
     ALOCAR,
     EDITAR_ALOCACAO,
     REMOVER_ALOCACAO,
@@ -75,6 +77,30 @@ def rotulos_dos_niveis(niveis):
     return " ou ".join(NIVEIS[nivel]["rotulo"] for nivel in niveis)
 
 # ------------------------------------------------------------
+# PERFIL DA CONTA: DIRETO OU INDIRETO
+# ------------------------------------------------------------
+# O Administrador classifica cada conta na tela de Usuarios.
+#   DIRETO: o que o vinculo (base, setor, tipo) cobre, como sempre foi.
+#   INDIRETO: LE tudo (Resumo, Banco de Dados e Indiretos) e nao altera a
+#   operacao. Ver descrever_sessao.
+# Em qualquer perfil, quem tem o vinculo SETOR_INDIRETO aloca e remove na tela
+# de Indiretos nesse setor (so o setor conta: nunca base, subsetor ou posicao
+# no organograma). Sem esse vinculo, a tela de Indiretos e so consulta.
+# Administrador sempre ve e faz tudo, qualquer que seja o perfil gravado.
+PERFIL_DIRETO = "DIRETO"
+PERFIL_INDIRETO = "INDIRETO"
+PERFIS = (PERFIL_DIRETO, PERFIL_INDIRETO)
+
+# operar equipes (alocar/editar/remover) e o que o Indireto nao faz
+PERMISSOES_DE_OPERACAO = (ALOCAR, EDITAR_ALOCACAO, REMOVER_ALOCACAO)
+
+
+def normalizar_perfil(valor):
+    valor = str(valor or "").strip().upper()
+    return valor if valor in PERFIS else PERFIL_DIRETO
+
+
+# ------------------------------------------------------------
 # NIVEIS
 # ------------------------------------------------------------
 # Os demais niveis entram aqui quando as regras forem definidas: basta uma
@@ -100,7 +126,7 @@ NIVEIS = {
             "bases dos Coordenadores sob sua responsabilidade (e dos "
             "Supervisores deles)."
         ),
-        "permissoes": {VER_RESUMO, VER_EQUIPES, ALOCAR, EDITAR_ALOCACAO, REMOVER_ALOCACAO},
+        "permissoes": {VER_RESUMO, VER_EQUIPES, VER_INDIRETOS, ALOCAR, EDITAR_ALOCACAO, REMOVER_ALOCACAO},
         "ignora_vinculos": False,
     },
     NIVEL_COORDENADOR: {
@@ -109,7 +135,7 @@ NIVEIS = {
             "Aloca, troca e remove colaboradores em todas as equipes e "
             "bases dos Supervisores sob sua responsabilidade."
         ),
-        "permissoes": {VER_RESUMO, VER_EQUIPES, ALOCAR, EDITAR_ALOCACAO, REMOVER_ALOCACAO},
+        "permissoes": {VER_RESUMO, VER_EQUIPES, VER_INDIRETOS, ALOCAR, EDITAR_ALOCACAO, REMOVER_ALOCACAO},
         "ignora_vinculos": False,
     },
     NIVEL_SUPERVISOR: {
@@ -118,7 +144,7 @@ NIVEIS = {
             "Visualiza o resumo e as equipes; aloca, troca e remove "
             "colaboradores nas equipes vinculadas a ele."
         ),
-        "permissoes": {VER_RESUMO, VER_EQUIPES, ALOCAR, EDITAR_ALOCACAO, REMOVER_ALOCACAO},
+        "permissoes": {VER_RESUMO, VER_EQUIPES, VER_INDIRETOS, ALOCAR, EDITAR_ALOCACAO, REMOVER_ALOCACAO},
         "ignora_vinculos": False,
     },
 }
@@ -136,6 +162,10 @@ VINCULO_BASE = "BASE"
 VINCULO_TIPO_EQUIPE = "TIPO_EQUIPE"
 VINCULO_SETOR = "SETOR"
 VINCULO_EQUIPE = "EQUIPE"          # id de uma equipe especifica
+# setor da tela de Indiretos (ADMINISTRATIVO, FROTA, ...) onde uma conta de
+# perfil INDIRETO pode alocar e remover. Nao e o SETOR das equipes (GSTC/GOMAN)
+# e nao conta como escopo operacional (ver escopo_operacional).
+VINCULO_SETOR_INDIRETO = "SETOR_INDIRETO"
 
 # SUPERVISOR e COORDENADOR existiram aqui como vinculo (texto livre) antes da
 # hierarquia Gerente -> Coordenador -> Supervisor existir. Esse laco agora e
@@ -155,13 +185,14 @@ VINCULO_EQUIPE = "EQUIPE"          # id de uma equipe especifica
 # jeito de dar a alguem a empresa toda sem o nivel de Administrador (sem
 # vinculo nenhum a conta nao ve nada, ver descrever_sessao).
 VALOR_TODOS = "TODOS"
-VINCULOS_COM_TODOS = (VINCULO_BASE, VINCULO_TIPO_EQUIPE, VINCULO_SETOR)
+VINCULOS_COM_TODOS = (VINCULO_BASE, VINCULO_TIPO_EQUIPE, VINCULO_SETOR, VINCULO_SETOR_INDIRETO)
 
 TIPOS_VINCULO = {
     VINCULO_BASE: "Base",
     VINCULO_TIPO_EQUIPE: "Tipo de equipe",
     VINCULO_SETOR: "Setor",
     VINCULO_EQUIPE: "Equipe específica",
+    VINCULO_SETOR_INDIRETO: "Setor de indiretos",
 }
 
 # Identificadores de operacao usados por pode_realizar_operacao — nao sao
@@ -381,7 +412,7 @@ def _uniao_dos_escopos(escopos):
         VINCULO_BASE: sorted(uniao.get(VINCULO_BASE, ())),
         VINCULO_TIPO_EQUIPE: sorted(uniao.get(VINCULO_TIPO_EQUIPE, ())),
     }
-    for tipo in (VINCULO_SETOR, VINCULO_EQUIPE):
+    for tipo in (VINCULO_SETOR, VINCULO_EQUIPE, VINCULO_SETOR_INDIRETO):
         if uniao.get(tipo):
             resultado[tipo] = sorted(uniao[tipo])
     return resultado
@@ -405,6 +436,8 @@ def descrever_usuario(usuario, incluir_vinculos=True, session=None):
         "responsavel_nome": usuario.responsavel.NOME if usuario.responsavel else None,
         "chapa": usuario.CHAPA,
     }
+    dados["perfil"] = normalizar_perfil(usuario.PERFIL)
+    dados["ve_motivo"] = pode_ver_motivo_fora_de_operacao(dados)
     # só os da própria conta: é o que o formulário de edição mostra e grava.
     # Em Gerente/Coordenador, "vinculos" é a soma com os de quem responde a
     # ele (só para exibir); gravar a soma prenderia na conta o vínculo dos
@@ -479,6 +512,8 @@ def descrever_usuarios(session, usuarios):
             "responsavel_nome": responsavel.NOME if responsavel else None,
             "chapa": usuario.CHAPA,
         }
+        dados["perfil"] = normalizar_perfil(usuario.PERFIL)
+        dados["ve_motivo"] = pode_ver_motivo_fora_de_operacao(dados)
         dados["vinculos_proprios"] = _vinculos_por_tipo(usuario)
         if usuario.NIVEL in NIVEIS_HIERARQUICOS:
             pessoas = [usuario] + supervisores_abaixo(usuario.id, set())
@@ -493,16 +528,29 @@ def descrever_usuarios(session, usuarios):
 def descrever_sessao(usuario, session):
     """A conta logada, com o que ela pode de fato nesta sessao.
 
-    Sem nenhum vinculo a conta nao acessa dado de equipe nem de colaborador,
-    em nenhuma rota: das permissoes do nivel so sobra gerenciar usuarios, que
-    nao depende de equipe. Cortar aqui vale para todo exige_permissao e para a
-    tela, que le a mesma lista. O vinculo pode ser herdado (ver escopos_efetivos).
+    DIRETO sem nenhum vinculo operacional nao acessa dado de equipe nem de
+    colaborador, em nenhuma rota: das permissoes do nivel sobram gerenciar
+    usuarios e abrir os Indiretos (leitura). Cortar aqui vale para todo
+    exige_permissao e para a tela, que le a mesma lista. O vinculo pode ser
+    herdado (ver escopos_efetivos).
+
+    INDIRETO le tudo (le_tudo) e nao opera equipes: perde alocar/editar/remover
+    da operacao. O que ele faz nos Indiretos depende do setor (ver
+    indiretos.pode_alterar_setor), nao destas permissoes.
     """
     dados = descrever_usuario(usuario, session=session)
-    dados["sem_vinculo"] = not tem_algum_vinculo(dados)
+    eh_indireto = dados["perfil"] == PERFIL_INDIRETO and not dados["ignora_vinculos"]
+    dados["le_tudo"] = eh_indireto
+    dados["sem_vinculo"] = not eh_indireto and not tem_algum_vinculo(dados)
 
-    if dados["sem_vinculo"]:
-        dados["permissoes"] = [p for p in dados["permissoes"] if p == GERENCIAR_USUARIOS]
+    if eh_indireto:
+        dados["permissoes"] = [
+            p for p in dados["permissoes"] if p not in PERMISSOES_DE_OPERACAO
+        ]
+    elif dados["sem_vinculo"]:
+        dados["permissoes"] = [
+            p for p in dados["permissoes"] if p in (GERENCIAR_USUARIOS, VER_INDIRETOS)
+        ]
 
     return dados
 
@@ -597,7 +645,7 @@ def equipe_visivel(usuario, base, tipos_e_setores, equipe_id=None):
     """
     if not usuario:
         return False
-    if usuario.get("ignora_vinculos"):
+    if usuario.get("ignora_vinculos") or usuario.get("le_tudo"):
         return True
 
     pares = tipos_e_setores or [(None, None)]
@@ -645,7 +693,57 @@ def tem_algum_vinculo(usuario):
     escopos = usuario.get("escopos")
     if escopos is None:
         escopos = [usuario.get("vinculos") or {}]
-    return any(any(escopo.values()) for escopo in escopos)
+    return any(
+        any(valores for tipo, valores in escopo.items() if tipo != VINCULO_SETOR_INDIRETO)
+        for escopo in escopos
+    )
+
+
+def setores_de_indiretos_do_usuario(usuario):
+    """Os setores da tela de Indiretos onde a conta pode alocar e remover.
+    Devolve None para quem pode em todos (Administrador) e, para os demais, o
+    conjunto de setores em maiusculas do vinculo SETOR_INDIRETO (Direto ou
+    Indireto) — vazio sem esse vinculo.
+    TODOS cobre todos os setores, exceto a GERÊNCIA (so o Administrador mexe)."""
+    if not usuario:
+        return set()
+    if usuario.get("ignora_vinculos"):
+        return None
+
+    escopos = usuario.get("escopos")
+    if escopos is None:
+        escopos = [usuario.get("vinculos") or {}]
+    setores = set()
+    for escopo in escopos:
+        setores.update(str(v).strip().upper() for v in escopo.get(VINCULO_SETOR_INDIRETO, []))
+    return setores
+
+
+def pode_alterar_setor_de_indiretos(usuario, setor, setor_gerencia="GERÊNCIA"):
+    """Diz se a conta pode alocar/remover alguem neste setor da tela de
+    Indiretos. So o setor conta: nunca o subsetor, a base ou a posicao no
+    organograma."""
+    setores = setores_de_indiretos_do_usuario(usuario)
+    if setores is None:
+        return True
+    setor = str(setor or "").strip().upper()
+    if not setor or setor == setor_gerencia:
+        return False
+    return VALOR_TODOS in setores or setor in setores
+
+
+# Quem ve o MOTIVO de estar fora de operacao (justificativa, data de desligamento,
+# se foi afastamento ou desligamento e quem registrou). Os demais so sabem que a
+# pessoa esta fora de operacao.
+NIVEIS_QUE_VEEM_O_MOTIVO = (NIVEL_ADMINISTRADOR, NIVEL_GERENTE, NIVEL_COORDENADOR)
+
+
+def pode_ver_motivo_fora_de_operacao(usuario):
+    if not usuario:
+        return False
+    if usuario.get("ignora_vinculos"):
+        return True
+    return usuario.get("nivel") in NIVEIS_QUE_VEEM_O_MOTIVO
 
 
 def pode_alterar_colaborador_sem_vaga(usuario):

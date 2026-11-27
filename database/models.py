@@ -115,6 +115,14 @@ class Equipe(Base):
         index=True
     )
 
+    # Equipe extra: as vagas dela não entram no previsto do Resumo, só no
+    # realizado (como a vaga de Folguista Extra) — migrations/029
+    EXTRA = Column(Boolean, nullable=False, default=False, server_default="false")
+
+    # Equipe inativa: some das listas e do Resumo, não recebe alocação e, ao ser
+    # inativada, os colaboradores dela ficam livres — migrations/029
+    ATIVA = Column(Boolean, nullable=False, default=True, server_default="true")
+
     composicoes = relationship(
         "ComposicaoEquipe",
         back_populates="equipe",
@@ -236,6 +244,10 @@ class Usuario(Base):
     # chapa da pessoa no cadastro de colaboradores (opcional): liga a conta ao
     # cadastro e aos Indiretos — migrations/024
     CHAPA = Column(String, nullable=True)
+
+    # perfil da conta: DIRETO (so as equipes do vinculo) ou INDIRETO (le tudo,
+    # nao altera a operacao e aloca so no proprio setor de indiretos) — migrations/028
+    PERFIL = Column(String, nullable=False, default="DIRETO", server_default="DIRETO")
 
     CRIADO_EM = Column(DateTime(timezone=True), server_default=func.now())
     ULTIMO_ACESSO = Column(DateTime(timezone=True), nullable=True)

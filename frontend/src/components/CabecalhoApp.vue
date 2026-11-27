@@ -227,6 +227,7 @@ import {
   PODE_GERENCIAR_USUARIOS,
   PODE_GERENCIAR_VAGAS,
   PODE_VER_EQUIPES,
+  PODE_VER_INDIRETOS,
   PODE_VER_RESUMO,
   useSessao
 } from '../composables/useSessao'
@@ -289,7 +290,7 @@ const PAGINAS = [
     caminhos: ['/alocacao-indiretos'],
     icone: 'groups',
     // todos consultam; editar é só do Administrador (controlado na página)
-    permissao: PODE_VER_EQUIPES
+    permissao: PODE_VER_INDIRETOS
   },
   {
     titulo: 'Vagas',

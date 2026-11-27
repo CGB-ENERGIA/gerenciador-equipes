@@ -139,7 +139,7 @@
                 />
               </div>
 
-              <div class="col-auto">
+              <div v-if="!somenteLeitura" class="col-auto">
                 <q-btn
                   outline
                   dense
@@ -192,6 +192,7 @@
 
                   <div v-if="usuario?.ignora_vinculos" class="col-auto">
                     <q-btn
+                      v-if="!somenteLeitura"
                       outline
                       dense
                       size="sm"
@@ -231,7 +232,7 @@
                     (!!prefixoParaAbrir && equipe.prefixo === prefixoParaAbrir)
                   "
                   expand-separator
-                  :label="equipe.prefixo || 'Equipe'"
+                  :label="(equipe.prefixo || 'Equipe') + (equipe.extra ? ' · EXTRA' : '')"
                   :caption="`${equipe.base || ''} — ${descricaoQuantidadeVagas(equipe)}`"
                   header-class="equipe-header"
                   expand-icon="fiber_manual_record"
@@ -243,7 +244,7 @@
                   <q-card flat>
                     <q-card-section class="q-pb-none text-right">
                       <q-btn
-                        v-if="ehEquipeFolguista(equipe)"
+                        v-if="ehEquipeFolguista(equipe) && !somenteLeitura"
                         outline
                         dense
                         size="sm"
@@ -254,6 +255,7 @@
                       />
 
                       <q-btn
+                        v-if="!somenteLeitura"
                         outline
                         dense
                         size="sm"
@@ -358,6 +360,7 @@
                         <div class="col-12 col-sm-2 acoes-vaga">
                           <template v-if="vaga.colaborador">
                             <q-btn
+                              v-if="!somenteLeitura"
                               flat
                               round
                               dense
@@ -372,6 +375,7 @@
                             </q-btn>
 
                             <q-btn
+                              v-if="!somenteLeitura"
                               flat
                               round
                               dense
@@ -382,7 +386,7 @@
                             />
 
                             <q-btn
-                              v-if="podeRemoverVaga(vaga)"
+                              v-if="!somenteLeitura && podeRemoverVaga(vaga)"
                               flat
                               round
                               dense
@@ -396,7 +400,7 @@
                           </template>
 
                           <q-btn
-                            v-else
+                            v-else-if="!somenteLeitura"
                             flat
                             round
                             dense
@@ -407,7 +411,7 @@
                           />
 
                           <q-btn
-                            v-if="!vaga.colaborador && podeExcluirVaga(vaga)"
+                            v-if="!somenteLeitura && !vaga.colaborador && podeExcluirVaga(vaga)"
                             flat
                             round
                             dense
@@ -492,7 +496,7 @@
                     v-for="colaborador in colaboradoresFiltrados"
                     :key="colaborador.chapa"
                     clickable
-                    :disable="colaborador.alocado"
+                    :disable="colaborador.alocado || somenteLeitura"
                     @click="selecionarColaborador(colaborador)"
                   >
                     <q-item-section class="text-center">
@@ -532,15 +536,15 @@
                         RESPONSÁVEL NA PÁGINA INDIRETOS
                       </q-item-label>
 
-                      <q-item-label v-if="colaborador.desligado" caption>
+                      <q-item-label v-if="veMotivo && colaborador.desligado" caption>
                         Desligamento em: {{ formatarDataDesligamento(colaborador.data_desligamento) }}
                       </q-item-label>
 
-                      <q-item-label v-else-if="colaborador.afastado" caption>
+                      <q-item-label v-else-if="veMotivo && colaborador.afastado" caption>
                         Justificativa: {{ colaborador.justificativa_afastamento || 'Não informada' }}
                       </q-item-label>
 
-                      <q-item-label v-if="colaborador.afastado" caption>
+                      <q-item-label v-if="veMotivo && colaborador.afastado" caption>
                         {{ colaborador.desligado ? 'Registrado por' : 'Afastado por' }}:
                         {{ descreverAfastadoPor(colaborador) }}
                       </q-item-label>
@@ -572,7 +576,7 @@
                         text-color="white"
                         size="sm"
                       >
-                        {{ colaborador.desligado ? 'DESLIGADO' : 'AFASTADO' }}
+                        {{ !veMotivo ? 'FORA DE OPERAÇÃO' : colaborador.desligado ? 'DESLIGADO' : 'AFASTADO' }}
                       </q-chip>
 
                       <q-chip
@@ -654,7 +658,7 @@
                     size="sm"
                     dense
                   >
-                    {{ scope.opt.desligado ? "Desligado" : "Afastado" }}
+                    {{ !veMotivo ? "Fora de operação" : scope.opt.desligado ? "Desligado" : "Afastado" }}
                   </q-chip>
 
                   <q-chip v-else color="positive" text-color="white" size="sm" dense>
@@ -960,7 +964,7 @@
                     size="sm"
                     dense
                   >
-                    {{ scope.opt.desligado ? "Desligado" : "Afastado" }}
+                    {{ !veMotivo ? "Fora de operação" : scope.opt.desligado ? "Desligado" : "Afastado" }}
                   </q-chip>
 
                   <q-chip v-else color="positive" text-color="white" size="sm" dense>
@@ -981,7 +985,7 @@
               <q-icon name="warning" color="amber-10" />
             </template>
             Este colaborador está fora de operação
-            ({{ colaboradorNovoEdicao.desligado ? 'desligamento' : (colaboradorNovoEdicao.justificativa_afastamento || 'sem justificativa') }}).
+            <template v-if="veMotivo">({{ colaboradorNovoEdicao.desligado ? 'desligamento' : (colaboradorNovoEdicao.justificativa_afastamento || 'sem justificativa') }})</template>.
             Ao confirmar a troca, isso será retirado.
           </q-banner>
         </q-card-section>
@@ -1060,7 +1064,7 @@
                     size="sm"
                     dense
                   >
-                    {{ scope.opt.desligado ? "Desligado" : "Afastado" }}
+                    {{ !veMotivo ? "Fora de operação" : scope.opt.desligado ? "Desligado" : "Afastado" }}
                   </q-chip>
 
                   <q-chip v-else color="positive" text-color="white" size="sm" dense>
@@ -1081,7 +1085,7 @@
               <q-icon name="warning" color="amber-10" />
             </template>
             Este colaborador está fora de operação
-            ({{ colaboradorExtra.desligado ? 'desligamento' : (colaboradorExtra.justificativa_afastamento || 'sem justificativa') }}).
+            <template v-if="veMotivo">({{ colaboradorExtra.desligado ? 'desligamento' : (colaboradorExtra.justificativa_afastamento || 'sem justificativa') }})</template>.
             Ao adicionar, isso será retirado.
           </q-banner>
 
@@ -1458,6 +1462,14 @@ const {
   gravarBasesSelecionadas,
   filtrosCompartilhados
 } = useSessao()
+
+// Administrador, Gerente e Coordenador veem o motivo de estar fora de operação;
+// os demais só veem que a pessoa está fora (o servidor nem manda o motivo).
+const veMotivo = computed(() => Boolean(usuario.value?.ve_motivo))
+
+// Perfil Indireto lê tudo e não altera a operação: sem os botões de alocar,
+// trocar, remover, observação e fora de operação (o servidor também barra).
+const somenteLeitura = computed(() => Boolean(usuario.value?.le_tudo))
 const { confirmar } = useConfirmacao()
 
 // Sem a permissão remover_alocacao, a única vaga que dá pra remover é o
@@ -1732,20 +1744,36 @@ const vagasAlocacao = computed(() => {
     return []
   }
 
-  const equipe = (opcoesAlocacao.value[baseAlocacao.value] || []).find(
-    item => String(item.id) === String(equipeAlocacao.value)
+  const idEquipe = String(equipeAlocacao.value)
+  const equipeDasOpcoes = (opcoesAlocacao.value[baseAlocacao.value] || []).find(
+    item => String(item.id) === idEquipe
+  )
+  // As opções de alocação são carregadas uma vez; a tela, porém, muda a cada
+  // remoção ou afastamento. Sem olhar também a equipe da tela, uma vaga que
+  // acabou de ficar livre não estava na lista e o campo mostrava o número dela.
+  const equipeDaTela = equipes.value.find(item => String(item.id) === idEquipe)
+  const ocupadasNaTela = new Set(
+    (equipeDaTela?.vagas || []).filter(vaga => vaga.ocupada).map(vaga => vaga.id)
   )
 
-  if (!equipe) {
-    return []
+  const rotulo = (funcao, estrutura) =>
+    [funcao, estrutura].filter(Boolean).join(' | ') || 'Função não informada'
+
+  const porId = new Map()
+
+  for (const vaga of equipeDasOpcoes?.vagas || []) {
+    if (!ocupadasNaTela.has(vaga.id)) {
+      porId.set(vaga.id, { label: rotulo(vaga.funcao_er, vaga.estrutura), value: vaga.id })
+    }
   }
 
-  return (equipe.vagas || []).map(vaga => ({
-    label:
-      [vaga.funcao_er, vaga.estrutura].filter(Boolean).join(' | ') ||
-      'Função não informada',
-    value: vaga.id
-  }))
+  for (const vaga of equipeDaTela?.vagas || []) {
+    if (!vaga.ocupada && !porId.has(vaga.id)) {
+      porId.set(vaga.id, { label: rotulo(vaga.funcao_er, vaga.tipo), value: vaga.id })
+    }
+  }
+
+  return [...porId.values()]
 })
 
 // ============================================================

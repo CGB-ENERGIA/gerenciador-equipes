@@ -62,7 +62,11 @@ export default defineRouter((/* { store, ssrContext } */) => {
 
     if (exigida && !temPermissao(exigida)) {
       // o início também exige permissão: mandar para ele de novo não teria fim
-      return { path: destino.path === '/' ? ROTA_SEM_ACESSO : '/' }
+      if (destino.path === '/') {
+        // sem Resumo, mas com os Indiretos (conta Direta ainda sem vínculo)
+        return { path: temPermissao('ver_indiretos') ? '/alocacao-indiretos' : ROTA_SEM_ACESSO }
+      }
+      return { path: '/' }
     }
 
     // página ainda em liberação gradual: só o Administrador (nível que ignora

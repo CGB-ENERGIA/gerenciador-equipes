@@ -272,7 +272,14 @@ export function descreverAfastadoPor(pessoa) {
 
 // Motivo de estar fora de operação: "Afastado" ou "Desligamento em 25/09/2026"
 // (ver migrations/027). Vazio para quem está em operação.
-export function descreverMotivoForaOperacao(pessoa) {
+//
+// Quem não é Administrador, Gerente ou Coordenador não vê o motivo (o servidor
+// nem manda os dados): `veMotivo` false só mostra que a pessoa está fora de
+// operação.
+export function descreverMotivoForaOperacao(pessoa, veMotivo = true) {
+  if (!veMotivo) {
+    return pessoa?.afastado ? 'Fora de operação' : ''
+  }
   if (pessoa?.desligado) {
     const [ano, mes, dia] = String(pessoa.data_desligamento || '').split('-')
     return ano && mes && dia

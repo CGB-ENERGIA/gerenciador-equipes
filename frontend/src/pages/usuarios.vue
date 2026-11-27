@@ -83,101 +83,6 @@
           </q-list>
         </q-card>
 
-        <!-- ================================================== -->
-        <!-- NÍVEIS DE ACESSO -->
-        <!-- ================================================== -->
-
-        <q-card bordered class="q-mb-md">
-          <q-card-section>
-            <div class="text-h6"> Níveis de acesso </div>
-
-            <div class="text-caption text-grey-7">
-              O nível define <strong>o que</strong> a pessoa pode fazer. Os
-              vínculos (ou, para Gerente e Coordenador, a hierarquia de
-              responsáveis) definem <strong>sobre quais equipes</strong>.
-              Marque ou desmarque as permissões e clique em Salvar na linha —
-              o Administrador sempre tem acesso total.
-            </div>
-          </q-card-section>
-
-          <q-separator />
-
-          <q-card-section class="q-pt-sm">
-            <q-markup-table flat square dense class="tabela-niveis">
-              <thead>
-                <tr>
-                  <th class="text-left">Nível</th>
-                  <th
-                    v-for="permissao in PERMISSOES"
-                    :key="permissao.valor"
-                    class="text-center"
-                  >
-                    {{ permissao.rotulo }}
-                  </th>
-                  <th class="text-center">Ações</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                <tr v-for="nivel in niveis" :key="nivel.valor">
-                  <td>
-                    <div class="text-weight-medium">{{ nivel.rotulo }}</div>
-                    <div class="text-caption text-grey-7">
-                      {{ nivel.descricao }}
-                    </div>
-                  </td>
-
-                  <td
-                    v-for="permissao in PERMISSOES"
-                    :key="permissao.valor"
-                    class="text-center"
-                  >
-                    <q-checkbox
-                      v-if="nivel.personalizavel && souAdministrador"
-                      :model-value="(permissoesEditaveis[nivel.valor] || []).includes(permissao.valor)"
-                      @update:model-value="alternarPermissaoNivel(nivel.valor, permissao.valor)"
-                    />
-
-                    <template v-else>
-                      <q-icon
-                        v-if="nivel.permissoes.includes(permissao.valor)"
-                        name="check_circle"
-                        color="positive"
-                        size="20px"
-                      />
-                      <q-icon v-else name="remove" color="grey-5" size="18px" />
-                    </template>
-                  </td>
-
-                  <td class="text-center">
-                    <q-btn
-                      v-if="nivel.personalizavel && souAdministrador"
-                      flat
-                      dense
-                      size="sm"
-                      color="primary"
-                      label="Salvar"
-                      :loading="salvandoPermissoesNivel === nivel.valor"
-                      @click="salvarPermissoesNivel(nivel.valor)"
-                    />
-                    <span v-else class="text-caption text-grey-6">fixo</span>
-                  </td>
-                </tr>
-              </tbody>
-            </q-markup-table>
-
-            <q-banner dense class="bg-blue-1 q-mt-md" rounded>
-              <template #avatar>
-                <q-icon name="info" color="primary" />
-              </template>
-              Gerente, Coordenador e Supervisor só fazem as operações de
-              Alocar/Editar/Remover marcadas aqui nas vagas cobertas pelos
-              vínculos de cada usuário (Base, Tipo de equipe, Setor, Equipe),
-              no formulário abaixo. Sem nenhum vínculo, a conta não vê dados.
-            </q-banner>
-          </q-card-section>
-        </q-card>
-
         <div class="row q-col-gutter-md q-mb-md items-stretch">
         <!-- ================================================== -->
         <!-- USUÁRIOS EM LOTE (EXPORTAR / SUBIR) -->
@@ -400,6 +305,9 @@
                           <template v-if="pessoa.responsavel_nome">
                             · responde a {{ pessoa.responsavel_nome }}
                           </template>
+                          <template v-if="!pessoa.ignora_vinculos && pessoa.perfil === 'INDIRETO'">
+                            · perfil Indireto
+                          </template>
                         </q-item-label>
 
                         <q-item-label v-if="resumoVinculos(pessoa)" caption class="q-mt-xs">
@@ -551,6 +459,28 @@
                 hint="Liga a conta à pessoa no cadastro de colaboradores e nos Indiretos"
               />
 
+              <div v-if="!nivelIgnoraVinculos">
+                <div class="text-caption text-grey-7 q-mb-xs">Perfil da conta</div>
+                <q-btn-toggle
+                  v-model="formulario.perfil"
+                  unelevated
+                  no-caps
+                  toggle-color="primary"
+                  :options="opcoesPerfil"
+                />
+                <div class="text-caption text-grey-7 q-mt-xs">
+                  <template v-if="formulario.perfil === 'INDIRETO'">
+                    Vê Resumo, Banco de Dados e Indiretos inteiros, sem alterar a operação. Nos
+                    Indiretos, aloca e remove só no(s) setor(es) escolhido(s) abaixo.
+                  </template>
+                  <template v-else>
+                    Vê e aloca as equipes do vínculo (base, setor, tipo). Os Indiretos ficam para
+                    consulta, a menos que a conta tenha o vínculo "Setor de indiretos": aí aloca e
+                    remove nos Indiretos desse setor, em qualquer base.
+                  </template>
+                </div>
+              </div>
+
               <q-toggle
                 v-model="formulario.ativo"
                 label="Usuário ativo"
@@ -592,8 +522,11 @@
 
                 <div v-if="!nivelIgnoraVinculos" class="q-gutter-sm">
                   <template v-for="(rotulo, tipo) in tiposVinculo" :key="tipo">
+                    <!-- Indireto: só o setor de indiretos; Direto: as dimensões das
+                         equipes e, opcionalmente, o setor de indiretos -->
+                    <template v-if="tipo !== 'SETOR_INDIRETO' && formulario.perfil === 'INDIRETO'" />
                     <q-select
-                      v-if="tipo === 'EQUIPE'"
+                      v-else-if="tipo === 'EQUIPE'"
                       v-model="formulario.vinculos[tipo]"
                       outlined
                       dense
@@ -790,6 +723,7 @@ const {
   usuario,
   niveis,
   tiposVinculo,
+  setoresIndiretos,
   buscarSessao
 } = useSessao()
 const { confirmar } = useConfirmacao()
@@ -982,83 +916,7 @@ const loteUsuariosLinhasFlatOrdenadas = computed(() => {
     : loteUsuariosLinhasFlat.value
 })
 
-// cópia local editável das permissões por nível, sincronizada sempre que
-// 'niveis' (vindo da sessão) muda — assim dá pra marcar/desmarcar antes de
-// salvar sem alterar o estado compartilhado da sessão
-const permissoesEditaveis = reactive({})
-
-// Níveis com checks marcados/desmarcados e ainda não salvos. Salvar um nível
-// devolve a lista inteira de 'niveis' e dispara o watch abaixo — sem isto, a
-// edição pendente dos outros níveis seria sobrescrita em silêncio.
-const niveisAlterados = reactive(new Set())
-
-watch(
-  niveis,
-  lista => {
-    for (const nivel of lista) {
-      if (!niveisAlterados.has(nivel.valor)) {
-        permissoesEditaveis[nivel.valor] = [...nivel.permissoes]
-      }
-    }
-  },
-  { immediate: true, deep: true }
-)
-
-const salvandoPermissoesNivel = ref('')
-
-function alternarPermissaoNivel(nivelValor, permissaoValor) {
-  const atuais = new Set(permissoesEditaveis[nivelValor] || [])
-  if (atuais.has(permissaoValor)) {
-    atuais.delete(permissaoValor)
-  } else {
-    atuais.add(permissaoValor)
-  }
-  permissoesEditaveis[nivelValor] = [...atuais]
-  niveisAlterados.add(nivelValor)
-}
-
-async function salvarPermissoesNivel(nivelValor) {
-  limparAvisos()
-  salvandoPermissoesNivel.value = nivelValor
-
-  try {
-    const resposta = await fetch(`/api/niveis/${nivelValor}/permissoes`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ permissoes: permissoesEditaveis[nivelValor] || [] })
-    })
-
-    const dados = await resposta.json()
-
-    if (!resposta.ok || dados.erro) {
-      throw new Error(dados.erro || 'Não foi possível salvar as permissões.')
-    }
-
-    // libera o nível salvo antes de trocar 'niveis', para o watch trazer o
-    // que o servidor gravou; os demais níveis alterados continuam intactos
-    niveisAlterados.delete(nivelValor)
-    niveis.value = dados.niveis
-    sucesso.value = `Permissões do nível ${rotuloDoNivel(nivelValor)} atualizadas.`
-  } catch (e) {
-    erro.value = e.message || 'Não foi possível salvar as permissões.'
-  } finally {
-    salvandoPermissoesNivel.value = ''
-  }
-}
-
 const SENHA_MINIMA = 6
-
-// mesmos nomes do auth.py — cada uma é um "check" na tabela de níveis
-const PERMISSOES = [
-  { valor: 'ver_resumo', rotulo: 'Ver resumo' },
-  { valor: 'ver_equipes', rotulo: 'Ver equipes' },
-  { valor: 'alocar', rotulo: 'Alocar' },
-  { valor: 'editar_alocacao', rotulo: 'Editar alocações' },
-  { valor: 'remover_alocacao', rotulo: 'Remover' },
-  { valor: 'gerenciar_vagas', rotulo: 'Cadastrar vagas' },
-  { valor: 'gerenciar_usuarios', rotulo: 'Gerenciar usuários' },
-  { valor: 'gerenciar_colaboradores', rotulo: 'Atualizar cadastro' }
-]
 
 const usuarios = ref([])
 const equipes = ref([])
@@ -1087,8 +945,14 @@ const formulario = reactive({
   ativo: true,
   vinculos: {},
   responsavel_id: null,
-  chapa: ''
+  chapa: '',
+  perfil: 'DIRETO'
 })
+
+const opcoesPerfil = [
+  { label: 'Direto', value: 'DIRETO' },
+  { label: 'Indireto', value: 'INDIRETO' }
+]
 
 const opcoesNiveis = computed(() =>
   niveis.value.map(nivel => ({ label: nivel.rotulo, value: nivel.valor }))
@@ -1143,7 +1007,8 @@ const opcoesVinculo = computed(() => {
     TIPO_EQUIPE: new Set(),
     SETOR: new Set(),
     SUPERVISOR: new Set(),
-    COORDENADOR: new Set()
+    COORDENADOR: new Set(),
+    SETOR_INDIRETO: new Set(setoresIndiretos.value)
   }
 
   for (const equipe of equipes.value) {
@@ -1182,7 +1047,7 @@ const opcoesVinculo = computed(() => {
 // convive com valores avulsos. Escolher TODOS limpa os outros; escolher um
 // valor avulso depois tira o TODOS.
 const VALOR_TODOS = 'TODOS'
-const VINCULOS_COM_TODOS = ['BASE', 'TIPO_EQUIPE', 'SETOR']
+const VINCULOS_COM_TODOS = ['BASE', 'TIPO_EQUIPE', 'SETOR', 'SETOR_INDIRETO']
 
 function ajustarTodos(tipo, valores) {
   if (!VINCULOS_COM_TODOS.includes(tipo)) {
@@ -1306,6 +1171,7 @@ function preencher(pessoa) {
   formulario.ativo = pessoa ? pessoa.ativo : true
   formulario.responsavel_id = pessoa?.responsavel_id ?? null
   formulario.chapa = pessoa?.chapa || ''
+  formulario.perfil = pessoa?.perfil || 'DIRETO'
   // os da própria conta, não a soma com os subordinados que a lista mostra
   const proprios = pessoa?.vinculos_proprios || pessoa?.vinculos || {}
   formulario.vinculos = Object.fromEntries(
@@ -1339,7 +1205,8 @@ async function salvar() {
       ativo: formulario.ativo,
       vinculos: nivelIgnoraVinculos.value ? {} : formulario.vinculos,
       responsavel_id: nivelDoResponsavel.value ? formulario.responsavel_id : null,
-      chapa: (formulario.chapa || '').trim()
+      chapa: (formulario.chapa || '').trim(),
+      perfil: nivelIgnoraVinculos.value ? 'DIRETO' : formulario.perfil
     }
 
     if (formulario.senha) {
@@ -1681,13 +1548,6 @@ onMounted(carregarTudo)
 .caixa-nivel__lista {
   max-height: 460px;
   overflow-y: auto;
-}
-
-.tabela-niveis :deep(th) {
-  font-family: var(--fonte-ui);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  font-size: 0.72rem;
 }
 
 /* tabela do diálogo de detalhe da importação */
